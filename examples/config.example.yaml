@@ -44,6 +44,8 @@ sources:
   alerts:
     enabled: true  # Email alerts from LinkedIn, StepStone, Indeed and Workwise
     folder: Jobalerts  # Gmail label or IMAP folder name
+    mode: search_first  # search_first: find each alert job's own ad on the employer's site by web search (needs
+    #                     PARALLEL_API_KEY; job-board pages are never opened). platform: read the job-board page.
   arbeitnow:
     enabled: false  # Free public feed, no key; enable in setup or here.
     max_pages_per_run: 40

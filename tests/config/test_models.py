@@ -319,3 +319,18 @@ def test_task_instructions_are_read_and_default_to_empty(tmp_path: Path) -> None
     cfg = load_config(ws_with(tmp_path, MIN_CONFIG + "llm:\n  tasks:\n" + tasks))
     assert cfg.llm.instructions("form_find") == "Prefer career sites."
     assert cfg.llm.instructions("write") == ""
+
+
+def test_alert_mode_defaults_to_search_first(tmp_path):
+    assert load_config(ws_with(tmp_path, MIN_CONFIG)).sources.alerts.mode == "search_first"
+
+
+def test_alert_mode_platform_can_be_chosen(tmp_path):
+    cfg = load_config(ws_with(tmp_path, MIN_CONFIG + "sources:\n  alerts: {mode: platform}\n"))
+    assert cfg.sources.alerts.mode == "platform"
+
+
+def test_alert_mode_typo_lists_the_allowed_values(tmp_path):
+    with pytest.raises(ConfigError) as err:
+        load_config(ws_with(tmp_path, MIN_CONFIG + "sources:\n  alerts: {mode: serch_first}\n"))
+    assert "search_first" in str(err.value) and "platform" in str(err.value)

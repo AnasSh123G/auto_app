@@ -83,6 +83,40 @@ def _folder_for(ctx: RunContext, job) -> Path:
     return ctx.ws.applications_dir / folder_name(job["company"], job["title"], job["id"])
 
 
+def _sample_jobs(ctx: RunContext) -> list:
+    """The quick test: the best evaluated jobs whatever their score, one email and one form application first.
+
+    A job below the apply threshold (review, skipped) is approved here, in the test workspace only, so that letter
+    writing and form finding are exercised.
+    """
+    repo = ctx.repo
+    sample = ctx.sample
+    assert sample is not None
+    pool = []
+    for job in repo.jobs_by_status(Status.APPROVED, Status.REVIEW, Status.SKIPPED):
+        ev = repo.current_evaluation(job["id"])
+        if ev is None:
+            continue
+        try:
+            channel = json.loads(ev["payload"] or "{}").get("channel")
+        except (json.JSONDecodeError, TypeError):
+            channel = None
+        pool.append((job, ev["fit_score"] or 0, channel))
+    pool.sort(key=lambda item: -item[1])
+    picked: list = []
+    for wanted in (("email",), ("employer_form", "platform")):  # one of each kind first
+        match = next((p for p in pool if p[2] in wanted and p not in picked), None)
+        if match:
+            picked.append(match)
+    picked += [p for p in pool if p not in picked]
+    jobs = []
+    for job, score, _ in picked[:sample.preparations]:
+        if job["status"] != Status.APPROVED.value:
+            repo.transition(job["id"], Status.APPROVED, note=f"quick test: prepared below the threshold (fit score {score})")
+        jobs.append(repo.get_job(job["id"]))
+    return jobs
+
+
 def prepare_jobs(
     ctx: RunContext,
     job_ids: list[str] | None = None,
@@ -97,6 +131,8 @@ def prepare_jobs(
         jobs = [j for j in (repo.get_job(i) for i in job_ids) if j is not None]
         allowed = {Status.APPROVED.value} | ({Status.PREPARED.value} if force else set())
         jobs = [j for j in jobs if j["status"] in allowed]
+    elif ctx.sample is not None and ctx.sample.ignore_threshold:
+        jobs = _sample_jobs(ctx)
     else:
         jobs = repo.alert_jobs_first(repo.jobs_by_status(Status.APPROVED))
     limit = ctx.config.limits.max_prepare_per_run

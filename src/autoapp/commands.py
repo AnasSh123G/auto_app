@@ -132,15 +132,26 @@ def search(
     dry_run: bool = typer.Option(False, "--dry-run", help="Do not mark alert emails as processed."),
 ) -> None:
     """Search all enabled sources with your search profiles, then fetch missing details."""
-    from autoapp.employers.service import find_own_ads, run_discovery
+    from autoapp.employers.service import (
+        add_careers_matches,
+        alerts_search_first,
+        find_alert_ads,
+        find_own_ads,
+        run_discovery,
+    )
     from autoapp.steps.fetch import fetch_details
     from autoapp.steps.pipeline import RunSummary
     from autoapp.steps.search import run_search
 
     with session(tctx, dry_run=dry_run) as ctx:
-        s = RunSummary(search=run_search(ctx, profile))
-        if ctx.config.sources.employer_careers.enabled:
+        s = RunSummary(search=run_search(ctx, profile), alert_mode=ctx.config.sources.alerts.mode)
+        search_first = alerts_search_first(ctx.config)
+        if search_first:
+            s.alerts = find_alert_ads(ctx)
+        if search_first or ctx.config.sources.employer_careers.enabled:
             s.employers = run_discovery(ctx, profile=profile)
+            if s.alerts is not None:
+                add_careers_matches(ctx, s.alerts)
         s.fetch = fetch_details(ctx)
         if ctx.config.sources.employer_careers.enabled:
             s.own_ads = find_own_ads(ctx)
@@ -654,12 +665,30 @@ def run(
                   no_dashboard=no_dashboard, fresh=fresh, redo=redo)
 
 
+@app.command(name="test")
+def quick_test(
+    tctx: typer.Context,
+    profile: str | None = typer.Option(None, "--profile", "-p", help="Use only this search profile."),
+    no_dashboard: bool = typer.Option(False, "--no-dashboard", help="Print plain lines instead of the live view."),
+) -> None:
+    """Quick test: a small sample of every step in a throwaway workspace, then a pass/fail checklist.
+
+    Reads the newest one or two alert emails (not marked as processed), asks each job source for a couple of jobs,
+    looks up a couple of employers online, evaluates a few jobs, prepares one email and one form application and
+    sends at most one TEST_RUN email to yourself. Your real jobs, statuses and CSV are not touched; the searches
+    and AI calls are real and count against your limits. Exit code 1 when any part FAILED.
+    """
+    run_with_mode(tctx, profile=profile, mode="test", dry_run=False, interactive=_interactive(False),
+                  no_dashboard=no_dashboard, ask_mode=False, fresh=True, sample=True)
+
+
 def run_with_mode(tctx: typer.Context, *, profile: str | None, mode: str | None, dry_run: bool, interactive: bool,
                   no_dashboard: bool = False, prompter=None, ask_mode: bool = True, fresh: bool = False,
-                  redo: bool = False) -> None:
+                  redo: bool = False, sample: bool = False) -> None:
     """``run`` and the menu's "Run now": resolve the mode, run, then offer to finish forms.
 
     ``fresh`` (test mode only) runs in a new test workspace with an empty job history (``steps.sandbox``).
+    ``sample`` (the quick test, ``autoapp test``) takes a small sample of every step and ends with a checklist.
     """
     if fresh:
         from autoapp.steps import sandbox
@@ -672,7 +701,7 @@ def run_with_mode(tctx: typer.Context, *, profile: str | None, mode: str | None,
         app_ctx.workspace = box.ws
         try:
             run_with_mode(tctx, profile=profile, mode="test", dry_run=dry_run, interactive=interactive,
-                          no_dashboard=no_dashboard, prompter=prompter, ask_mode=False)
+                          no_dashboard=no_dashboard, prompter=prompter, ask_mode=False, sample=sample)
         finally:
             app_ctx.workspace = real
             sandbox.merge_back(box)
@@ -688,6 +717,7 @@ def run_with_mode(tctx: typer.Context, *, profile: str | None, mode: str | None,
     # the run until the last prepared form is dealt with.
     screen: TaskScreen | None = None
     s = None
+    checklist = None
     forms = 0
     try:
         with session(tctx, dry_run=dry_run, interactive=interactive, needs_llm=True) as ctx:
@@ -704,6 +734,11 @@ def run_with_mode(tctx: typer.Context, *, profile: str | None, mode: str | None,
             if redo and not _start_redo(ctx, dry_run=dry_run, interactive=interactive, prompter=prompter):
                 return
             ctx.mode = mode or ctx.config.run.default_mode
+            if sample:
+                from autoapp.steps.context import SampleLimits
+
+                ctx.sample = SampleLimits()
+                ctx.sample.apply_to(ctx.config)
             if ctx.stats is not None:
                 ctx.stats.mode = MODE_LABELS[ctx.mode]
             log.info("run mode: %s%s", MODE_LABELS[ctx.mode], " (dry run)" if dry_run else "")
@@ -719,7 +754,12 @@ def run_with_mode(tctx: typer.Context, *, profile: str | None, mode: str | None,
                     ctx.events.subscribe(PlainPrinter())
             s = run_pipeline(ctx, profile)
             _echo_lines(s.lines(), ctx)
-            forms = len(s.forms_to_finish) if interactive and not dry_run else 0
+            if sample:
+                from autoapp.steps.quicktest import build_report
+
+                checklist = build_report(ctx.config, s)
+                _echo_lines(checklist.lines(), ctx)
+            forms = len(s.forms_to_finish) if interactive and not dry_run and not sample else 0  # no forms to finish in a quick test
         if forms:
             from autoapp.menu.main import finish_forms
             from autoapp.setup.prompts import SetupAborted
@@ -741,7 +781,7 @@ def run_with_mode(tctx: typer.Context, *, profile: str | None, mode: str | None,
     if screen is not None:
         # After the form list there is nothing more to read on the screen; without it, the log can be read first.
         screen.stop(wait_for_key=not forms)
-    if s is not None and not s.ok:
+    if s is not None and (not s.ok or (checklist is not None and checklist.failed)):
         raise typer.Exit(code=1)
 
 

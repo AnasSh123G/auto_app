@@ -260,8 +260,8 @@ def test_proton_fingerprint_is_stored_only_after_confirmation(ws):
     checks = FakeChecks(fingerprint="AB:CD" + ":EF" * 30)
     answers = [("Use Adzuna", False), ("job-alert emails", True), ("Mail provider", "proton_bridge"),
                ("Email address", "me@proton.me"), ("Bridge username", ENTER), ("Bridge password", "bridge-pw"),
-               ("Pin this certificate", False), ("Folder or label", "INBOX"), ("LinkedIn", ENTER), ("Indeed", ENTER),
-               ("StepStone", ENTER), ("careers pages", ENTER),
+               ("Pin this certificate", False), ("Folder or label", "INBOX"), ("alert jobs get their full ad", ENTER), ("LinkedIn", ENTER), ("Indeed", ENTER),
+               ("StepStone", ENTER), ("careers pages", ENTER), ("Parallel Search API key", ENTER),
                ("company apply links", ENTER), ("Use Arbeitnow", ENTER), ("Use Workwise", ENTER), ("Test the connections", False)]
     p = run(ws, "sources", answers, checks)
     assert load_config(ws).mail.alerts.bridge_cert_sha256 is None
@@ -277,8 +277,8 @@ def test_proton_bridge_not_running_can_be_skipped(ws):
     checks = FakeChecks(fingerprint=OSError("connection refused"))
     answers = [("Use Adzuna", False), ("job-alert emails", True), ("Mail provider", "proton_bridge"),
                ("Email address", "me@proton.me"), ("Bridge username", ENTER), ("Bridge password", "pw"),
-               ("Try again", False), ("Folder or label", ENTER), ("LinkedIn", ENTER), ("Indeed", ENTER),
-               ("StepStone", ENTER), ("careers pages", ENTER),
+               ("Try again", False), ("Folder or label", ENTER), ("alert jobs get their full ad", ENTER), ("LinkedIn", ENTER), ("Indeed", ENTER),
+               ("StepStone", ENTER), ("careers pages", ENTER), ("Parallel Search API key", ENTER),
                ("company apply links", ENTER), ("Use Arbeitnow", ENTER), ("Use Workwise", ENTER), ("Test the connections", False)]
     p = run(ws, "sources", answers, checks)
     assert any("Could not read the Bridge certificate" in line for line in p.output)
@@ -289,7 +289,7 @@ def test_custom_preset_asks_for_hosts(ws):
     answers = [("Use Adzuna", False), ("job-alert emails", True), ("Mail provider", "custom"),
                ("Email address", "me@example.org"), ("IMAP host", "imap.example.org"), ("IMAP encryption", "starttls"),
                ("IMAP port", ENTER), ("Login name", "me"), ("Mail password", "pw"), ("Folder or label", ENTER),
-               ("LinkedIn", ENTER), ("Indeed", ENTER), ("StepStone", ENTER), ("careers pages", ENTER),
+               ("alert jobs get their full ad", ENTER), ("LinkedIn", ENTER), ("Indeed", ENTER), ("StepStone", ENTER), ("careers pages", ENTER), ("Parallel Search API key", ENTER),
                ("company apply links", ENTER), ("Use Arbeitnow", ENTER), ("Use Workwise", ENTER), ("Test the connections", False)]
     run(ws, "sources", answers)
     acct = load_config(ws).mail.alerts
@@ -531,3 +531,23 @@ def test_defaults_are_the_employer_site_and_workwise_on():
     s = Sources()
     assert s.workwise.enabled and not (s.apply_links_with_login.linkedin or s.apply_links_with_login.indeed
                                        or s.apply_links_with_login.stepstone)
+
+
+def test_alert_mode_is_asked_stored_and_search_first_needs_the_key(ws):
+    key = "pk-test-0123456789abcdef"
+    answers = sources_answers(test=False)
+    answers[answers.index(("alert jobs get their full ad", ENTER))] = ("alert jobs get their full ad", "search_first")
+    answers[answers.index(("Parallel Search API key", ENTER))] = ("Parallel Search API key", key)
+    p = run(ws, "sources", answers)
+    assert load_config(ws).sources.alerts.mode == "search_first"
+    assert f"PARALLEL_API_KEY='{key}'" in ws.env_path.read_text() and key not in p.shown
+    assert any("needed for search-first alert jobs" in q for _, q in p.asked)
+
+
+def test_platform_alert_mode_is_stored_and_asks_for_no_search_key(ws):
+    answers = sources_answers(test=False)
+    answers[answers.index(("alert jobs get their full ad", ENTER))] = ("alert jobs get their full ad", "platform")
+    answers.remove(("Parallel Search API key", ENTER))
+    p = run(ws, "sources", answers)
+    assert load_config(ws).sources.alerts.mode == "platform"
+    assert not any("Parallel Search API key" in q for _, q in p.asked)

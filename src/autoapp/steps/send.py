@@ -288,11 +288,17 @@ def send_test_applications(ctx: RunContext, *, mailer: Mailer | None = None) -> 
     real_today = sends_today(repo, datetime.now(UTC))
     job_ids = [j["id"] for j in repo.jobs_by_status(Status.PREPARED)
                if (repo.get_application(j["id"]) or {"channel": None})["channel"] == "email"]
+    sample = ctx.sample
     for job_id in job_ids:
+        if sample is not None and len(s.sent) + len(s.would_send) >= sample.test_emails:
+            break  # the quick test sends at most this many test emails
         job = repo.get_job(job_id)
         folder = _folder(ctx, job_id)
         elig = check_eligibility(repo, job_id, ctx.config.email, bundle=folder / BUNDLE if folder else None)
         reasons = list(elig.reasons)
+        if sample is not None and sample.ignore_threshold:
+            # The quick test prepared its jobs whatever their score; the mail goes only to you, so the score is no bar.
+            reasons = [r for r in reasons if not r.startswith(("decision is not apply", "fit score "))]
         if folder is not None and not (folder / "email.eml").exists():
             reasons.append("email.eml is missing; run `autoapp render` for this job")
         if not any("daily cap" in r for r in reasons) and real_today + len(s.sent) + len(s.would_send) >= cap:

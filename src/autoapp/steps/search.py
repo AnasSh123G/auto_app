@@ -37,6 +37,8 @@ class SearchSummary:
     sources: dict[str, SourceReport] = field(default_factory=dict)
     unrecognised_emails: int = 0
     warnings: list[str] = field(default_factory=list)
+    alert_emails: int = 0  # alert emails read and parsed in this run
+    alert_parsers: dict[str, int] = field(default_factory=dict)  # parser name -> cards, for the quick test
 
     def report(self, name: str) -> SourceReport:
         return self.sources.setdefault(name, SourceReport())
@@ -106,9 +108,7 @@ def run_search(
             continue
         detail = getattr(source, "fetch_detail", None)
         try:
-            for sp in profiles:
-                for raw in source.search(sp):
-                    _store(ctx, raw, report, profiles, today, detail)
+            _search_source(ctx, source, report, profiles, today, detail)
         except Exception as err:  # noqa: BLE001 - isolate source failures
             report.note = f"error: {err}"
         stopped = getattr(source, "stop_reason", None)
@@ -124,6 +124,19 @@ def run_search(
     if "alerts" in summary.sources:
         _emit_source(ctx, "alerts", summary.sources["alerts"], unrecognised=summary.unrecognised_emails)
     return summary
+
+
+def _search_source(ctx: RunContext, source, report: SourceReport, profiles: list[SearchProfile],  # noqa: ANN001
+                   today: date, detail) -> None:  # noqa: ANN001
+    """Query one source with every profile; the quick test asks only the first profile and stops at a few jobs."""
+    sample = ctx.sample
+    kept = 0
+    for sp in profiles[:1] if sample else profiles:
+        for raw in source.search(sp):
+            if _store(ctx, raw, report, profiles, today, detail):
+                kept += 1
+            if sample and (kept >= sample.jobs_per_source or report.found >= sample.jobs_per_source * 5):
+                return  # closes the source's generator: no further pages are requested
 
 
 def _emit_source(ctx: RunContext, name: str, r: SourceReport, **extra: int) -> None:
@@ -189,7 +202,8 @@ def _search_alerts(ctx: RunContext, summary: SearchSummary, profiles: list[Searc
             return
         from autoapp.mail.connection import ssl_context_for
 
-        mailbox = ImapAlertMailbox(account, password, ssl_context=ssl_context_for(account), since_days=30)
+        mailbox = ImapAlertMailbox(account, password, ssl_context=ssl_context_for(account), since_days=30,
+                                   max_messages=ctx.sample.alert_emails if ctx.sample else None)
 
     repo = ctx.repo
 
@@ -206,11 +220,14 @@ def _search_alerts(ctx: RunContext, summary: SearchSummary, profiles: list[Searc
             )
 
     try:
-        result = ingest_alerts(mailbox, alerts.folder, is_processed, mark)
+        result = ingest_alerts(mailbox, alerts.folder, is_processed, mark,
+                               newest=ctx.sample.alert_emails if ctx.sample else None)
     except Exception as err:  # noqa: BLE001
         report.note = f"error: {err}"
         return
     summary.unrecognised_emails += result.unrecognised
+    summary.alert_emails += len(result.processed_ids)
+    summary.alert_parsers.update(result.parsers)
     summary.warnings += result.warnings
     own_resolver = resolver is None
     resolver = resolver or StepStoneLinkResolver()

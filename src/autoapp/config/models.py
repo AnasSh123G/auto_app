@@ -111,9 +111,16 @@ class AdzunaConfig(_Model):
     max_requests_per_month: int = Field(default=900, ge=1)
 
 
+AlertMode = Literal["search_first", "platform"]
+
+
 class AlertsSource(_Model):
+    """``mode`` decides how an alert job gets its ad: ``search_first`` (default) searches for the employer's own
+    ad and careers page and never opens the job board's page; ``platform`` reads the job board's page as before."""
+
     enabled: bool = True
     folder: str = "Jobalerts"
+    mode: AlertMode = "search_first"
 
 
 class ArbeitnowConfig(_Model):

@@ -102,7 +102,8 @@ def test_hand_edits_are_defaults_on_rerun(finished):
     prompter.feed(
         ("Use Adzuna", None), ("Adzuna app ID", None), ("Adzuna app key", None), ("job-alert emails", None),
         ("Mail provider", None), ("Email address", None), ("app password", None), ("Folder or label", None),
-        ("LinkedIn job pages", None), ("Indeed job pages", None), ("StepStone job pages", None), ("careers pages", None),
+        ("alert jobs get their full ad", None), ("LinkedIn job pages", None), ("Indeed job pages", None),
+        ("StepStone job pages", None), ("careers pages", None), ("Parallel Search API key", None),
         ("company apply links", None), ("Use Arbeitnow", None), ("Use Workwise", None),
         ("Test the connections", False),
     )

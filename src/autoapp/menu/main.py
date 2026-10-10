@@ -504,13 +504,18 @@ def entry_tests(tctx: typer.Context, p: Prompter) -> str:
     from autoapp.commands import run_with_mode, send
 
     choice = p.select("Which test?", [
+        ("quick", "Quick test: a small sample of every step (a few emails, jobs, employers, one application), then a checklist"),
         ("testrun", "Test run: a full run where every email comes to you, marked TEST_RUN"),
         ("fresh", "Fresh test run: as above, but every job counts as new (your history is not touched)"),
         ("email", "Send a test email for one application to myself"),
         ("logins", "Check the logins (mailboxes, AI model, Adzuna)"),
         ("dry", "Dry run: a full run that sends nothing, saves no drafts and marks no emails"),
         (BACK, "Back"),
-    ], default="logins")
+    ], default="quick")
+    if choice == "quick":
+        code = _call(run_with_mode, tctx, profile=None, mode="test", dry_run=False, interactive=True, prompter=p,
+                     ask_mode=False, fresh=True, sample=True)
+        return "Quick test finished." if code == 0 else f"Quick test finished with problems (exit code {code})."
     if choice == "testrun":
         code = _call(run_with_mode, tctx, profile=None, mode="test", dry_run=False, interactive=True, prompter=p,
                      ask_mode=False)
@@ -581,6 +586,10 @@ def check_logins(ws: Workspace, checks=None, draft_store_factory=None, adzuna_ch
     if config.sources.adzuna.enabled:
         ok, message = (adzuna_check or _adzuna_check)()
         line("Adzuna key", ok, message, "Settings > sources")
+    if config.sources.alerts.enabled and config.sources.alerts.mode == "search_first":
+        key_set = bool(os.environ.get("PARALLEL_API_KEY"))
+        line("search key for search-first alert jobs (PARALLEL_API_KEY)", key_set,
+             "not set: alert jobs wait until a key is saved", "Settings > sources")
     return lines
 
 
@@ -619,7 +628,7 @@ def section_summaries(ws: Workspace) -> dict[str, str]:
         profile, docs = "not set", "?"
     keywords = sum(len(sp.keywords) for sp in c.search_profiles)
     sources = [n for n, on in (("Arbeitsagentur", c.sources.arbeitsagentur.enabled), ("Adzuna", c.sources.adzuna.enabled),
-                              ("alert emails", c.sources.alerts.enabled)) if on]
+                              ((f"alert emails ({c.sources.alerts.mode.replace('_', ' ')})"), c.sources.alerts.enabled)) if on]
     return {
         "documents": docs,
         "profile": profile,

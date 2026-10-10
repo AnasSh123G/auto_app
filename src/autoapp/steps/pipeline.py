@@ -12,7 +12,16 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from autoapp.db.repo import Repo
-from autoapp.employers.service import DiscoverySummary, OwnAdsSummary, find_own_ads, run_discovery
+from autoapp.employers.service import (
+    AlertResolutionSummary,
+    DiscoverySummary,
+    OwnAdsSummary,
+    add_careers_matches,
+    alerts_search_first,
+    find_alert_ads,
+    find_own_ads,
+    run_discovery,
+)
 from autoapp.llm.cost import CostSummary, format_cost
 from autoapp.steps.context import RunContext
 from autoapp.steps.drafts import CheckSummary, DraftSummary, check_drafts, draft_applications
@@ -27,6 +36,7 @@ from autoapp.tracking.csv_export import export_csv, sync_csv
 @dataclass
 class RunSummary:
     search: SearchSummary | None = None
+    alerts: AlertResolutionSummary | None = None
     employers: DiscoverySummary | None = None
     own_ads: OwnAdsSummary | None = None
     fetch: FetchSummary | None = None
@@ -38,6 +48,7 @@ class RunSummary:
     test: TestRunSummary | None = None
     cost: CostSummary | None = None
     mode: str | None = None
+    alert_mode: str | None = None  # search_first | platform
     dry_run: bool = False
     forms_to_finish: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
@@ -52,6 +63,9 @@ class RunSummary:
         if self.mode:
             labels = {"automatic": "full automatic", "review": "review first", "test": "test run"}
             out.append(f"mode: {labels.get(self.mode, self.mode)}" + (" (dry run)" if self.dry_run else ""))
+        if self.alert_mode:
+            out.append("alert mode: " + {"search_first": "search first (employer ads found by search)",
+                                         "platform": "platform (job board pages are read)"}.get(self.alert_mode, self.alert_mode))
         if self.drafts_check and (self.drafts_check.sent or self.drafts_check.missing):
             c = self.drafts_check
             out.append(f"drafts check: {len(c.sent)} sent by you" + (f", draft missing for {', '.join(c.missing)}"
@@ -65,6 +79,8 @@ class RunSummary:
                            f"{r.filtered} filtered{extra}")
             if self.search.unrecognised_emails:
                 out.append(f"alert emails from unknown senders: {self.search.unrecognised_emails}")
+        if self.alerts:
+            out += self.alerts.lines()
         if self.employers:
             out += self.employers.lines()
         if self.own_ads:
@@ -133,7 +149,7 @@ def _guard(summary: RunSummary, step: str, fn, *args: Any, ctx: RunContext | Non
 
 def run_pipeline(ctx: RunContext, profile_name: str | None = None, **overrides: Any) -> RunSummary:
     """Run every step once. ``overrides`` let tests inject sources, mailbox, fetchers, mailer, renderer."""
-    s = RunSummary(mode=ctx.mode, dry_run=ctx.dry_run)
+    s = RunSummary(mode=ctx.mode, dry_run=ctx.dry_run, alert_mode=ctx.config.sources.alerts.mode)
     tracking = ctx.config.tracking
     s.warnings += _guard(s, "csv sync", sync_csv, ctx.conn, ctx.ws.csv_path, tracking.delimiter) or []
 
@@ -146,9 +162,15 @@ def run_pipeline(ctx: RunContext, profile_name: str | None = None, **overrides: 
                       mailbox=overrides.get("mailbox"), resolver=overrides.get("resolver"))
     if s.search:
         s.warnings += s.search.warnings
-    if ctx.config.sources.employer_careers.enabled:
+    if alerts_search_first(ctx.config):
+        # Search first: the employer's own ad by company and title, then its careers pages, before any page is read.
+        s.alerts = _guard(s, "alert ads", find_alert_ads, ctx, ctx=ctx, fetch=overrides.get("employer_fetch"),
+                          api=overrides.get("employer_api"))
+    if alerts_search_first(ctx.config) or ctx.config.sources.employer_careers.enabled:
         s.employers = _guard(s, "employer sites", run_discovery, ctx, ctx=ctx, fetch=overrides.get("employer_fetch"),
                              api=overrides.get("employer_api"))
+        if s.alerts and s.employers is not None:
+            add_careers_matches(ctx, s.alerts)
         if s.employers:
             s.errors += [f"employer sites: {e}" for e in s.employers.errors]
             s.warnings += s.employers.warnings

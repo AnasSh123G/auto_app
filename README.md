@@ -2,7 +2,7 @@
 
 A local command-line tool that finds job ads in Germany, checks each one against your CV, writes a tailored cover letter, builds a complete application folder, saves email applications as drafts in your own mailbox or sends them from it (your choice) and fills web application forms for you to submit. Everything it does is tracked in `applications.csv`.
 
-It never applies on LinkedIn, Indeed or StepStone: it reads the job-alert emails those sites send you, uses the Arbeitsagentur, Adzuna and Workwise searches, and leaves every web form's Submit button to you. Only if you switch it on per site (`sources.apply_links_with_login`, off by default) does it open a job page there with your login, to read the company's apply address.
+It never applies on LinkedIn, Indeed or StepStone: it reads the job-alert emails those sites send you and, by default, finds each job's own ad on the employer's website with a web search instead of opening the job board's page (`sources.alerts.mode`, `search_first` or `platform`), uses the Arbeitsagentur, Adzuna and Workwise searches, and leaves every web form's Submit button to you. Only if you switch it on per site (`sources.apply_links_with_login`, off by default) does it open a job page there with your login, to read the company's apply address.
 
 ## Quick start
 
@@ -31,6 +31,7 @@ Run each command from the project folder as `uv run autoapp <command>`, for exam
 | `draft <id> [--again]`, `drafts [--check]` | Save one email application as a draft in your mailbox; list drafts, or mark the ones you sent by hand as `sent` |
 | `reset-data [--answers] [--logins] [--yes]` | Delete all job data (history, folders, CSV, logs, test runs) and keep the setup; shows what goes and asks first |
 | `login <linkedin\|stepstone\|indeed\|workwise>` | Log in once in the app's browser (kept for later): Workwise applications, and company apply links with your login (`sources.apply_links_with_login`, off by default) |
+| `test [--profile NAME] [--no-dashboard]` | Quick test: a small sample of every step (a few alert emails, jobs, employer lookups, one email and one form application) in a throwaway test workspace, then an OK/FAILED/SKIPPED checklist. Sends at most one `TEST_RUN:` email, to you; your real history is not touched; exit code 1 on a failure |
 | `send <id> [--test]` | Send one prepared email now; with `--test`, send the email to yourself instead |
 | `search`, `evaluate`, `prepare` | Individual steps |
 | `add <url>`, `describe <id>` | Add a job by link; paste an ad whose page could not be read |
@@ -55,7 +56,7 @@ Run each command from the project folder as `uv run autoapp <command>`, for exam
 | Employer sites | Show saved employer careers sites, preview or run a lookup, scan saved sites again, confirm the right website for one job |
 | Redo unsent | Process every job that is not sent again, as if it were new (asks first, backs the database up) |
 | Add a job by URL | Add one ad by its link; paste the text if the page cannot be read |
-| Tests | Test run, test email for one application, check logins (mailboxes, Drafts folder, AI model, Adzuna), dry run |
+| Tests | Quick test (the default), test run, test email for one application, check logins (mailboxes, Drafts folder, AI model, Adzuna), dry run |
 | Settings | Edit one setup section, set the default run mode for scheduled runs, redo the whole setup (a backup is made first), reset one section |
 | Quit | Leave the menu |
 

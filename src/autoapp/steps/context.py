@@ -20,6 +20,34 @@ from autoapp.llm.base import LLMClient, Usage, UsageMeter
 from autoapp.llm.cost import PriceTable
 
 
+@dataclass(frozen=True)
+class SampleLimits:
+    """The quick test (``autoapp test``): a small sample of every step instead of a whole run (run-modes spec).
+
+    ``RunContext.sample`` is None in every normal run, so steps only ever look at it where they already limit work.
+    """
+
+    alert_emails: int = 2  # the newest alert emails read
+    jobs_per_source: int = 2  # jobs kept from each search source
+    employer_lookups: int = 2  # alert jobs / employers looked up online
+    evaluations: int = 4
+    preparations: int = 2
+    test_emails: int = 1
+    arbeitnow_pages: int = 3  # Arbeitnow is read page by page and matched locally: a few pages are enough to try it
+    ignore_threshold: bool = True  # prepare (and test-mail) the best evaluated jobs whatever their score
+
+    def apply_to(self, config: Config) -> None:
+        """Lower the per-run limits of ``config`` (the in-memory copy of this run) to this sample."""
+        limits = config.limits
+        limits.max_evaluate_per_run = min(limits.max_evaluate_per_run, self.evaluations)
+        limits.max_prepare_per_run = min(limits.max_prepare_per_run, self.preparations)
+        employers = config.sources.employer_careers
+        employers.max_employers_per_run = min(employers.max_employers_per_run, self.employer_lookups)
+        arbeitnow = config.sources.arbeitnow
+        arbeitnow.max_pages_per_run = min(arbeitnow.max_pages_per_run, self.arbeitnow_pages)
+        arbeitnow.max_requests_per_run = min(arbeitnow.max_requests_per_run, self.arbeitnow_pages)
+
+
 @dataclass
 class RunContext:
     ws: Workspace
@@ -36,6 +64,9 @@ class RunContext:
     _meter: UsageMeter | None = None
     _http: HttpFetcher | None = None
     _apply_links: Any = None  # fetch.apply_links.RunLookup, made on first use
+    # Search-first alert handling: why an alert job still has no employer ad (job id -> reason), for the detail step.
+    alert_notes: dict[str, str] = field(default_factory=dict)
+    sample: SampleLimits | None = None  # set only by the quick test
 
     @classmethod
     def open(cls, ws: Workspace, *, dry_run: bool = False, interactive: bool = True,

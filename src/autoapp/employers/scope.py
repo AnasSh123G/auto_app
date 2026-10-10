@@ -25,7 +25,7 @@ DIRECTORY_HOSTS = frozenset({
     "hrb.de", "unternehmen24.info", "wlw.de", "europages.de", "yellowpages.com", "dnb.com", "zoominfo.com",
     "crunchbase.com", "jobted.de", "talent.com", "jobrapido.com", "whatjobs.com", "ziprecruiter.com", "welcometothejungle.com",
     "tracxn.com", "owler.com", "pitchbook.com", "rocketreach.co", "cbinsights.com", "wellfound.com", "companyhouse.de",
-    "handelsregister.de", "unternehmensregister.de", "bundesanzeiger.de", "firmenabc.at", "dnb.de", "lusha.com",
+    "handelsregister.de", "unternehmensregister.de", "workwise.io", "bundesanzeiger.de", "firmenabc.at", "dnb.de", "lusha.com",
 })
 
 

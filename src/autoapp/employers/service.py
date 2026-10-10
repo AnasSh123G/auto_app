@@ -7,6 +7,7 @@ stop other employers or sources; an unexpected error is reported as an error, no
 
 from __future__ import annotations
 
+import json
 import os
 from collections import Counter
 from collections.abc import Callable
@@ -37,6 +38,20 @@ from autoapp.steps.context import RunContext
 # Alerts from platforms the app does not open (LinkedIn, Indeed, StepStone). Workwise jobs are applied to on
 # Workwise itself, which the app can open, so they need no employer lookup.
 ALERT_SOURCES = tuple(s for s in get_args(AlertSource) if not s.startswith("workwise"))
+# In search-first mode every alert source counts, Workwise alerts included: nothing is read on the job board itself.
+SEARCH_FIRST_ALERT_SOURCES = tuple(get_args(AlertSource))
+
+
+def alerts_search_first(config) -> bool:  # noqa: ANN001
+    """True when alert jobs get their ad by searching for the employer's own posting (``sources.alerts.mode``)."""
+    return config.sources.alerts.mode == "search_first"
+
+
+def alert_sources(config) -> tuple[str, ...]:  # noqa: ANN001
+    """The alert sources whose jobs are looked up at the employer in the configured alert mode."""
+    return SEARCH_FIRST_ALERT_SOURCES if alerts_search_first(config) else ALERT_SOURCES
+
+
 # Alert jobs worth looking for at the employer: nothing evaluated as unfit, filtered, sent or closed.
 SEED_STATUSES = (Status.NEW, Status.DESCRIPTION_UNAVAILABLE, Status.EVALUATION_FAILED, Status.REVIEW, Status.APPROVED,
                  Status.PREPARED, Status.DRAFTED)
@@ -177,14 +192,22 @@ def make_fetch(ctx: RunContext) -> tuple[Callable, Callable[[], None]]:
 
 def run_discovery(ctx: RunContext, *, job_ids: list[str] | None = None, profile: str | None = None, again: bool = False,
                   refresh_site: bool = False, website: str | None = None, force: bool = False,
+                  import_related: bool | None = None,
                   fetch: Callable | None = None, api: ParallelSearch | None = None, today: date | None = None,
                   now: Callable[[], datetime] | None = None) -> DiscoverySummary:
+    """``import_related`` says whether other relevant openings of an employer are added as jobs; by default they
+    are, except that search-first alert handling alone (``employer_careers`` off) only looks for the alert's own job."""
     cfg = ctx.config.sources.employer_careers
-    summary = DiscoverySummary(enabled=cfg.enabled or force)
+    search_first = alerts_search_first(ctx.config)
+    summary = DiscoverySummary(enabled=cfg.enabled or force or search_first)
     if not summary.enabled:
         return summary
+    if import_related is None:
+        import_related = cfg.enabled or force or not search_first
     profiles = [p for p in ctx.config.search_profiles if profile in (None, p.name)]
-    rows = eligible_seed_rows(ctx.conn, job_ids=job_ids, profiles=profiles, again=again)
+    rows = eligible_seed_rows(ctx.conn, job_ids=job_ids, profiles=profiles, again=again, sources=alert_sources(ctx.config))
+    if search_first:
+        rows = [r for r in rows if not _company_unknown(ctx, r)]  # nothing to look up without an employer name
     if not rows:
         return summary
     groups = group_seeds([seed_of(r) for r in rows])
@@ -209,7 +232,8 @@ def run_discovery(ctx: RunContext, *, job_ids: list[str] | None = None, profile:
             summary.employers.append(report)
             try:
                 _process_group(ctx, group, report, summary, profiles, emp, gateway, reconciler, fetch, meter, run_budget,
-                               emit, again=again, refresh_site=refresh_site, website=website, now=now)
+                               emit, again=again, refresh_site=refresh_site, website=website, now=now,
+                               import_related=import_related)
             except Exception as err:  # noqa: BLE001 - one employer must not stop the others
                 summary.errors.append(f"employer {group.name}: {type(err).__name__}: {err}")
                 emit("error", f"employer discovery for {group.name} failed: {type(err).__name__}: {err}")
@@ -256,7 +280,8 @@ def _emitter(ctx: RunContext) -> Callable[..., None]:
 
 def _process_group(ctx, group: Group, report: EmployerReport, summary: DiscoverySummary, profiles, emp: EmployerRepo,  # noqa: ANN001
                    gateway: SearchGateway, reconciler: Reconciler, fetch, meter: PageMeter, run_budget: RunBudget,
-                   emit, *, again: bool, refresh_site: bool, website: str | None, now) -> None:  # noqa: ANN001
+                   emit, *, again: bool, refresh_site: bool, website: str | None, now,  # noqa: ANN001
+                   import_related: bool = True) -> None:
     cfg = ctx.config.sources.employer_careers
     resolver = IdentityResolver(emp, cfg, fetch, meter, gateway, emit, now=now)
     ident = resolver.confirm(group, website) if website else resolver.resolve(group, again=again, refresh_site=refresh_site)
@@ -307,6 +332,8 @@ def _process_group(ctx, group: Group, report: EmployerReport, summary: Discovery
             report.unresolved.append(job["id"])
         else:
             report.not_found.append(job["id"])
+    if not import_related:
+        return
     related = reconciler.import_related(employer, listings, _profiles_for(group, profiles), attached_urls=attached,
                                         seed_job_ids=report.seeds)
     report.related_created, report.related_linked = related.created, related.linked
@@ -325,6 +352,139 @@ class OwnAdsSummary:
                 f"the employer's site by searching company and title ({self.search_requests} search requests)"]
 
 
+NO_EMPLOYER_NAME = "alert does not name the employer"
+
+
+@dataclass
+class AlertResolutionSummary:
+    """How the alert jobs of a search-first run got their ad (alert-resolution spec)."""
+
+    mode: str = "platform"
+    searched: int = 0
+    direct: list[str] = field(default_factory=list)
+    via_careers: list[str] = field(default_factory=list)
+    not_found: dict[str, str] = field(default_factory=dict)
+    deferred: dict[str, str] = field(default_factory=dict)
+    no_company: list[str] = field(default_factory=list)
+    search_requests: int = 0
+
+    @property
+    def active(self) -> bool:
+        return self.mode == "search_first"
+
+    def lines(self) -> list[str]:
+        if not self.active or not (self.searched or self.no_company or self.deferred or self.not_found):
+            return []
+        waiting = len(self.not_found) + len(self.deferred) + len(self.no_company)
+        out = [f"alert jobs (search first): {len(self.direct)} found by searching company and title, "
+               f"{len(self.via_careers)} on the employer's careers page, {len(self.not_found)} not found, "
+               f"{len(self.deferred)} deferred" + (f", {len(self.no_company)} without an employer name" if self.no_company else "")
+               + (f" ({self.search_requests} search requests)" if self.search_requests else "")]
+        reasons = {**self.not_found, **self.deferred}
+        out += [f"alert job {job_id} waits: {why}" for job_id, why in sorted(reasons.items())[:10]]
+        if waiting > 10:
+            out.append(f"... and {waiting - 10} more alert jobs wait for their employer ad")
+        return out
+
+
+def _company_unknown(ctx: RunContext, row) -> bool:  # noqa: ANN001
+    if (row["company"] or "").startswith("(company"):
+        return True
+    for source in ctx.repo.sources(row["id"]):
+        try:
+            if json.loads(source["raw"] or "{}").get("company_unknown"):
+                return True
+        except (json.JSONDecodeError, AttributeError):
+            continue
+    return False
+
+
+def find_alert_ads(ctx: RunContext, *, job_ids: list[str] | None = None, again: bool = False,
+                   fetch: Callable | None = None, api: ParallelSearch | None = None,
+                   now: Callable[[], datetime] | None = None) -> AlertResolutionSummary:
+    """Search-first alert handling, step one: search "<company> <job title>" for every alert job without a text.
+
+    Runs before the detail step and before evaluation, so the ad's text comes from the employer and a job board's
+    page is never read. What this does not find is left to ``run_discovery`` (the employer's careers pages); the
+    reason of every job that still has no ad is kept in ``ctx.alert_notes`` for the detail step.
+    """
+    cfg = ctx.config.sources.employer_careers
+    summary = AlertResolutionSummary(mode=ctx.config.sources.alerts.mode)
+    if not summary.active:
+        return summary
+    rows = eligible_seed_rows(ctx.conn, job_ids=job_ids, profiles=list(ctx.config.search_profiles), again=again,
+                              sources=alert_sources(ctx.config), statuses=(Status.NEW, Status.DESCRIPTION_UNAVAILABLE))
+    rows = [r for r in rows if not (r["description"] or "").strip()]
+    named = []
+    for row in rows:
+        if _company_unknown(ctx, row):
+            summary.no_company.append(row["id"])
+            ctx.alert_notes[row["id"]] = NO_EMPLOYER_NAME
+        else:
+            named.append(row)
+    if ctx.sample is not None and len(named) > ctx.sample.employer_lookups:
+        for row in named[ctx.sample.employer_lookups:]:
+            summary.deferred[row["id"]] = "quick test: only a sample of the alert jobs is searched"
+            ctx.alert_notes[row["id"]] = summary.deferred[row["id"]]
+        named = named[:ctx.sample.employer_lookups]
+    if not named:
+        return summary
+    if api is None and not os.environ.get("PARALLEL_API_KEY"):
+        why = "PARALLEL_API_KEY is not set in workspace/.env"
+        for row in named:
+            summary.deferred[row["id"]] = why
+            ctx.alert_notes[row["id"]] = f"search key missing: {why}"
+        ctx.emit("warning", None, f"{len(named)} alert jobs wait for the search key: {why} "
+                 "(sources.alerts.mode is search_first)")
+        return summary
+    close_fetch: Callable[[], None] = lambda: None  # noqa: E731
+    if fetch is None:
+        fetch, close_fetch = make_fetch(ctx)
+    own_api = api is None
+    api = api or ParallelSearch(os.environ.get("PARALLEL_API_KEY", ""))
+    gateway = SearchGateway(ctx.conn, cfg, api)
+    run_budget = RunBudget(pages=cfg.max_pages_per_run, openings=cfg.max_openings_per_run)
+    own = OwnAdsSummary()
+
+    def heard(job_id: str, kind: str, reason: str) -> None:
+        if kind == "found":
+            summary.direct.append(job_id)
+            ctx.alert_notes.pop(job_id, None)
+            return
+        (summary.not_found if kind == "miss" else summary.deferred)[job_id] = reason
+        ctx.alert_notes[job_id] = reason
+
+    try:
+        _direct_postings(ctx, named, EmployerRepo(ctx.conn), gateway, fetch, run_budget, _emitter(ctx), own,
+                         again=again, now=now, on_result=heard)
+    finally:
+        close_fetch()
+        if own_api:
+            api.close()
+    summary.searched = own.searched
+    summary.search_requests = gateway.usage.requests
+    if summary.search_requests:
+        ctx.emit("employer_search_usage", None, f"{summary.search_requests} search requests",
+                 requests=summary.search_requests, failures=gateway.usage.failures,
+                 estimated_usd=gateway.usage.estimated_usd)
+    return summary
+
+
+def add_careers_matches(ctx: RunContext, summary: AlertResolutionSummary) -> None:
+    """Move the alert jobs that the employer's careers page matched, after discovery, out of the waiting lists."""
+    waiting = {**summary.not_found, **summary.deferred}
+    if not waiting:
+        return
+    marks = ", ".join("?" for _ in waiting)
+    matched = {r["job_id"] for r in ctx.conn.execute(
+        f"SELECT job_id FROM employer_seeds WHERE outcome = 'matched' AND job_id IN ({marks})", list(waiting))}  # noqa: S608
+    for job_id in sorted(matched):
+        summary.via_careers.append(job_id)
+        summary.not_found.pop(job_id, None)
+        summary.deferred.pop(job_id, None)
+        ctx.alert_notes.pop(job_id, None)
+
+
 def find_own_ads(ctx: RunContext, *, job_ids: list[str] | None = None, again: bool = False, fetch: Callable | None = None,
                  api: ParallelSearch | None = None, now: Callable[[], datetime] | None = None) -> OwnAdsSummary:
     """For every alert job the employer's careers site did not give: search "<company> <job title>" for its own ad.
@@ -338,6 +498,8 @@ def find_own_ads(ctx: RunContext, *, job_ids: list[str] | None = None, again: bo
     sources = OWN_AD_SOURCES if cfg.enabled else ("arbeitsagentur",)
     rows = eligible_seed_rows(ctx.conn, job_ids=job_ids, profiles=list(ctx.config.search_profiles), again=again,
                               sources=sources, statuses=OWN_AD_STATUSES)
+    if ctx.sample is not None:
+        rows = rows[:ctx.sample.employer_lookups]
     if not rows:
         return summary
     if api is None and not os.environ.get("PARALLEL_API_KEY"):
@@ -367,8 +529,12 @@ def find_own_ads(ctx: RunContext, *, job_ids: list[str] | None = None, again: bo
 
 
 def _direct_postings(ctx, rows, emp: EmployerRepo, gateway: SearchGateway, fetch, run_budget: RunBudget,  # noqa: ANN001
-                     emit, summary: OwnAdsSummary, *, again: bool, now) -> list[str]:  # noqa: ANN001
+                     emit, summary: OwnAdsSummary, *, again: bool, now,  # noqa: ANN001
+                     on_result: Callable[[str, str, str], None] | None = None) -> list[str]:
+    """Search each row's own ad. ``on_result(job_id, kind, reason)`` hears every job's outcome: ``found``,
+    ``miss`` (searched, nothing usable) or ``deferred`` (not searched now: cap, key, page limit)."""
     cfg = ctx.config.sources.employer_careers
+    report = on_result or (lambda *_: None)
     restricted = ctx.config.assist.restricted_domains
     memo = PostingMemo(ctx.conn, cfg.failure_ttl_hours, now)
     found: list[str] = []
@@ -387,11 +553,13 @@ def _direct_postings(ctx, rows, emp: EmployerRepo, gateway: SearchGateway, fetch
         if miss:
             emit("posting_searched", f"own ad not searched again before {cfg.failure_ttl_hours} hours pass "
                  f"(last time: {miss})", job_id=job["id"], found=False)
+            report(job["id"], "miss", f"employer ad not found (last search: {miss})")
             continue
         meter = PageMeter(run_budget, MAX_PAGES)  # its own pages: the website check cannot use them up
         if meter.left <= 0:
             emit("posting_searched", "own ad not searched: the page limit for this run is used up", job_id=job["id"],
                  found=False)
+            report(job["id"], "deferred", "page limit for this run reached")
             continue
         summary.searched += 1
         result = find_posting(gateway, meter.wrap(fetch), job_id=job["id"], company=seed.company, title=seed.title,
@@ -401,10 +569,13 @@ def _direct_postings(ctx, rows, emp: EmployerRepo, gateway: SearchGateway, fetch
                 memo.save(job["id"], found=False, url=None, reason=result.reason)
             emit("posting_searched", f"own ad not found by searching company and title: {result.reason}",
                  job_id=job["id"], found=False)
+            report(job["id"], "deferred" if result.deferred else "miss",
+                   result.reason if result.deferred else f"employer ad not found: {result.reason}")
             continue
         memo.save(job["id"], found=True, url=result.url, reason=result.reason)
         _attach_direct(ctx, emp, job, app, result, restricted, emit)
         found.append(job["id"])
+        report(job["id"], "found", result.reason)
     return found
 
 

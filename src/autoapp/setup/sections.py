@@ -687,10 +687,19 @@ def run_sources(ctx: SetupContext) -> bool:
         acct = ask_mail_account(ctx, purpose="alerts", current=cur_acct, default_env="AUTOAPP_ALERTS_PASSWORD")
         folder = p.text("Folder or label that holds the alert emails", _s(cur_alerts.get("folder")) or "Jobalerts",
                         required("The folder")).strip()
-        sources["alerts"] = {**cur_alerts, "enabled": True, "folder": folder}
+        p.say("How should an alert job get its full ad? Search first: the app looks for the employer's own ad (and")
+        p.say("its careers page) with a web search and never opens LinkedIn, Indeed, StepStone or Workwise job pages.")
+        p.say("Platform: the job board's page is read slowly, as before; the sites often block that.")
+        alert_mode = p.select("How should alert jobs get their full ad?", [
+            ("search_first", "Search first: find the employer's own ad by search (recommended; needs a Parallel Search key)"),
+            ("platform", "Platform: read the job board's page (often blocked)"),
+        ], default=_s(cur_alerts.get("mode")) or "search_first")
+        sources["alerts"] = {**cur_alerts, "enabled": True, "folder": folder, "mode": alert_mode}
         mail["alerts"] = acct
     else:
-        sources["alerts"] = {**cur_alerts, "enabled": False}
+        alert_mode = _s(cur_alerts.get("mode")) or "search_first"
+        sources["alerts"] = {**cur_alerts, "enabled": False, "mode": alert_mode}
+    search_first_alerts = use_alerts and alert_mode == "search_first"
 
     p.say("Some job pages (LinkedIn, Indeed, StepStone) are fetched to read the full description. This is done")
     p.say("slowly with random delays; the sites may still block it.")
@@ -703,11 +712,13 @@ def run_sources(ctx: SetupContext) -> bool:
     p.say("Parallel Search API (about $1 per 1,000 searches, at most 2 per new employer; the result is saved and")
     p.say("reused, so each employer is searched once). Sites already saved are scanned without a key.")
     use_emp = p.confirm("Look up employers' own careers pages for alert jobs?", default=bool(cur_emp.get("enabled", False)))
-    if use_emp:
-        ask_secret(ctx, "Parallel Search API key (optional; without it only saved sites are scanned)",
+    if use_emp or search_first_alerts:
+        needed = "needed for search-first alert jobs" if search_first_alerts else "optional"
+        ask_secret(ctx, f"Parallel Search API key ({needed}; without it only saved sites are scanned)",
                    "PARALLEL_API_KEY")
         if not has_secret(ws, "PARALLEL_API_KEY"):
-            p.say("No key saved: employers without a saved careers site are skipped.")
+            p.say("No key saved: employers without a saved careers site are skipped"
+                  + (", and alert jobs wait until a key is set." if search_first_alerts else "."))
     sources["employer_careers"] = {**cur_emp, "enabled": use_emp}
 
     cur_links = dict(sources.get("apply_links_with_login") or {})
@@ -753,6 +764,8 @@ def run_sources(ctx: SetupContext) -> bool:
 
     if p.confirm("Test the connections now?", default=True):
         _check_loop(ctx, "Arbeitsagentur API reachable", ctx.checks.arbeitsagentur, None)
+        if search_first_alerts and not has_secret(ws, "PARALLEL_API_KEY"):
+            p.say("Note: search-first alert handling needs PARALLEL_API_KEY; without it alert jobs wait for a key.")
         if use_alerts:
             state = {"acct": acct}
 

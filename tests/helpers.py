@@ -85,11 +85,27 @@ def _pdf(path: Path, text: str) -> None:
     path.write_bytes(bytes(out))
 
 
+def _with_alert_mode(config: str, mode: str) -> str:
+    """``config`` with ``sources.alerts.mode`` set to ``mode`` unless it names a mode itself."""
+    import io
+
+    from ruamel.yaml import YAML
+
+    yaml = YAML()
+    data = yaml.load(config)
+    alerts = data.setdefault("sources", {}).setdefault("alerts", {})
+    alerts.setdefault("mode", mode)
+    out = io.StringIO()
+    yaml.dump(data, out)
+    return out.getvalue()
+
+
 def make_workspace(tmp_path: Path, *, config: str = CONFIG, profile: str = PROFILE,
-                   instructions: str = "Kurz und direkt schreiben.") -> Workspace:
+                   instructions: str = "Kurz und direkt schreiben.", alert_mode: str = "platform") -> Workspace:
+    """Test workspaces keep the earlier ``platform`` alert mode unless a test asks for ``search_first``."""
     ws = Workspace(tmp_path / "ws")
     ws.ensure_layout()
-    ws.config_path.write_text(config, encoding="utf-8")
+    ws.config_path.write_text(_with_alert_mode(config, alert_mode), encoding="utf-8")
     ws.profile_path.write_text(profile, encoding="utf-8")
     ws.writing_instructions_path.write_text(instructions, encoding="utf-8")
     _pdf(ws.documents_dir / "Lebenslauf_de.pdf", CV_TEXT)

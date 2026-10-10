@@ -172,6 +172,39 @@ to on Workwise, which the app can open.
 2. Create a saved search with your keywords and filters
 3. Create a job alert by email
 
+## Alert jobs: search first (default) or platform
+
+An alert email only shows a card: title, company and city. `sources.alerts.mode` decides how the app gets the full
+ad of each card:
+
+```yaml
+sources:
+  alerts:
+    enabled: true
+    folder: Jobalerts
+    mode: search_first   # search_first (default) or platform
+```
+
+- **`search_first` (default).** The app reads only the alert email. For each new job it searches
+  `"<company>" "<job title>"` for the employer's own ad. If that finds nothing it looks up the
+  employer's website (or reuses one it saved before) and reads the job ads on its careers page. LinkedIn, Indeed,
+  StepStone and Workwise job pages are **never opened** to read a description, so their bot blocks cannot
+  stop the app. This works for every alert sender, Workwise included, and it needs `PARALLEL_API_KEY` in
+  `workspace/.env` (see the next section). It runs before the pages are read and before evaluation, even when
+  `sources.employer_careers.enabled` is off; that setting then only decides whether the employer's *other*
+  openings are added as new jobs.
+- **What if the ad is not found?** The job waits as `description_unavailable` and the reason is shown in the
+  tracker, the log and the run summary: `employer ad not found`, `search key missing`,
+  `search cap reached`, `alert does not name the employer`, and so on. It is searched again in a later run (after
+  `failure_ttl_hours`, or as soon as a cap allows). You can paste the text yourself with `autoapp describe <id>`
+  or add the employer's link with `autoapp add <url>`. The app never falls back to the job-board page.
+- **`platform`.** The earlier behavior: the job-board page is read slowly with your browser profile (see
+  [Detail fetching](#detail-fetching-page-parsing)), and employer lookup only happens when
+  `sources.employer_careers.enabled` is true. Set it to `platform` if you prefer that.
+
+Every run summary starts with `alert mode: ...` and, in `search_first`, counts how many alert jobs were found by
+searching, found on a careers page, not found or deferred. Search usage is reported separately from AI cost.
+
 ## Employer careers pages (optional, off by default)
 
 Alert emails (LinkedIn, Indeed, StepStone) often link to pages the tool cannot read. With
@@ -281,6 +314,9 @@ cities is one job with those locations. The matched alert posting is not importe
 run totals count recovered alerts and new employer jobs separately.
 
 ## Detail fetching (page parsing)
+
+In the default `search_first` alert mode (see above) alert jobs are not fetched from the job boards at all;
+this section applies to `sources.alerts.mode: platform` and to jobs from other sources.
 
 ### Alert-first processing
 

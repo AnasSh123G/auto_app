@@ -123,10 +123,12 @@ def sources_answers(*, test: bool = True) -> list[Any]:
         ("Email address", "me@gmail.com"),
         ("app password", "abcd efgh ijkl mnop"),
         ("Folder or label", ENTER),
+        ("alert jobs get their full ad", ENTER),
         ("LinkedIn job pages", ENTER),
         ("Indeed job pages", ENTER),
         ("StepStone job pages", ENTER),
         ("careers pages", ENTER),
+        ("Parallel Search API key", ENTER),  # asked because search-first alert handling needs it
         ("company apply links", ENTER), ("Use Arbeitnow", ENTER), ("Use Workwise", ENTER),
         ("Test the connections", test),
     ]

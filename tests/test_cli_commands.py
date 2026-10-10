@@ -283,3 +283,33 @@ def test_login_opens_the_sites_login_page_in_the_apps_browser(tmp_path, monkeypa
     assert "login is kept" in r.output
     bad = CliRunner().invoke(app, ["-w", str(ws.root), "login", "xing"])
     assert bad.exit_code == 2 and "unknown site" in bad.output
+
+
+@pytest.mark.parametrize("mode, expected", [
+    ("search_first", ["search", "alert_ads", "discovery", "fetch"]),
+    ("platform", ["search", "fetch"]),
+])
+def test_search_command_orders_the_alert_steps_by_mode(tmp_path, monkeypatch, mode, expected):
+    from autoapp.employers.service import AlertResolutionSummary
+    from autoapp.steps.fetch import FetchSummary
+    from autoapp.steps.search import SearchSummary
+
+    monkeypatch.setenv("AUTOAPP_NON_INTERACTIVE", "1")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-not-real")
+    ws = make_workspace(tmp_path, config=CONFIG + SETUP, alert_mode=mode)
+    order: list[str] = []
+
+    def step(name, result):
+        def fn(*a, **k):
+            order.append(name)
+            return result
+        return fn
+
+    from autoapp.employers.service import DiscoverySummary
+
+    monkeypatch.setattr("autoapp.steps.search.run_search", step("search", SearchSummary()))
+    monkeypatch.setattr("autoapp.employers.service.find_alert_ads", step("alert_ads", AlertResolutionSummary(mode=mode)))
+    monkeypatch.setattr("autoapp.employers.service.run_discovery", step("discovery", DiscoverySummary()))
+    monkeypatch.setattr("autoapp.steps.fetch.fetch_details", step("fetch", FetchSummary()))
+    cli(ws, "search")
+    assert order == expected

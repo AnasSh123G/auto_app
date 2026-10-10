@@ -1,0 +1,67 @@
+"""`autoapp test`: a quick test in a throwaway workspace, ending with a checklist (run-modes spec)."""
+
+from __future__ import annotations
+
+from typer.testing import CliRunner
+
+from autoapp.cli import app
+from autoapp.db.schema import open_db
+from tests.steps.test_quicktest_report import healthy
+from tests.steps.test_sandbox import seeded_real
+
+
+def invoke(real, *args):
+    return CliRunner().invoke(app, ["-w", str(real.root), "test", *args])
+
+
+def test_the_quick_test_samples_in_a_test_workspace_and_leaves_the_real_one_alone(tmp_path, monkeypatch):
+    real = seeded_real(tmp_path, monkeypatch)
+    seen = {}
+
+    def fake_pipeline(ctx, profile=None, **kw):
+        seen.update(root=ctx.ws.root, mode=ctx.mode, sample=ctx.sample, jobs=ctx.conn.execute(
+            "SELECT COUNT(*) FROM jobs").fetchone()[0], evaluate_limit=ctx.config.limits.max_evaluate_per_run,
+            prepare_limit=ctx.config.limits.max_prepare_per_run)
+        ctx.conn.execute("UPDATE api_usage SET requests = 43")  # spent in the test run
+        ctx.conn.commit()
+        return healthy()
+
+    monkeypatch.setattr("autoapp.steps.pipeline.run_pipeline", fake_pipeline)
+    result = invoke(real)
+    assert result.exit_code == 0, result.output
+    assert seen["mode"] == "test" and seen["jobs"] == 0 and seen["root"].parent == real.root / "test-runs"
+    assert (seen["sample"].alert_emails, seen["evaluate_limit"], seen["prepare_limit"]) == (2, 4, 2)
+    assert "quick test checklist:" in result.output and "OK       alert mailbox" in result.output
+    assert "SKIPPED  source arbeitnow: disabled" in result.output
+    conn = open_db(real.db_path)
+    assert conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 1  # the real history is untouched
+    assert [r[0] for r in conn.execute("SELECT message_id FROM processed_emails")] == ["<m1>"]
+    assert conn.execute("SELECT requests FROM api_usage").fetchone()[0] == 43  # but what was spent counts
+    conn.close()
+
+
+def test_a_failed_part_makes_the_command_exit_with_one(tmp_path, monkeypatch):
+    real = seeded_real(tmp_path, monkeypatch)
+
+    def failing(ctx, profile=None, **kw):
+        summary = healthy()
+        summary.search.sources["adzuna"].note = "error: Adzuna rejected the app ID or key (HTTP 401)"
+        return summary
+
+    monkeypatch.setattr("autoapp.steps.pipeline.run_pipeline", failing)
+    result = invoke(real)
+    assert result.exit_code == 1
+    assert "FAILED   source adzuna" in result.output and "1 FAILED" in result.output
+
+
+def test_a_normal_run_never_prints_a_checklist_or_samples(tmp_path, monkeypatch):
+    real = seeded_real(tmp_path, monkeypatch)
+    seen = {}
+
+    def fake_pipeline(ctx, profile=None, **kw):
+        seen["sample"] = ctx.sample
+        return healthy()
+
+    monkeypatch.setattr("autoapp.steps.pipeline.run_pipeline", fake_pipeline)
+    result = CliRunner().invoke(app, ["-w", str(real.root), "run", "--mode", "review", "--non-interactive"])
+    assert seen["sample"] is None and "quick test checklist" not in result.output

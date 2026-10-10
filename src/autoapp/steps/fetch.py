@@ -14,6 +14,8 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit
 
 from autoapp.db.status import Status
+from autoapp.employers.scope import host_matches
+from autoapp.employers.service import NO_EMPLOYER_NAME, _company_unknown, alert_sources, alerts_search_first
 from autoapp.fetch.browser_fetcher import BrowserFetcher, site_key
 from autoapp.fetch.extract import closed_notice, extract_job
 from autoapp.fetch.http_fetcher import FetchResult, HttpFetcher
@@ -47,6 +49,27 @@ def _employer_posting(ctx: RunContext, job_id: str) -> str | None:
     return row["posting_url"] if row and row["posting_url"] else None
 
 
+def _is_job_board_page(url: str) -> bool:
+    """LinkedIn, Indeed, StepStone and Workwise job pages: never read for alert jobs in search-first mode."""
+    return site_key(url) in PLATFORM_SITES or host_matches(url, frozenset({"workwise.io"}))
+
+
+def _waiting_reason(ctx: RunContext, job) -> str:  # noqa: ANN001
+    """Why a search-first alert job has no employer ad: this run's note, else what the employer lookup recorded."""
+    note = ctx.alert_notes.get(job["id"])
+    if note:
+        return note
+    if _company_unknown(ctx, job):
+        return NO_EMPLOYER_NAME
+    seed = ctx.conn.execute("SELECT outcome, reason FROM employer_seeds WHERE job_id = ?", (job["id"],)).fetchone()
+    if seed and seed["reason"] and seed["outcome"] != "matched":
+        return f"employer ad not found: {seed['reason']}"
+    miss = ctx.conn.execute("SELECT reason FROM posting_searches WHERE job_id = ? AND found = 0", (job["id"],)).fetchone()
+    if miss and miss["reason"]:
+        return f"employer ad not found: {miss['reason']}"
+    return "employer ad not found"
+
+
 def _where(url: str) -> str:
     """``stepstone`` / ``linkedin`` / ``indeed`` for platform pages, else the host name."""
     site = site_key(url)
@@ -69,6 +92,8 @@ def fetch_details(ctx: RunContext, *, http: HttpFetcher | None = None, browser: 
     own_browser = browser is None
     total = len(jobs)
     targets = [(job, _employer_posting(ctx, job["id"]) or job["job_url"]) for job in jobs]
+    search_first = alerts_search_first(ctx.config)
+    alert_set = set(alert_sources(ctx.config))
     sites = Counter(_where(url) if site_key(url) in PLATFORM_SITES else "other sites" for _, url in targets if url)
     ctx.emit("details_started", detail=f"{total} job pages to read ("
              + ", ".join(f"{name} {n}" for name, n in sorted(sites.items(), key=lambda kv: (-kv[1], kv[0]))) + ")", total=total)
@@ -92,6 +117,14 @@ def fetch_details(ctx: RunContext, *, http: HttpFetcher | None = None, browser: 
     try:
         for i, (job, url) in enumerate(targets, start=1):
             position.update(i=i, job=job)
+            if (search_first and (not url or _is_job_board_page(url)) and _employer_posting(ctx, job["id"]) is None
+                    and any(src["source"] in alert_set for src in repo.sources(job["id"]))):
+                # Search-first: an alert job's ad comes from the employer, never from the job board's page.
+                reason = _waiting_reason(ctx, job)
+                repo.transition(job["id"], Status.DESCRIPTION_UNAVAILABLE, note=reason)
+                summary.unavailable += 1
+                done("detail_skipped", job, f"skipped: no page of the job board is read (search first); {reason}")
+                continue
             if not url:
                 repo.transition(job["id"], Status.DESCRIPTION_UNAVAILABLE, note="no job URL")
                 summary.unavailable += 1

@@ -74,12 +74,14 @@ class ImapAlertMailbox:
         ssl_context: ssl.SSLContext | None = None,
         since_days: int | None = None,
         timeout: float = 30.0,
+        max_messages: int | None = None,
     ) -> None:
         self.account = account
         self._password = password
         self.ssl_context = ssl_context
         self.since_days = since_days
         self.timeout = timeout
+        self.max_messages = max_messages  # only the newest N messages are fetched (the quick test)
 
     def endpoint(self) -> tuple[str, int, str]:
         """Resolved ``(host, port, tls)`` with ``tls`` one of ``ssl``, ``starttls``, ``none``."""
@@ -121,6 +123,8 @@ class ImapAlertMailbox:
             if status != "OK":
                 raise RuntimeError("IMAP SEARCH failed")
             ids = data[0].split() if data and data[0] else []
+            if self.max_messages is not None:
+                ids = ids[-self.max_messages:] if self.max_messages > 0 else []  # SEARCH lists the oldest first
             for num in ids:
                 status, parts = conn.fetch(num.decode() if isinstance(num, bytes) else num, "(BODY.PEEK[])")
                 if status != "OK" or not parts:
@@ -151,6 +155,7 @@ class IngestResult(BaseModel):
     skipped_processed: int = 0
     warnings: list[str] = Field(default_factory=list)
     processed_ids: list[str] = Field(default_factory=list)
+    parsers: dict[str, int] = Field(default_factory=dict)  # parser name -> cards found, for the quick test
 
 
 def ingest_alerts(
@@ -158,17 +163,22 @@ def ingest_alerts(
     folder: str,
     is_processed: Callable[[str], bool],
     mark_processed: Callable[[str, str, int], None],
+    *,
+    newest: int | None = None,
 ) -> IngestResult:
     """Parse every unprocessed email in ``folder``.
 
     ``mark_processed(message_id, sender, card_count)`` is called only for emails from a known
     sender, including known senders with zero cards (those also get a warning). Emails from
     unknown senders are counted as unrecognised and left unprocessed so that they are ingested
-    once a parser exists.
+    once a parser exists. ``newest`` keeps only the last N messages the mailbox lists (oldest first).
     """
     result = IngestResult()
     seen: set[str] = set()
-    for message_id, msg in mailbox.list_messages(folder):
+    messages = mailbox.list_messages(folder)  # a generator for the real mailbox: read one message at a time
+    if newest is not None:
+        messages = list(messages)[-newest:] if newest > 0 else []
+    for message_id, msg in messages:
         if message_id in seen or is_processed(message_id):
             result.skipped_processed += 1
             continue
@@ -183,6 +193,7 @@ def ingest_alerts(
             result.unrecognised += 1
             continue
         result.warnings.extend(f"{message_id}: {w}" for w in parsed.warnings)
+        result.parsers[parsed.parser_name] = result.parsers.get(parsed.parser_name, 0) + len(parsed.cards)
         result.cards.extend((message_id, card) for card in parsed.cards)
         mark_processed(message_id, sender, len(parsed.cards))
         result.processed_ids.append(message_id)

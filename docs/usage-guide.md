@@ -38,7 +38,7 @@ while you work.
 | Step | What happens | Uses the AI? |
 |---|---|---|
 | **Search** | Looks at Arbeitsagentur, Adzuna, Workwise, optionally Arbeitnow, and the job-alert emails (LinkedIn, Indeed, StepStone, Workwise) in your mailbox | no |
-| **Fetch** | Reads the full text of ads that arrived with only a short snippet | no |
+| **Fetch** | Reads the full text of ads that arrived with only a short snippet. Alert jobs get their ad by a web search for the employer's own posting (`sources.alerts.mode: search_first`, the default), not from LinkedIn, Indeed, StepStone or Workwise | no |
 | **Evaluate** | Scores each job from 0 to 100 against your CV and decides: apply, maybe, or skip | yes (task `evaluate`) |
 | **Prepare** | Writes a cover letter, renders PDFs, builds the application folder, looks for the real application form | yes (tasks `write`, `form_find`) |
 | **Send / draft** | Email applications: saved as a draft in your mailbox, or sent, or sent to you as a test | no |
@@ -181,7 +181,7 @@ Redo unsent · Add a job by URL · Tests · Settings · Quit
 | **Employer sites** | Careers sites found for your alert jobs | Show, preview, look up, scan again, confirm a website for one job (section 14) |
 | **Redo unsent** | Process every unsent job again | Section 11 |
 | **Add a job by URL** | One job you found yourself | Paste the link. If the page cannot be read, it offers to let you paste the ad text |
-| **Tests** | Safe experiments | Test run, fresh test run, test email, check logins, dry run |
+| **Tests** | Safe experiments | Quick test (the default), test run, fresh test run, test email, check logins, dry run |
 | **Settings** | Change setup | Edit a section, default run mode for scheduled runs, redo or reset, delete all job data (keeps the setup) |
 | **Quit** | Leave | |
 
@@ -560,14 +560,59 @@ uv run autoapp assist <id>                # open one job directly in the browser
 
 ## 11. Safe ways to try things
 
-Four ways to try the program without sending anything to employers. They differ in what they touch:
+Five ways to try the program without sending anything to employers. They differ in what they touch:
 
 | Option | Command | Emails | Your real job history | Costs AI money? |
 |---|---|---|---|---|
+| **Quick test** | `uv run autoapp test` (menu: Tests > Quick test) | At most one, to **you**, subject `TEST_RUN: ...` | **Not touched.** A small sample of every step in `workspace/test-runs/<time>/`, then a checklist | a little |
 | **Dry run** | `uv run autoapp run --dry-run` (menu: Tests > Dry run) | none sent, none drafted; shows `WOULD ...` | Evaluations and folders are still made; mails are not marked processed | yes |
 | **Test run** | `uv run autoapp run --mode test` | Each goes to **you**, subject `TEST_RUN: ...` | Normal run; skips jobs already in the history | yes |
 | **Fresh test run** | `uv run autoapp run --mode test --fresh` | Each goes to **you** | **Not touched.** Runs in `workspace/test-runs/<time>/` with an empty history, so every job counts as new | yes |
 | **Redo unsent** | `uv run autoapp run --redo` | Whatever mode you pick | **Reset on purpose** for unsent jobs (a backup is made first) | yes |
+
+### Quick test
+
+`uv run autoapp test` (menu: **Tests > Quick test**, the pre-selected entry) checks the whole chain in a few minutes
+instead of simulating a whole run. In a throwaway workspace under `workspace/test-runs/<time>/` it:
+
+- reads the 1-2 newest alert emails (they are **not** marked as processed, so your next real run still reads them);
+- asks each enabled source (Arbeitsagentur, Adzuna, Workwise, Arbeitnow) for a couple of jobs, keeping at most 2 from each (Arbeitnow, which is
+  read page by page, only 3 pages);
+- looks up at most 2 alert employers online: the own-ad search, then the employer's website and careers page;
+- evaluates at most 4 jobs and prepares at most 2: one email and one online-form application, **even if they score
+  below your threshold**, so that letter writing and the read-only form search are exercised (nothing is filled in,
+  uploaded or submitted);
+- sends at most one `TEST_RUN:` email, to your own address only. The fit score does not stop it, every other
+  send rule does.
+
+It ends with a checklist, one line per part, each `OK`, `FAILED` or `SKIPPED` with the reason:
+
+```
+quick test checklist:
+  OK       alert mailbox: 2 newest emails read, 18 job cards
+  OK       alert parser linkedin: 6 cards
+  OK       source arbeitsagentur: 3 jobs found, 3 new
+  FAILED   source adzuna: error: Adzuna rejected the app ID or key (HTTP 401)
+  OK       source workwise: 4 jobs found, 4 new
+  SKIPPED  source arbeitnow: disabled
+  OK       search key: PARALLEL_API_KEY is set
+  OK       employer lookup: 3 search requests, 0 saved sites used, 1 ads found by search, 1 on careers pages
+  OK       reading pages: 2 job pages, 4 employer pages, 1 ads read from search results
+  OK       AI model (evaluation): 4 jobs evaluated
+  OK       letter writing: 2 applications prepared
+  OK       form finding: 1 found, 1 partial
+  SKIPPED  test email: no email application was prepared
+quick test: 10 OK, 1 FAILED, 2 SKIPPED
+```
+
+(An example; yours depends on your sources and on what the newest alert emails contain.)
+
+`SKIPPED` means that part could not be tried this time (for example no alert email in the folder, a disabled source,
+or no email application among the jobs it prepared, so no test email); run the quick test again later or use a
+**test run** for those parts;
+`FAILED` makes the command exit with code 1. Your real jobs, statuses, folders and CSV are not touched. The searches
+and AI calls are real, a handful in total, and are added to your real counters and limits. `--profile NAME` uses one
+search profile only. It cannot be set as `run.default_mode`.
 
 ### Dry run
 
@@ -781,6 +826,15 @@ link to a Workwise job from the email; the title and company then come from the 
 
 You apply to Workwise jobs on Workwise itself, with your Workwise account: run `uv run autoapp login workwise` once,
 then the app's browser is logged in when it opens a Workwise job.
+
+### Alert jobs: search first or platform
+
+By default (`sources.alerts.mode: search_first`) the app never opens a LinkedIn, Indeed, StepStone or Workwise job page
+to read an alert job. It takes the title, company and city from the alert email, searches for the employer's own ad
+and, if that fails, reads the job ads on the employer's careers page. This needs `PARALLEL_API_KEY` in
+`workspace/.env`; without it, alert jobs wait with the reason "search key missing" and the run says so. Set
+`sources.alerts.mode: platform` to get the earlier behavior (the job-board page is read, often blocked). The run
+summary names the mode and counts the outcomes.
 
 ### Getting past LinkedIn, StepStone and Indeed links
 

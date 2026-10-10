@@ -197,3 +197,76 @@ def test_later_alert_for_a_listed_vacancy_reads_only_its_page_and_never_searches
     s = run_discovery(ctx2, fetch=web, api=api2)
     assert calls2 == [] and web.calls == [TENANT + "details/346298.html"] and s.matched == 1
     assert ctx2.repo.get_job(other)["status"] == "new" and ctx2.repo.get_job(other)["description"]
+
+
+def test_alert_mode_helpers(tmp_path):
+    from autoapp.employers.service import ALERT_SOURCES, alert_sources, alerts_search_first
+
+    platform = RunContext.open(make_workspace(tmp_path / "a", config=EMP_CONFIG)).config
+    first = RunContext.open(make_workspace(tmp_path / "b", config=EMP_CONFIG, alert_mode="search_first")).config
+    assert not alerts_search_first(platform) and alert_sources(platform) == ALERT_SOURCES
+    assert "workwise-alert" not in alert_sources(platform)
+    assert alerts_search_first(first) and "workwise-alert" in alert_sources(first)
+    assert set(ALERT_SOURCES) <= set(alert_sources(first))
+
+
+def _search_first_ws(tmp_path, *, careers_enabled: bool):
+    config = EMP_CONFIG if careers_enabled else EMP_CONFIG.replace("enabled: true", "enabled: false")
+    return make_workspace(tmp_path, config=config, alert_mode="search_first")
+
+
+def test_search_first_scans_the_careers_site_even_with_employer_discovery_off(tmp_path):
+    ctx = open_ctx(_search_first_ws(tmp_path, careers_enabled=False))
+    alert = add_alert(ctx)
+    api, calls = search_client(["https://www.cbc-cologne.de/karriere"])
+    s = run_discovery(ctx, fetch=FakeWeb(cbc_pages()), api=api)
+    assert s.enabled and s.errors == [] and s.matched == 1 and s.recovered == 1
+    job = ctx.repo.get_job(alert)
+    assert job["status"] == "new" and "Partnerschaftliches" in job["description"]
+    assert s.related_created == []  # the employer's other openings are not imported without employer_careers
+    assert ctx.conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 1
+    ctx.close()
+
+
+def test_search_first_with_employer_discovery_on_still_imports_related_openings(tmp_path):
+    ctx = open_ctx(_search_first_ws(tmp_path, careers_enabled=True))
+    add_alert(ctx)
+    api, _ = search_client(["https://www.cbc-cologne.de/karriere"])
+    s = run_discovery(ctx, fetch=FakeWeb(cbc_pages()), api=api)
+    assert len(s.related_created) == 1
+    ctx.close()
+
+
+def test_workwise_alert_with_a_company_is_an_employer_seed_and_its_site_is_reused(tmp_path):
+    ws = _search_first_ws(tmp_path, careers_enabled=False)
+    ctx = open_ctx(ws)
+    card = AlertCard(source="workwise-alert", title="(Junior) Data Engineer / BI Developer (m/w/d) in Vollzeit oder Teilzeit",
+                     company=CBC, locations=["Köln"], source_job_id="55", url="https://www.workwise.io/job/55-data")
+    first = ingest(ctx.repo, card_to_raw(card)).job_id
+    ctx.repo.transition(first, "description_unavailable", note="not read")
+    api, calls = search_client(["https://www.cbc-cologne.de/karriere"])
+    web = FakeWeb(cbc_pages())
+    s = run_discovery(ctx, fetch=web, api=api)
+    assert s.matched == 1 and len(calls) == 1 and not any("workwise.io" in url for url in web.calls)
+    ctx.close()
+
+    ctx2 = open_ctx(ws)
+    again = AlertCard(source="workwise-alert", title="Cloud Platform Engineer (m/w/d)", company=CBC, locations=["Köln"],
+                      source_job_id="56", url="https://www.workwise.io/job/56-cloud")
+    second = ingest(ctx2.repo, card_to_raw(again)).job_id
+    ctx2.repo.transition(second, "description_unavailable", note="not read")
+    api2, calls2 = search_client(["https://www.cbc-cologne.de/karriere"])
+    s2 = run_discovery(ctx2, fetch=FakeWeb(cbc_pages()), api=api2)
+    assert calls2 == [] and s2.employers[0].source == "cache"
+    ctx2.close()
+
+
+def test_search_first_leaves_alerts_without_an_employer_name_alone(tmp_path):
+    ctx = open_ctx(_search_first_ws(tmp_path, careers_enabled=False))
+    card = AlertCard(source="workwise-alert", title="Data Engineer", company="", company_unknown=True,
+                     source_job_id="57", url="https://www.workwise.io/job/57-x")
+    ctx.repo.transition(ingest(ctx.repo, card_to_raw(card)).job_id, "description_unavailable", note="not read")
+    api, calls = search_client(["https://www.cbc-cologne.de/karriere"])
+    s = run_discovery(ctx, fetch=FakeWeb(cbc_pages()), api=api)
+    assert s.employers == [] and calls == []
+    ctx.close()

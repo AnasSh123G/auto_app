@@ -325,6 +325,32 @@ def test_check_logins_reports_every_check(ws):
     assert "PASS  AI model" in text
 
 
+def test_check_logins_asks_search_first_for_its_search_key(tmp_path, monkeypatch):
+    from tests.helpers import make_workspace
+
+    ws = make_workspace(tmp_path, alert_mode="search_first")
+    checks = FakeChecks()
+    monkeypatch.delenv("PARALLEL_API_KEY", raising=False)
+    text = "\n".join(menu.check_logins(ws, checks=checks, draft_store_factory=lambda: type(
+        "S", (), {"drafts_folder": lambda self: "Drafts", "close": lambda self: None})(), adzuna_check=lambda: (True, "")))
+    assert "FAIL  search key for search-first alert jobs" in text
+    monkeypatch.setenv("PARALLEL_API_KEY", "pk-x")
+    text = "\n".join(menu.check_logins(ws, checks=checks, draft_store_factory=lambda: type(
+        "S", (), {"drafts_folder": lambda self: "Drafts", "close": lambda self: None})(), adzuna_check=lambda: (True, "")))
+    assert "PASS  search key for search-first alert jobs" in text
+
+
+def test_quick_test_is_the_first_and_default_action_of_the_tests_entry(ws, monkeypatch):
+    calls = []
+    monkeypatch.setattr("autoapp.commands.run_with_mode", lambda tctx, **kw: calls.append(kw))
+    r, p = open_menu(ws, [("What would you like", "tests"), ("Which test", None), ("What would you like", "quit")])
+    choices = next(v for v in p.choice_values if "quick" in v)
+    assert choices[0] == "quick"
+    assert [(c["mode"], c["fresh"], c["sample"], c["ask_mode"], c["dry_run"]) for c in calls] == [
+        ("test", True, True, False, False)]  # Enter picks the quick test: no mode question, a fresh sampled test run
+    assert any("Quick test finished." in line for line in p.output)
+
+
 def test_test_run_and_dry_run_skip_the_mode_question(ws, monkeypatch):
     calls = []
     monkeypatch.setattr("autoapp.commands.run_with_mode", lambda tctx, **kw: calls.append(kw))
@@ -383,6 +409,14 @@ def test_redo_everything_backs_up_first(ws, monkeypatch):
 def test_section_summaries(ws):
     s = menu.section_summaries(ws)
     assert "keywords" in s["search"] and "default mode review" in s["email"]
+    assert "alert emails (platform)" in s["sources"]  # the test workspaces keep the earlier alert mode
+
+
+def test_section_summaries_name_the_default_search_first_mode(tmp_path):
+    from tests.helpers import make_workspace
+
+    s = menu.section_summaries(make_workspace(tmp_path, alert_mode="search_first"))
+    assert "alert emails (search first)" in s["sources"]
 
 
 def test_a_pasted_form_address_becomes_the_application_link_and_opens(ws, monkeypatch):

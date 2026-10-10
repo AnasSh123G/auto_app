@@ -143,8 +143,9 @@ def test_menu_redo_everything_keeps_current_values(finished_ws):
                                   ("different amount for jobs", ENTER)]
         + [("'machine-learning-engineer'", ENTER), ("Add another search profile", ENTER)]
         + [(m, ENTER) for m in ("Use Adzuna", "Adzuna app ID", "Adzuna app key", "job-alert emails", "Mail provider",
-                                "Email address", "app password", "Folder or label", "LinkedIn job", "Indeed job",
-                                "StepStone job", "careers pages", "company apply links", "Use Arbeitnow",
+                                "Email address", "app password", "Folder or label", "alert jobs get their full ad",
+                                "LinkedIn job", "Indeed job", "StepStone job", "careers pages",
+                                "Parallel Search API key", "company apply links", "Use Arbeitnow",
                                 "Use Workwise")]
         + [("Test the connections", False)]
         + [(m, ENTER) for m in ("Provider for evaluate", "Model for evaluate", "Provider for write", "Model for write",

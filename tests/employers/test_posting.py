@@ -180,3 +180,16 @@ def test_employer_discovery_leaves_searches_for_the_own_ad_search(tmp_path):
     own_ads = SearchGateway(ctx.conn, cfg, api)
     assert own_ads._budget.take()
     ctx.close()
+
+
+def test_a_workwise_page_is_never_taken_as_the_ad(tmp_path):
+    from autoapp.employers.scope import is_directory
+
+    assert is_directory("https://www.workwise.io/job/1001-software-engineer")
+    ctx, job_id, _ = _setup(tmp_path)
+    workwise = "https://www.workwise.io/job/1001-software-engineer"
+    web = FakeWeb({**PAGES, workwise: ad(TEXT)})
+    api, _ = _search([workwise])
+    s = find_own_ads(ctx, fetch=web, api=api)
+    assert s.found == [] and workwise not in web.calls
+    ctx.close()
