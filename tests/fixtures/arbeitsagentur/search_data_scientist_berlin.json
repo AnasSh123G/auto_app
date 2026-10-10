@@ -1,0 +1,484 @@
+{
+  "ergebnisliste": [
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "Data Scientist (f/m/d)",
+      "quereinstiegGeeignet": true,
+      "arbeitszeitSchichtNachtWochenende": false,
+      "arbeitszeitTeilzeitAbend": false,
+      "arbeitszeitTeilzeitNachmittag": false,
+      "arbeitszeitTeilzeitVormittag": false,
+      "arbeitszeitTeilzeitFlexibel": false,
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-10-06"
+      },
+      "verguetungsangabe": "KEINE_ANGABEN",
+      "vertragsdauer": "UNBEFRISTET",
+      "istGeringfuegigeBeschaeftigung": false,
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "strasse": "Schönhauser Allee",
+            "hausnummer": "9",
+            "plz": "10119",
+            "ort": "Berlin",
+            "region": "BERLIN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 52.530075,
+          "laenge": 13.4108775
+        }
+      ],
+      "homeofficemoeglich": true,
+      "homeofficetyp": "NACH_VEREINBARUNG",
+      "veroeffentlichungszeitraum": {
+        "von": "2026-09-15"
+      },
+      "datumErsteVeroeffentlichung": "2026-06-19",
+      "aenderungsdatum": "2026-10-06T08:20:39.372",
+      "hauptberuf": "Data Scientist",
+      "firma": "Forto Logistics SE & Co. KG",
+      "arbeitgeberKundennummerHash": "NqX-X-znFZc29vuGDx4ILEfIA_rKooiO0S-BbFfAYro=",
+      "referenznummer": "10001-1003259403-S",
+      "entfernung": 2,
+      "alleBerufe": [
+        "Data Scientist"
+      ]
+    },
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "Senior Data Scientist m/w/d",
+      "quereinstiegGeeignet": false,
+      "arbeitszeitSchichtNachtWochenende": false,
+      "arbeitszeitTeilzeitAbend": false,
+      "arbeitszeitTeilzeitNachmittag": false,
+      "arbeitszeitTeilzeitVormittag": false,
+      "arbeitszeitTeilzeitFlexibel": false,
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-10-06"
+      },
+      "verguetungsangabe": "KEINE_ANGABEN",
+      "vertragsdauer": "UNBEFRISTET",
+      "istGeringfuegigeBeschaeftigung": false,
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "strasse": "Schönhauser Allee",
+            "hausnummer": "9",
+            "plz": "10119",
+            "ort": "Berlin",
+            "region": "BERLIN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 52.530075,
+          "laenge": 13.4108775
+        }
+      ],
+      "homeofficemoeglich": false,
+      "veroeffentlichungszeitraum": {
+        "von": "2026-09-15"
+      },
+      "datumErsteVeroeffentlichung": "2026-05-18",
+      "aenderungsdatum": "2026-10-06T08:23:42.977",
+      "hauptberuf": "Data Scientist",
+      "firma": "Forto Logistics SE & Co. KG",
+      "arbeitgeberKundennummerHash": "NqX-X-znFZc29vuGDx4ILEfIA_rKooiO0S-BbFfAYro=",
+      "referenznummer": "10000-1206543821-S",
+      "entfernung": 2,
+      "alleBerufe": [
+        "Data Scientist"
+      ]
+    },
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "Data Scientist (m/w/d)",
+      "quereinstiegGeeignet": false,
+      "arbeitszeitSchichtNachtWochenende": false,
+      "arbeitszeitTeilzeitAbend": false,
+      "arbeitszeitTeilzeitNachmittag": false,
+      "arbeitszeitTeilzeitVormittag": false,
+      "arbeitszeitTeilzeitFlexibel": false,
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-10-01"
+      },
+      "verguetungsangabe": "JAHRESGEHALT",
+      "artDerVerguetung": "GEHALTSSPANNE",
+      "gehaltsspanneVon": 80000.0,
+      "gehaltsspanneBis": 90000.0,
+      "vertragsdauer": "KEINE_ANGABE",
+      "istGeringfuegigeBeschaeftigung": false,
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "strasse": "Wilhelmstraße",
+            "hausnummer": "43",
+            "plz": "10117",
+            "ort": "Berlin",
+            "region": "BERLIN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 52.510599,
+          "laenge": 13.3840125
+        }
+      ],
+      "homeofficemoeglich": true,
+      "homeofficetyp": "NACH_VEREINBARUNG",
+      "veroeffentlichungszeitraum": {
+        "von": "2026-09-30"
+      },
+      "datumErsteVeroeffentlichung": "2026-09-15",
+      "aenderungsdatum": "2026-10-01T08:02:13.024",
+      "externeURL": "https://www.jobvector.de/job/data-scientist-652cf97c682519e5/?utm_source=arbeitsagentur&utm_medium=partner&utm_campaign=tmcfdae_job_jid271513&utm_content=b2c&utm_term=tmf8eca_uic991a1ee",
+      "hauptberuf": "Informatiker/in",
+      "firma": "Gesamtverband der Deutschen Versicherungswirtschaft e. V.",
+      "referenznummer": "14225-652cf97c682519e5-S",
+      "entfernung": 3,
+      "alleBerufe": [
+        "Informatiker/in"
+      ]
+    },
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "Senior Data Scientist (m/f/d)",
+      "quereinstiegGeeignet": false,
+      "arbeitszeitSchichtNachtWochenende": false,
+      "arbeitszeitTeilzeitAbend": false,
+      "arbeitszeitTeilzeitNachmittag": false,
+      "arbeitszeitTeilzeitVormittag": false,
+      "arbeitszeitTeilzeitFlexibel": false,
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-10-06"
+      },
+      "verguetungsangabe": "KEINE_ANGABEN",
+      "vertragsdauer": "UNBEFRISTET",
+      "istGeringfuegigeBeschaeftigung": false,
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "plz": "10117",
+            "ort": "Berlin",
+            "region": "BERLIN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 52.5172722,
+          "laenge": 13.3882904
+        }
+      ],
+      "homeofficemoeglich": false,
+      "chiffrenummer": "34604053",
+      "veroeffentlichungszeitraum": {
+        "von": "2026-09-05"
+      },
+      "datumErsteVeroeffentlichung": "2026-09-05",
+      "aenderungsdatum": "2026-10-05T07:23:29.698",
+      "externeURL": "https://www.persy.jobs/persy/l/job-ji2lw-b",
+      "hauptberuf": "Data Scientist",
+      "firma": "TechMinds GmbH",
+      "referenznummer": "12288-4931146844-S",
+      "entfernung": 3,
+      "alleBerufe": [
+        "Data Scientist"
+      ]
+    },
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "Data Scientist & Data Analyst (f/m/d)",
+      "quereinstiegGeeignet": false,
+      "arbeitszeitSchichtNachtWochenende": false,
+      "arbeitszeitTeilzeitAbend": false,
+      "arbeitszeitTeilzeitNachmittag": false,
+      "arbeitszeitTeilzeitVormittag": false,
+      "arbeitszeitTeilzeitFlexibel": false,
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-07-01"
+      },
+      "verguetungsangabe": "KEINE_ANGABEN",
+      "vertragsdauer": "UNBEFRISTET",
+      "istGeringfuegigeBeschaeftigung": false,
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "plz": "10553",
+            "ort": "Berlin",
+            "region": "BERLIN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 52.5281495,
+          "laenge": 13.3234467
+        }
+      ],
+      "homeofficemoeglich": false,
+      "chiffrenummer": "293695",
+      "veroeffentlichungszeitraum": {
+        "von": "2026-05-07"
+      },
+      "datumErsteVeroeffentlichung": "2026-05-06",
+      "aenderungsdatum": "2026-05-20T11:21:43.445",
+      "hauptberuf": "Data Scientist",
+      "firma": "Siemens Energy Global GmbH & Co. KG",
+      "arbeitgeberKundennummerHash": "HmhVIE5IrRBnk8cbtySzmaFEZpUH0t-x_DBDeMHrPi8=",
+      "referenznummer": "15170-458395528-S",
+      "entfernung": 7,
+      "alleBerufe": [
+        "Data Scientist"
+      ]
+    }
+  ],
+  "maxErgebnisse": 26,
+  "page": 1,
+  "size": 5,
+  "woOutput": {
+    "bereinigterOrt": "Berlin",
+    "suchmodus": "UMKREISSUCHE",
+    "koordinaten": [
+      {
+        "lat": 52.5112613,
+        "lon": 13.4255145
+      }
+    ]
+  },
+  "facetten": {
+    "verguetung": {
+      "counts": {
+        "jahr": 4
+      },
+      "maxCount": 26
+    },
+    "befristung": {
+      "counts": {
+        "1": 1,
+        "2": 16,
+        "3": 9
+      },
+      "maxCount": 26
+    },
+    "externestellenboersen": {
+      "counts": {
+        "false": 20,
+        "true": 6
+      },
+      "maxCount": 26
+    },
+    "behinderung": {
+      "counts": {
+        "false": 21
+      },
+      "maxCount": 26
+    },
+    "pav": {
+      "counts": {
+        "false": 23,
+        "true": 3
+      },
+      "maxCount": 26
+    },
+    "berufsfeld": {
+      "counts": {
+        "IT-Netzwerktechnik, -Administration, -Organisation": 2,
+        "IT-Systemanalyse, -Anwendungsberatung und -Vertrieb": 1,
+        "Informatik": 20,
+        "Maschinenbau- und Betriebstechnik": 1,
+        "Softwareentwicklung und Programmierung": 2
+      },
+      "maxCount": 26
+    },
+    "topberuf": {
+      "counts": {
+        "Data Scientist": 20,
+        "Informatiker/in": 3
+      },
+      "scores": {
+        "Data Scientist": 22050393,
+        "Informatiker/in": 38935
+      },
+      "maxCount": 26
+    },
+    "arbeitsort": {
+      "counts": {
+        "Berlin": 25
+      },
+      "maxCount": 26
+    },
+    "ausbildungsart": {
+      "counts": {
+        "0": 1
+      },
+      "maxCount": 26
+    },
+    "veroeffentlichtseit": {
+      "counts": {
+        "14": 5,
+        "28": 8,
+        "7": 1,
+        "alle": 26
+      },
+      "maxCount": 26
+    },
+    "schulbildung": {
+      "counts": {
+        "0": 25,
+        "1": 25,
+        "11": 25,
+        "12": 25,
+        "2": 25,
+        "3": 25,
+        "4": 26,
+        "5": 26,
+        "6": 26
+      },
+      "maxCount": 26
+    },
+    "arbeitsort_plz": {
+      "counts": {
+        "06112": 1,
+        "10115": 1,
+        "10117": 7,
+        "10119": 3,
+        "10178": 1,
+        "10243": 1,
+        "10247": 1,
+        "10553": 3,
+        "10623": 1,
+        "10707": 1,
+        "10719": 2,
+        "13347": 1,
+        "13629": 1,
+        "14482": 1,
+        "20097": 1,
+        "30173": 1,
+        "40210": 1,
+        "40549": 1,
+        "44787": 1,
+        "60322": 1,
+        "65760": 1,
+        "70174": 1,
+        "76133": 1,
+        "80637": 1,
+        "85774": 1,
+        "90489": 1
+      },
+      "maxCount": 26
+    },
+    "arbeitgeber": {
+      "counts": {
+        "ALDB GmbH": 1,
+        "Delivery Hero SE": 2,
+        "Deloitte GmbH": 2,
+        "Filmuniversität Babelsberg  Konrad Wolf": 1,
+        "Forto Logistics SE & Co. KG": 3,
+        "GDV Gesamtverband der Versicherer": 1,
+        "Gesamtverband der Deutschen Versicherungswirtschaft e. V.": 1,
+        "IPB Internet Provider in Berlin GmbH": 1,
+        "Kassenärztl. Bundesvereinigung": 1,
+        "Limebit GmbH": 1,
+        "Michael Page GmbH": 1,
+        "S-Markt & Mehrwert GmbH & Co. KG": 1,
+        "Siemens Energy Global GmbH & Co. KG": 4,
+        "TechMinds GmbH": 2,
+        "Vodafone GmbH": 1,
+        "Zalando SE": 1,
+        "aconium GmbH Hauptsitz Berlin": 1,
+        "alfatraining Bildungszentrum GmbH": 1
+      },
+      "maxCount": 26
+    },
+    "beruf": {
+      "counts": {
+        "Data Engineer": 1,
+        "Data Scientist": 20,
+        "Data-Analyst/in": 1,
+        "Datenbankadministrator/in": 1,
+        "Datenbankentwickler/in": 1,
+        "Datenerfasser/in": 1,
+        "Fachinformatiker/in - Daten- und Prozessanalyse": 1,
+        "IT-Berater/in": 1,
+        "Informatiker/in": 3,
+        "Ingenieur/in - Maschinenbau": 1,
+        "Ingenieur/in - Systems Engineering": 1,
+        "KI-Engineer": 1,
+        "Machine Learning Engineer": 2,
+        "Medieninformatiker/in": 1,
+        "Softwareentwickler/in": 2,
+        "Statiker/in": 1,
+        "Statistiker/in": 1,
+        "Wirtschaftsinformatiker/in (Hochschule)": 1
+      },
+      "maxCount": 26
+    },
+    "homeoffice": {
+      "counts": {
+        "prozentual": 1,
+        "nv_false": 1,
+        "nv_true": 6
+      },
+      "maxCount": 26
+    },
+    "angebotsart": {
+      "counts": {
+        "1": 24,
+        "2": 1,
+        "4": 1
+      },
+      "maxCount": 26
+    },
+    "quereinstieg": {
+      "counts": {
+        "false": 24,
+        "true": 2
+      },
+      "maxCount": 26
+    },
+    "branche": {
+      "counts": {
+        "11": 5,
+        "13": 7,
+        "21": 3,
+        "29": 2,
+        "4": 2,
+        "6": 2,
+        "9": 1
+      },
+      "maxCount": 26
+    },
+    "arbeitszeit": {
+      "counts": {
+        "tz": 1,
+        "vz": 23
+      },
+      "maxCount": 26
+    },
+    "eintrittsdatum": {
+      "counts": {
+        "10_01_01-now": 24,
+        "26_10_01-26_11_01": 15
+      },
+      "maxCount": 26
+    },
+    "zeitarbeit": {
+      "counts": {
+        "false": 26
+      },
+      "maxCount": 26
+    },
+    "topberufsfeld": {
+      "counts": {
+        "Informatik": 20,
+        "Softwareentwicklung und Programmierung": 2,
+        "IT-Netzwerktechnik, -Administration, -Organisation": 2,
+        "IT-Systemanalyse, -Anwendungsberatung und -Vertrieb": 1
+      },
+      "scores": {
+        "Informatik": 598572,
+        "Softwareentwicklung und Programmierung": 9971,
+        "IT-Netzwerktechnik, -Administration, -Organisation": 7276,
+        "IT-Systemanalyse, -Anwendungsberatung und -Vertrieb": 2849
+      },
+      "maxCount": 26
+    }
+  }
+}

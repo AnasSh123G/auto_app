@@ -1,0 +1,81 @@
+# Example candidate profile for autoapp.
+# Copy this to your workspace as profile.yaml and customize your personal data.
+
+personal:
+  first_name: Max
+  last_name: Mustermann
+  email: max.mustermann@example.com
+  phone: "+49 30 12345678"
+  street: Musterstraße 1
+  postal_code: "10115"
+  city: Berlin
+  country: Deutschland
+  # (optional) linkedin_url: https://linkedin.com/in/maxmustermann
+  # (optional) xing_url: https://xing.com/profile/MaxMustermann
+
+# Work authorization (e.g. German citizenship, EU passport, work visa).
+work_authorization: EU citizen
+
+# Availability.
+availability:
+  earliest_start: null  # Date or duration (e.g. "2025-01-15" or "4 weeks")
+  notice_period: "3 Monate zum Monatsende"  # Notice period text
+
+# Document mapping (relative paths in documents/ folder).
+documents:
+  - file: Lebenslauf_de.pdf
+    role: cv
+    language: de  # German CV
+  - file: CV_en.pdf
+    role: cv
+    language: en  # English CV
+  - file: Arbeitszeugnis_Beispiel.pdf
+    role: work_reference  # Arbeitszeugnis from an employer
+    language: any  # sent whatever the language of the ad. "de" / "en": only with a letter in that language.
+  # - file: Bachelor_Zeugnis.pdf
+  #   role: certificate  # degree, diploma, course
+  # - file: Portfolio.pdf
+  #   role: other  # for form fields like "Andere" / "Other documents"
+
+# Standard answers to common form questions.
+standard_answers:
+  notice_period: "3 Monate zum Monatsende"
+  work_permit: "EU citizen"
+  # Add more as needed for questions you encounter frequently:
+  # earliest_start: "1. Dezember 2025"
+  # why_interested: "Your company's innovative approach to X interests me."
+
+# Language proficiency (using CEFR levels A1–C2 or 'native').
+language_levels:
+  de: "C1"  # German: proficient
+  en: "C1"  # English: proficient
+
+# Salary expectations (optional; omit entirely if not negotiating salary).
+# salary:
+#   target_eur: 70000  # Annual target
+#   min_eur: 60000  # Minimum acceptable
+#   overrides:  # (optional) Override by seniority level
+#     senior:
+#       target_eur: 85000
+#       min_eur: 75000
+#     lead:
+#       target_eur: 100000
+#       min_eur: 90000
+#   region_overrides:  # (optional) Another amount for jobs in a federal state; wins over the seniority overrides
+#     bayern:  # recognised from the job's location: the state's name, a postcode or a larger city
+#       target_eur: 56000
+
+# Extra skills not prominent in the CV (e.g. tools learned on personal projects).
+extra_skills:
+  - name: Docker
+    level: basic  # basic, good, or strong
+    context: "Home server and private projects"
+  # - name: Kubernetes
+  #   level: basic
+  #   context: "Hobby DevOps projects"
+
+# Dealbreakers (automatically checked during evaluation).
+dealbreakers:
+  # max_german_level_required: B2  # Reject jobs requiring German above this level
+  no_relocation: false  # Reject jobs that require relocation
+  # excluded_industries: ["Pharma", "Defense"]  # Industries to skip

@@ -1,0 +1,52 @@
+{
+  "stellenangebotsart": "ARBEIT",
+  "stellenangebotsTitel": "Data Scientist (m/w/d)",
+  "quereinstiegGeeignet": false,
+  "stellenangebotsBeschreibung": "Gesellschaft. Politik. Wirtschaft.\n\nDer Gesamtverband der Deutschen Versicherungswirtschaft (GDV) in Berlin ist die Dachorganisation der Versicherer in Deutschland. Gegenüber Parlament, Regierung und Öffentlichkeit - national wie auf europäischer Ebene - vertreten wir die Interessen einer spannenden, leistungsfähigen und vielfältigen Branche.\n\n\nSie kommen aus dem Bereich der KI und verstehen es, Technologie in erfolgreiche Lösungen zu übersetzen? Als Senior AI Specialist gestalten Sie unser zukünftiges KI-Portfolio aktiv mit!\n\n\nWir suchen ab sofort Verstärkung für unser Team!\n\n\nSenior AI Specialist (w/m/d) \n\tAls zentraler KI-Spezialist des Verbandes übernehmen Sie die fachliche Verantwortung für unser KI-Portfolio und treiben dessen strategische und technologische Weiterentwicklung federführend voran.\n\tSie übersetzen fachliche Anforderungen in tragfähige, nutzerorientierte KI-Lösungen, mit klarem Fokus auf Cloud-Technologien.\n\tSie begleiten KI-Lösungen von der Idee bis zum produktiven Einsatz und zur Skalierung und steuern die Umsetzung gemeinsam mit Engineering, Data/ML, IT-Security, Architektur und unseren Fachbereichen.\n\tMit Ihrer technischen KI-Expertise bewerten Sie Technologien und Lösungsansätze und unterstützen bei Entscheidungen rund um Architektur, Cloud-Services, Daten und Modelle.\n\tGemeinsam mit den zuständigen Bereichen stellen Sie einen sicheren und regelkonformen Einsatz unserer KI-Lösungen sicher und berücksichtigen dabei insbesondere Datenschutz, Informationssicherheit und AI Governance.\n\tSie koordinieren interne und externe Stakeholder und vertreten Vision, Roadmap und Ergebnisse gegenüber unterschiedlichen Zielgruppen - von Fachbereichen und Abteilungsleitung bis hin zu Geschäftsführung, Mitgliedsunternehmen und externen Partnern.\n\tSie treiben die Nutzung von KI innerhalb des Verbandes voran, unterstützen unsere Fachbereiche und tragen dazu bei, KI-Kompetenz und eine datenorientierte Arbeitsweise weiterzuentwickeln.\n \n\tSie verfügen über mehrjährige praktische Erfahrung mit KI- und Machine-Learning-Technologien und haben bereits technische KI-Lösungen konzipiert, umgesetzt oder maßgeblich begleitet.\n\tSie verstehen moderne Software-, Daten- und ML-Architekturen und verfügen über fundierte Kenntnisse in Cloud-Technologien und Cloud-basierten KI-Services.\n\tNeben Ihrer technischen Expertise bringen Sie Erfahrung in der Steuerung komplexer technischer Projekte oder Produkte mit und verstehen es, unterschiedliche fachliche und technische Beteiligte zusammenzubringen.\n\tSie können komplexe technologische Zusammenhänge verständlich vermitteln und überzeugen durch ausgeprägte Kommunikations-, Moderations- und Stakeholdermanagement-Kompetenz.\n\tSie denken strategisch und konzeptionell, haben gleichzeitig aber Freude daran, Themen pragmatisch voranzutreiben und in die Umsetzung zu bringen.\n\tSie verfügen über sehr gute Deutsch- und Englischkenntnisse in Wort und Schrift.\n\n\nEin Plus, aber kein Muss sind außerdem\n\n\n\n\tErfahrung als Software Engineer, Data Scientist oder ML Engineer\n\tKenntnisse in MLOps, CI/CD, APIs und Observability\n\tErfahrung mit Cloud-Plattformen wie Azure, AWS oder GCP und deren AI-/ML-Services\n\tKenntnisse in den Bereichen AI Governance, Responsible AI und regulatorische Anforderungen\n\tErfahrung mit Plattformlösungen oder in einem B2B- bzw. vergleichbaren komplexen Stakeholderumfeld\n \n\tFlexible Arbeitszeiten mit einer 38-Stunden-Woche\n\t30 Tagen Urlaub plus zusätzlicher Freistellung an Heiligabend und Silvester\n\tMobiles Arbeiten - bis zu 50 % Remote-Option für mehr Flexibilität\n\tFirmenfinanzierte betriebliche Altersvorsorge sowie Vermögenswirksame Leistungen\n\tMobilitätszulage\n\tJobRad-Leasing & Dienstfahrräder - nachhaltig unterwegs, ob auf dem Weg zur Arbeit oder in der Freizeit.\n\tEin Familienzimmer sowie ein Kita-Zuschuss\n\tModerne Büros im Herzen Berlins, direkt am Potsdamer Platz\n",
+  "arbeitszeitSchichtNachtWochenende": false,
+  "arbeitszeitTeilzeitAbend": false,
+  "arbeitszeitTeilzeitNachmittag": false,
+  "arbeitszeitTeilzeitVormittag": false,
+  "arbeitszeitTeilzeitFlexibel": false,
+  "arbeitszeitVollzeit": true,
+  "eintrittszeitraum": {
+    "von": "2026-10-01"
+  },
+  "verguetungsangabe": "JAHRESGEHALT",
+  "artDerVerguetung": "GEHALTSSPANNE",
+  "gehaltsspanneVon": 80000.0,
+  "gehaltsspanneBis": 90000.0,
+  "vertragsdauer": "KEINE_ANGABE",
+  "istGeringfuegigeBeschaeftigung": false,
+  "istBehinderungGefordert": false,
+  "stellenlokationen": [
+    {
+      "adresse": {
+        "strasse": "Wilhelmstraße",
+        "hausnummer": "43",
+        "plz": "10117",
+        "ort": "Berlin",
+        "region": "BERLIN",
+        "land": "DEUTSCHLAND"
+      },
+      "breite": 52.510599,
+      "laenge": 13.3840125
+    }
+  ],
+  "homeofficemoeglich": true,
+  "homeofficetyp": "NACH_VEREINBARUNG",
+  "istPrivateArbeitsvermittlung": false,
+  "istArbeitnehmerUeberlassung": false,
+  "veroeffentlichungszeitraum": {
+    "von": "2026-09-30"
+  },
+  "datumErsteVeroeffentlichung": "2026-09-15",
+  "aenderungsdatum": "2026-10-01T08:02:13.024",
+  "externeURL": "https://www.jobvector.de/job/data-scientist-652cf97c682519e5/?utm_source=arbeitsagentur&utm_medium=partner&utm_campaign=tmcfdae_job_jid271513&utm_content=b2c&utm_term=tmf8eca_uic991a1ee",
+  "istBetreut": false,
+  "hauptberuf": "Informatiker/in",
+  "firma": "Gesamtverband der Deutschen Versicherungswirtschaft e. V.",
+  "allianzpartnerUrl": "www.jobvector.de",
+  "allianzpartnerName": "jobvector.de",
+  "referenznummer": "14225-652cf97c682519e5-S"
+}

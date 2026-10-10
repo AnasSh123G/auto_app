@@ -1,0 +1,18 @@
+[Unit]
+Description=autoapp job search and application runner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# A scheduled run never asks which mode to use. It uses run.default_mode from config.yaml:
+# review (the default) saves emails as drafts in your mailbox, automatic sends them.
+# Watch it live from another terminal with: autoapp stats
+Type=oneshot
+WorkingDirectory=%h/dev/auto_app
+ExecStart=/bin/sh -c 'cd %h/dev/auto_app && exec uv run autoapp --workspace %h/dev/auto_app/workspace run --non-interactive'
+Environment=AUTOAPP_NON_INTERACTIVE=1
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

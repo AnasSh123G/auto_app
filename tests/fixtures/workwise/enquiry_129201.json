@@ -1,0 +1,462 @@
+{
+ "data": {
+  "id": 129201,
+  "name": "Stellvertretende Wohnbereichsleitung in der Pflege (m/w/d)",
+  "status": "open",
+  "firstPublished": "2026-10-09T15:35:50+02:00",
+  "lastPublished": "2026-10-09T15:35:50+02:00",
+  "description": "<h3>Was erwartet Sie?</h3><p><ul><li>Sie vertreten kompetent die Wohnbereichsleitung bei Abwesenheit und unterstützen bei der Personalleitung sowie der bedarfsgerechten Dienstplangestaltung</li><li>Sie überwachen, steuern und dokumentieren die Pflege- und Betreuungsprozesse nach aktuellen Qualitätsstandards (Strukturmodell / SIS)</li><li>Sie führen eine aktivierende, fachgerechte Grund- und Behandlungspflege direkt am Bewohner durch</li><li>Sie motivieren, leiten an, arbeiten ein und begleiten Pflegekräfte, Auszubildende und Praktikant:innen auf dem Wohnbereich</li><li>Sie arbeiten vertrauensvoll mit Ärzt:innen, Therapeut:innen, Behörden zusammen und sind Ansprechperson für Bewohner:innen und deren Angehörige</li></ul></p><h3>Was bieten wir Ihnen?</h3><p><ul><li>Attraktive Vergütung: Sie erhalten ein Gehalt inklusive Pflegezulage nach unserer Vergütungsrichtlinie, je nach Erfahrung zwischen 4.290,00 Euro und 4.817,00 Euro in Vollzeit, sowie Urlaubs- und Weihnachtsgeld</li><li>Umfangreiche Zusatzleistungen: Sie profitieren von Zuschlägen für Wochenend-, Feiertags- und Nachtarbeit, einem Kinderbetreuungskostenzuschuss bis zur Einschulung, betrieblicher Altersvorsorge und einer betrieblichen Krankenversicherung mit einem jährlichen Gesundheitsbudget von 800 Euro</li><li>Berufliche Weiterentwicklung: Wir übernehmen die Kosten für Ihre Weiterbildungen und bieten Ihnen ein betriebliches Gesundheitsmanagement</li><li>Work-Life-Balance: Sie genießen 29 Tage Grundurlaub mit Steigerung nach Betriebszugehörigkeit und planbare Arbeitszeiten durch rechtzeitige Dienstplangestaltung – einen Monat im Voraus</li><li>Moderne Arbeitsumgebung: Sie arbeiten mit einem digitalen Dokumentationssystem und erhalten Dienstkleidung inklusive Reinigung (ohne Schuhe)</li><li>Team- und Familienkultur: Sie nehmen an Team- und Familienevents teil, die das Gemeinschaftsgefühl stärken</li></ul></p><h3>Was sollten Sie mitbringen?</h3><p><ul><li>Sie haben eine abgeschlossene Ausbildung als Pflegefachkraft (Pflegefachmann/-frau, Altenpfleger:in, Gesundheits- und Krankenpfleger:in)</li><li>Sie haben eine Weiterbildung zur verantwortlichen Leitung einer Wohn-/Funktionseinheit (mind. 460 Std.) oder ein pflegebezogenes Studium – alternativ sind Sie bereit zur Weiterbildung innerhalb der nächsten 2 bis 3 Jahre</li><li>Sie verfügen über mindestens 2 Jahre Berufserfahrung in der stationären Langzeitpflege</li><li>Sie besitzen sichere EDV-Kenntnisse (Pflegedokumentation, Dienstplanprogramm, Roxtra, MS Office)</li><li>Sie haben idealerweise Weiterbildungen in Praxisanleitung, als gerontopsychiatrische Fachkraft, Wundexpert:in oder in Palliative Care absolviert</li></ul></p>",
+  "shortDescription": "Werden Sie stellvertretende/r Wohnbereichsleiter/in (m/w/d) und unterstützen Sie uns in der Pflegeleitung und Dienstplangestaltung.",
+  "projectStart": "2026-10-09T00:00:00+02:00",
+  "projectEnd": null,
+  "hoursStart": 40,
+  "hoursEnd": 40,
+  "maxSalary": "57804.00",
+  "minSalary": "51480.00",
+  "isSalaryFlexible": true,
+  "durationStart": null,
+  "durationEnd": null,
+  "remoteWork": "not_possible",
+  "minimumRemoteWorkDaysPerWeekPossible": null,
+  "maximumRemoteWorkDaysPerWeekPossible": null,
+  "jobLocationTypes": [
+   "location"
+  ],
+  "modified": "2026-10-09T18:06:08+02:00",
+  "workExperience": "with",
+  "minimumWorkExperience": 2,
+  "maximumWorkExperience": null,
+  "leadershipExperience": "with",
+  "estimatedValue": 3199.2181865093453,
+  "areApplicationsOnWorkwiseDistributionsAllowedByEmployee": true,
+  "isRecruitingServiceEnabledByContact": true,
+  "isApprovedByEmployee": true,
+  "slug": "stellvertretende-wohnbereichsleitung-in-der-pflege-m-w-d",
+  "travelType": "none",
+  "travelDetails": null,
+  "paymentCondition": {
+   "id": 13889658,
+   "salaryType": "per year"
+  },
+  "applicationQuestions": [
+   {
+    "id": 217346,
+    "question": "Möchten Sie Ihrer Bewerbung noch etwas hinzufügen?",
+    "enquiryId": 129201,
+    "hint": "Erwähne deine Motivation für die Pflege, besondere Qualifikationen oder Erfahrungen, die dich für die Rolle der stellvertretenden Wohnbereichsleitung auszeichnen. Betone auch deine Teamfähigkeit und Bereitschaft zur Weiterbildung, um die Qualität der Pflege zu fördern.",
+    "created": "2026-10-09T15:23:06+02:00",
+    "modified": "2026-10-09T15:23:06+02:00"
+   }
+  ],
+  "toolLevels": [
+   {
+    "id": 29866841,
+    "skillTag": {
+     "id": 777294,
+     "name": "Pflegeplanung",
+     "parentId": null,
+     "alternateName": null,
+     "customShortDescription": null,
+     "category": "professional",
+     "isReviewed": true,
+     "created": "2022-11-27T11:33:09+01:00",
+     "modified": "2026-10-10T05:58:56+02:00"
+    },
+    "level": 66,
+    "priority": "mandatory"
+   },
+   {
+    "id": 29866842,
+    "skillTag": {
+     "id": 321128,
+     "name": "Dienstplanung",
+     "parentId": null,
+     "alternateName": null,
+     "customShortDescription": null,
+     "category": "professional",
+     "isReviewed": true,
+     "created": "2021-01-07T10:07:34+01:00",
+     "modified": "2026-10-10T05:58:50+02:00"
+    },
+    "level": 66,
+    "priority": "mandatory"
+   },
+   {
+    "id": 29866983,
+    "skillTag": {
+     "id": 810277,
+     "name": "geriatrische Psychiatrie",
+     "parentId": null,
+     "alternateName": null,
+     "customShortDescription": null,
+     "category": "professional",
+     "isReviewed": true,
+     "created": "2023-09-18T12:21:44+02:00",
+     "modified": "2026-10-10T05:59:04+02:00"
+    },
+    "level": 66,
+    "priority": "optional"
+   },
+   {
+    "id": 29866984,
+    "skillTag": {
+     "id": 404686,
+     "name": "Wundversorgung",
+     "parentId": null,
+     "alternateName": null,
+     "customShortDescription": null,
+     "category": "professional",
+     "isReviewed": true,
+     "created": "2021-06-24T00:20:41+02:00",
+     "modified": "2026-10-10T05:58:51+02:00"
+    },
+    "level": 66,
+    "priority": "optional"
+   },
+   {
+    "id": 29866985,
+    "skillTag": {
+     "id": 801491,
+     "name": "Palliativversorgung",
+     "parentId": null,
+     "alternateName": null,
+     "customShortDescription": null,
+     "category": "professional",
+     "isReviewed": true,
+     "created": "2023-05-25T13:42:32+02:00",
+     "modified": "2026-10-10T05:59:02+02:00"
+    },
+    "level": 66,
+    "priority": "optional"
+   }
+  ],
+  "languageLevels": [
+   {
+    "id": 28264097,
+    "level": 75,
+    "priority": "mandatory",
+    "language": {
+     "id": 1,
+     "name": "Deutsch",
+     "code": "de"
+    }
+   }
+  ],
+  "type": {
+   "id": 2,
+   "name": "Festanstellung",
+   "pluralName": "Festanstellungen",
+   "shortName": "employment",
+   "salaryType": "per year"
+  },
+  "company": {
+   "id": 2316400,
+   "isActive": true,
+   "shortDescription": null,
+   "displayAnonymously": false,
+   "name": "Oberlausitz Pflegeheim & Kurzzeitpflege gGmbH",
+   "slug": "oberlausitz-pflegeheim-kurzzeitpflege-ggmbh",
+   "website": "https://www.olpk.de/",
+   "street": "Belmsdorfer Str. 43",
+   "zip": "01877",
+   "city": "Bischofswerda",
+   "countEmployees": "500-999",
+   "estimatedYearlyRevenue": null,
+   "foundationYear": null,
+   "privacyPolicySite": null,
+   "chatEnabled": true,
+   "logo": {
+    "small": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company/photo/2316400/small_2316400-260306101240.jpeg",
+    "thumb": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company/photo/2316400/thumb_2316400-260306101240.jpeg",
+    "big": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company/photo/2316400/big_2316400-260306101240.jpeg"
+   },
+   "photo": {
+    "file": "2316400-260306101240.jpeg",
+    "directory": "2316400"
+   },
+   "kununu": {
+    "url": null,
+    "slug": null
+   },
+   "country": {
+    "id": 47,
+    "countryCode": "DE",
+    "nameEn": "Germany",
+    "name": "Deutschland",
+    "memberOfEuropeanUnion": true
+   },
+   "companyArea": {
+    "id": 37,
+    "name": "Gesundheits- & Sozialwesen"
+   },
+   "companySize": {
+    "id": 11,
+    "name": "Non-Profit",
+    "pluralName": "Non-Profits"
+   },
+   "companyMedia": [
+    {
+     "id": 49141,
+     "title": "Oberlausitz Pflegeheim & Kurzzeitpflege gGmbH",
+     "fileType": "photo",
+     "contentType": "miscellaneous",
+     "isThumbnail": false,
+     "companyId": 2316400,
+     "file": "Bildschirmfoto_2026-02-26_um_14.55.21.png",
+     "fileDir": "49141",
+     "youtubeVideoId": null,
+     "photos": {
+      "256x144": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49141/256x144_Bildschirmfoto_2026-02-26_um_14.55.21.png",
+      "640x360": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49141/640x360_Bildschirmfoto_2026-02-26_um_14.55.21.png",
+      "1280x720": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49141/1280x720_Bildschirmfoto_2026-02-26_um_14.55.21.png",
+      "1920x1080": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49141/1920x1080_Bildschirmfoto_2026-02-26_um_14.55.21.png"
+     }
+    },
+    {
+     "id": 49143,
+     "title": null,
+     "fileType": "video",
+     "contentType": null,
+     "isThumbnail": false,
+     "companyId": 2316400,
+     "file": null,
+     "fileDir": null,
+     "youtubeVideoId": "L31hFhCMtYo",
+     "photos": null
+    },
+    {
+     "id": 49278,
+     "title": "Pflege mit Herz, Verstand und Handschuhen",
+     "fileType": "photo",
+     "contentType": "miscellaneous",
+     "isThumbnail": false,
+     "companyId": 2316400,
+     "file": "1000294954.png",
+     "fileDir": "49278",
+     "youtubeVideoId": null,
+     "photos": {
+      "256x144": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49278/256x144_1000294954.png",
+      "640x360": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49278/640x360_1000294954.png",
+      "1280x720": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49278/1280x720_1000294954.png",
+      "1920x1080": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49278/1920x1080_1000294954.png"
+     }
+    },
+    {
+     "id": 49279,
+     "title": "Pflegeazubis",
+     "fileType": "photo",
+     "contentType": "miscellaneous",
+     "isThumbnail": false,
+     "companyId": 2316400,
+     "file": "azubiPf.png",
+     "fileDir": "49279",
+     "youtubeVideoId": null,
+     "photos": {
+      "256x144": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49279/256x144_azubiPf.png",
+      "640x360": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49279/640x360_azubiPf.png",
+      "1280x720": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49279/1280x720_azubiPf.png",
+      "1920x1080": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49279/1920x1080_azubiPf.png"
+     }
+    },
+    {
+     "id": 49280,
+     "title": "Lauftraining",
+     "fileType": "photo",
+     "contentType": "miscellaneous",
+     "isThumbnail": false,
+     "companyId": 2316400,
+     "file": "B49x13Pflege.jpg",
+     "fileDir": "49280",
+     "youtubeVideoId": null,
+     "photos": {
+      "256x144": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49280/256x144_B49x13Pflege.jpg",
+      "640x360": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49280/640x360_B49x13Pflege.jpg",
+      "1280x720": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49280/1280x720_B49x13Pflege.jpg",
+      "1920x1080": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49280/1920x1080_B49x13Pflege.jpg"
+     }
+    },
+    {
+     "id": 49281,
+     "title": "Pflege geht unter die Haut",
+     "fileType": "photo",
+     "contentType": "miscellaneous",
+     "isThumbnail": false,
+     "companyId": 2316400,
+     "file": "PXL_20250415_063329881_2.jpg",
+     "fileDir": "49281",
+     "youtubeVideoId": null,
+     "photos": {
+      "256x144": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49281/256x144_PXL_20250415_063329881_2.jpg",
+      "640x360": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49281/640x360_PXL_20250415_063329881_2.jpg",
+      "1280x720": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49281/1280x720_PXL_20250415_063329881_2.jpg",
+      "1920x1080": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49281/1920x1080_PXL_20250415_063329881_2.jpg"
+     }
+    },
+    {
+     "id": 49282,
+     "title": "Alltagssituation",
+     "fileType": "photo",
+     "contentType": "miscellaneous",
+     "isThumbnail": false,
+     "companyId": 2316400,
+     "file": "ServicemitarbeiterPflege.jpg",
+     "fileDir": "49282",
+     "youtubeVideoId": null,
+     "photos": {
+      "256x144": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49282/256x144_ServicemitarbeiterPflege.jpg",
+      "640x360": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49282/640x360_ServicemitarbeiterPflege.jpg",
+      "1280x720": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49282/1280x720_ServicemitarbeiterPflege.jpg",
+      "1920x1080": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company_media/file/49282/1920x1080_ServicemitarbeiterPflege.jpg"
+     }
+    }
+   ],
+   "companyTags": [
+    {
+     "id": 132,
+     "name": "Arbeitszeiterfassung",
+     "icon": "alarm",
+     "topic": "working_time"
+    },
+    {
+     "id": 15,
+     "name": "Betriebliche Altersvorsorge",
+     "icon": "BAV",
+     "topic": "salary"
+    },
+    {
+     "id": 125,
+     "name": "Faire Vergütung",
+     "icon": "euro",
+     "topic": "salary"
+    },
+    {
+     "id": 21,
+     "name": "Desktop Computer",
+     "icon": "desktop-pc",
+     "topic": "workplace"
+    }
+   ],
+   "descriptionParts": [
+    {
+     "id": 86084,
+     "title": "",
+     "text": "Die Oberlausitz Pflegeheim & Kurzzeitpflege gGmbH ist gemeinsam mit der Westlausitz Pflegeheim &\nKurzzeitpflege gGmbH einer der größten Träger der Altenhilfe im Landkreis Bautzen. An unseren 8\nStandorten betreuen wir mit 726 Mitarbeiterinnen und Mitarbeitern unsere 622 Bewohner und\nBewohnerinnen sowie 46 Kurzzeitpflegegäste und 15 Tagespflegegäste.",
+     "contentType": "working_culture",
+     "created": "2026-02-26T15:00:06+01:00",
+     "modified": "2026-02-26T15:00:06+01:00"
+    },
+    {
+     "id": 86085,
+     "title": "",
+     "text": "Die Oberlausitz Pflegeheim & Kurzzeitpflege gGmbH ist gemeinsam mit der Westlausitz Pflegeheim & Kurzzeitpflege gGmbH einer der größten Träger der Altenhilfe im Landkreis Bautzen. An unseren 8 Standorten betreuen wir mit 726 Mitarbeiterinnen und Mitarbeitern unsere 622 Bewohner und Bewohnerinnen sowie 46 Kurzzeitpflegegäste und 15 Tagespflegegäste.",
+     "contentType": "intro",
+     "created": "2026-02-26T15:00:06+01:00",
+     "modified": "2026-02-26T15:00:06+01:00"
+    },
+    {
+     "id": 86086,
+     "title": "",
+     "text": "Wir bieten Ihnen einen krisensicheren Arbeitsplatz bei einem etablierten regionalen Träger, der Wert auf eine faire Vergütung und verlässliche Dienstplanung legt. Profitieren Sie von individuellen Fort- und Weiterbildungsmöglichkeiten, um Ihre Karriere in der Pflege gezielt voranzutreiben und neue Impulse zu setzen. Neben einer offenen Feedbackkultur und moderner technischer Ausstattung erwartet Sie ein herzliches Team, das sich gegenseitig unterstützt und Erfolge gemeinsam feiert. Ein wertschätzendes Miteinander sowie verschiedene Zusatzleistungen machen uns zu einem Arbeitgeber, bei dem Ihre Arbeit wirklich zählt.",
+     "contentType": "benefits",
+     "created": "2026-02-26T15:05:44+01:00",
+     "modified": "2026-02-26T15:05:44+01:00"
+    },
+    {
+     "id": 86087,
+     "title": "",
+     "text": "Unsere Einrichtungen, wie beispielsweise in Neukirch, Bautzen oder Bischofswerda, sind tief in der idyllischen Oberlausitz verwurzelt und bieten ein naturnahes Arbeitsumfeld. Die modernen Häuser zeichnen sich durch eine helle, freundliche Architektur aus und verfügen oft über liebevoll gestaltete Außenanlagen mit eigenen Kräuterbeeten oder Obstbäumen. Dank der guten regionalen Anbindung genießen Sie bei uns einen Arbeitsplatz, der ländliche Ruhe mit der Nähe zu Städten wie Bautzen perfekt verbindet. Hier arbeiten Sie dort, wo andere Urlaub machen – in einer Region mit hoher Lebensqualität und starkem Zusammenhalt",
+     "contentType": "location",
+     "created": "2026-02-26T15:05:44+01:00",
+     "modified": "2026-02-26T15:05:44+01:00"
+    }
+   ]
+  },
+  "locationLevels": [
+   {
+    "id": 212463190,
+    "city": "Bischofswerda",
+    "country": "Deutschland",
+    "countryCode": "DE",
+    "enquiryId": 129201,
+    "googlePlaceId": "ChIJT1wvaA2tCUcRRwtVnnyOHEA",
+    "isMandatory": false,
+    "lat": 51.1234391,
+    "level": 0,
+    "limiter": "zip",
+    "lon": 14.1982327,
+    "prefix": "01877 Bischofswerda, Deutschland",
+    "state": "Sachsen",
+    "stateCode": "SN",
+    "zip": "01877",
+    "created": "2026-10-09T15:23:04+02:00",
+    "modified": "2026-10-09T15:35:47+02:00"
+   }
+  ],
+  "residenceRequirements": [],
+  "alternativeTitles": [
+   {
+    "id": 203306,
+    "title": "Stv Wohnbereichsleitung Altenpflege (m/w/d)"
+   },
+   {
+    "id": 203307,
+    "title": "Stellvertretende Wohnbereichsleitung - Altenpflege (m/w/d)"
+   }
+  ],
+  "descriptionParts": [
+   {
+    "id": 1072956,
+    "contentType": "responsibilities",
+    "title": "Was erwartet Sie?",
+    "text": "<ul><li>Sie vertreten kompetent die Wohnbereichsleitung bei Abwesenheit und unterstützen bei der Personalleitung sowie der bedarfsgerechten Dienstplangestaltung</li><li>Sie überwachen, steuern und dokumentieren die Pflege- und Betreuungsprozesse nach aktuellen Qualitätsstandards (Strukturmodell / SIS)</li><li>Sie führen eine aktivierende, fachgerechte Grund- und Behandlungspflege direkt am Bewohner durch</li><li>Sie motivieren, leiten an, arbeiten ein und begleiten Pflegekräfte, Auszubildende und Praktikant:innen auf dem Wohnbereich</li><li>Sie arbeiten vertrauensvoll mit Ärzt:innen, Therapeut:innen, Behörden zusammen und sind Ansprechperson für Bewohner:innen und deren Angehörige</li></ul>",
+    "created": "2026-10-09T15:23:06+02:00"
+   },
+   {
+    "id": 1072957,
+    "contentType": "job_offer",
+    "title": "Was bieten wir Ihnen?",
+    "text": "<ul><li>Attraktive Vergütung: Sie erhalten ein Gehalt inklusive Pflegezulage nach unserer Vergütungsrichtlinie, je nach Erfahrung zwischen 4.290,00 Euro und 4.817,00 Euro in Vollzeit, sowie Urlaubs- und Weihnachtsgeld</li><li>Umfangreiche Zusatzleistungen: Sie profitieren von Zuschlägen für Wochenend-, Feiertags- und Nachtarbeit, einem Kinderbetreuungskostenzuschuss bis zur Einschulung, betrieblicher Altersvorsorge und einer betrieblichen Krankenversicherung mit einem jährlichen Gesundheitsbudget von 800 Euro</li><li>Berufliche Weiterentwicklung: Wir übernehmen die Kosten für Ihre Weiterbildungen und bieten Ihnen ein betriebliches Gesundheitsmanagement</li><li>Work-Life-Balance: Sie genießen 29 Tage Grundurlaub mit Steigerung nach Betriebszugehörigkeit und planbare Arbeitszeiten durch rechtzeitige Dienstplangestaltung – einen Monat im Voraus</li><li>Moderne Arbeitsumgebung: Sie arbeiten mit einem digitalen Dokumentationssystem und erhalten Dienstkleidung inklusive Reinigung (ohne Schuhe)</li><li>Team- und Familienkultur: Sie nehmen an Team- und Familienevents teil, die das Gemeinschaftsgefühl stärken</li></ul>",
+    "created": "2026-10-09T15:23:06+02:00"
+   },
+   {
+    "id": 1072958,
+    "contentType": "candidate_profile",
+    "title": "Was sollten Sie mitbringen?",
+    "text": "<ul><li>Sie haben eine abgeschlossene Ausbildung als Pflegefachkraft (Pflegefachmann/-frau, Altenpfleger:in, Gesundheits- und Krankenpfleger:in)</li><li>Sie haben eine Weiterbildung zur verantwortlichen Leitung einer Wohn-/Funktionseinheit (mind. 460 Std.) oder ein pflegebezogenes Studium – alternativ sind Sie bereit zur Weiterbildung innerhalb der nächsten 2 bis 3 Jahre</li><li>Sie verfügen über mindestens 2 Jahre Berufserfahrung in der stationären Langzeitpflege</li><li>Sie besitzen sichere EDV-Kenntnisse (Pflegedokumentation, Dienstplanprogramm, Roxtra, MS Office)</li><li>Sie haben idealerweise Weiterbildungen in Praxisanleitung, als gerontopsychiatrische Fachkraft, Wundexpert:in oder in Palliative Care absolviert</li></ul>",
+    "created": "2026-10-09T15:23:06+02:00"
+   }
+  ],
+  "language": {
+   "id": 1,
+   "name": "Deutsch",
+   "code": "de"
+  },
+  "jobRole": {
+   "id": 3746,
+   "name": "Bereichsleitung Betreutes Wohnen  (m/w/d)",
+   "approvedAt": "2024-11-19T10:50:05+01:00",
+   "description": "Die Bereichsleitung im Betreuten Wohnen ist verantwortlich für die strategische und operative Führung von Wohnbereichen, die auf die Unterstützung von Menschen mit besonderen Bedürfnissen ausgerichtet sind. Diese Rolle umfasst die Entwicklung und Umsetzung von Betreuungskonzepten, die Sicherstellung der Qualität der Pflege- und Betreuungsleistungen sowie die Einhaltung gesetzlicher Vorgaben. Die Bereichsleitung koordiniert ein Team von Fachkräften, fördert deren Weiterentwicklung und sorgt für eine effiziente Ressourcennutzung. Sie agiert als Schnittstelle zwischen Bewohnern, Angehörigen, Mitarbeitern und externen Partnern, um ein harmonisches und unterstützendes Wohnumfeld zu gewährleisten.",
+   "disciplinesJobRoles": [
+    {
+     "id": 5904,
+     "jobRoleId": 3746,
+     "disciplineId": 109,
+     "similarity": 0.72,
+     "discipline": {
+      "id": 109,
+      "name": "Pflege und Betreuung",
+      "approvedAt": "2025-03-03T11:45:44+01:00",
+      "description": "Die Discipline \"Pflege und Betreuung\" konzentriert sich auf die Unterstützung und Versorgung von Menschen, die aufgrund von Alter, Krankheit oder Behinderung Hilfe im Alltag benötigen. Diese Berufsgruppe umfasst Tätigkeiten, die darauf abzielen, das Wohlbefinden und die Lebensqualität der betreuten Personen zu verbessern und zu erhalten. Dazu gehören sowohl die körperliche Pflege, wie Hilfe bei der Körperhygiene und Mobilität, als auch die emotionale Unterstützung und soziale Interaktion. Die Arbeit in der Pflege und Betreuung erfordert Empathie, Geduld und ein hohes Maß an Verantwortungsbewusstsein, da sie oft in enger Zusammenarbeit mit medizinischem Fachpersonal, Angehörigen und anderen Betreuern erfolgt.",
+      "functionalArea": {
+       "id": 9,
+       "name": "Healthcare",
+       "approvedAt": "2024-11-19T10:53:51+01:00",
+       "description": "Die Functional Area \"Healthcare\" umfasst alle beruflichen Tätigkeiten, die sich mit der Förderung, Erhaltung und Wiederherstellung der Gesundheit von Individuen und Gemeinschaften befassen. Diese Area deckt ein breites Spektrum an Aufgaben ab, von der direkten Patientenversorgung und medizinischen Diagnostik bis hin zur Gesundheitsförderung, Prävention und Verwaltung im Gesundheitswesen. Im Mittelpunkt stehen Berufe, die durch medizinisches Fachwissen, pflegerische Kompetenz und organisatorische Fähigkeiten zur Verbesserung der Lebensqualität und zur Behandlung von Krankheiten beitragen. Die Tätigkeiten finden in verschiedenen Kontexten statt, darunter Krankenhäuser, Arztpraxen, Pflegeeinrichtungen, öffentliche Gesundheitsorganisationen und Forschungseinrichtungen. Die Functional Area ist geprägt von einem hohen Maß an Verantwortung, Empathie und interdisziplinärer Zusammenarbeit, um die bestmögliche Versorgung und Unterstützung für Patienten und Gemeinschaften zu gewährleisten."
+      }
+     }
+    }
+   ]
+  },
+  "driverLicenseRequirements": []
+ }
+}

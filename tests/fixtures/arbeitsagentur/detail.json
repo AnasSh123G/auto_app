@@ -1,0 +1,49 @@
+{
+  "stellenangebotsart": "ARBEIT",
+  "stellenangebotsTitel": "Data Scientist (f/m/d)",
+  "quereinstiegGeeignet": true,
+  "stellenangebotsBeschreibung": "# About Us\n\nWhat if your work could drive change in a globally established industry, shaping processes that touch every corner of the world? At Forto, we are at the forefront of change, harnessing the power of AI to revolutionise logistics. We want to reinvent digital supply chains to be transparent, frictionless and sustainable. From day one, our mission has been to simplify global trade – creating a seamless and efficient logistics process.\n\n# **Your role & Mission**\n\nAs a Data Scientist at Forto, you will take ownership of production ML systems that extract structured intelligence from unstructured logistics data. You will working closely with the Engineering Manager across three core workstreams — document data extraction (FlashDoc), vocabulary mapping, and classical ML. Your immediate priority is ensuring continuity of existing production systems and setting up evaluation pipelines, but equally important is driving step-change improvements in accuracy through disruptive methods and new technologies when the opportunity arises. Beyond document automation, the team’s roadmap extends into traditional data science territory — demand forecasting, churn prediction, route optimization, and predictive analytics for logistics operations. You will bring both the ML engineering depth to maintain and innovate on current systems and the classical data science foundation to tackle these broader challenges as the team grows.\n\n# **What you will do**\n\n- Design, build, and maintain end-to-end ML pipelines for document extraction, classification, and data enrichment in production.\n- Build prompt evaluation frameworks and feedback-based optimization loops to systematically improve extraction accuracy.\n- Train custom in-house models using human-in-the-loop (HITL) data to move from assisted to fully automated extraction.\n- Build and maintain semantic similarity models for free-text to standardized TMS vocabulary across ports, terminals, container types, legal entities, and line items.\n- Improve pipeline reliability through redesign, testing, monitoring, and alerting for non-deterministic ML systems.\n- Evaluate and introduce disruptive approaches (new model architectures, fine-tuning strategies, novel evaluation methods) to achieve step-change accuracy improvements when incremental optimization plateaus.\n- Partner with Product Managers to identify where DS can solve real user pain points, proactively surface opportunities from the data, and shape product roadmaps with a data-informed perspective.\n- Collaborate closely with Engineering teams on integration, infrastructure, and API design to ensure DS outputs are consumed reliably by downstream systems.\n- Manage stakeholder expectations: communicate what is feasible given capacity, set realistic timelines, flag risks early, and negotiate prioritization trade-offs across teams.\n\n# **Required Skills and Experience**\n\n- 2+ years of professional experience in data science or machine learning engineering\n- Ability to design, deploy, and maintain ML systems in production. Go beyond model development — it includes pipeline architecture, monitoring, reliability, and handling non-deterministic outputs at scale.\n- Ability to quickly get onboarded with new tools/ technologies/ problem space\n- Strong use of agentic tools for coding\n- Strong proficiency in Python\n- Hands-on experience with LLMs (prompting, fine-tuning, evaluation) and understanding of their limitations in production environments.\n- Strong foundation in classical data science and statistics: regression, classification, time series analysis, data leakage, experimental design, and hypothesis testing.\n- Strong analytical and problem-solving skills with the ability to work independently on ambiguous, research-oriented problems.\n- Demonstrated ability to evaluate when existing approaches are insufficient and propose disruptive alternatives — not just incremental tuning.\n- Strong stakeholder management skills: ability to identify problems and opportunities proactively, manage expectations on timelines and feasibility, and negotiate prioritization across competing demands.\n- Ability to commit fully to a direction after healthy debate, even when it wasn’t their preferred approach\n\nDon’t fit all of our criteria? That’s okay! We know that you might be hesitant to apply if you don’t meet all our requirements, but here at Forto, we pride ourselves on embracing diverse perspectives and celebrating potential. If you are passionate about this position and the Forto values, please apply anyway. There could be a place for you in this role – or another one that’s a perfect fit! \n\n# **Why work with us?**\n\nOur team is hard-working, constantly seeking to maximise the impact of their work, but we put our people first, always winning with care. We value efficient systems and swift, direct communication. We want everyone to have their time to speak, so that we can embrace diverse perspectives to help drive towards solutions always.",
+  "arbeitszeitSchichtNachtWochenende": false,
+  "arbeitszeitTeilzeitAbend": false,
+  "arbeitszeitTeilzeitNachmittag": false,
+  "arbeitszeitTeilzeitVormittag": false,
+  "arbeitszeitTeilzeitFlexibel": false,
+  "arbeitszeitVollzeit": true,
+  "eintrittszeitraum": {
+    "von": "2026-10-06"
+  },
+  "verguetungsangabe": "KEINE_ANGABEN",
+  "vertragsdauer": "UNBEFRISTET",
+  "istGeringfuegigeBeschaeftigung": false,
+  "istBehinderungGefordert": false,
+  "stellenlokationen": [
+    {
+      "adresse": {
+        "strasse": "Schönhauser Allee",
+        "hausnummer": "9",
+        "plz": "10119",
+        "ort": "Berlin",
+        "region": "BERLIN",
+        "land": "DEUTSCHLAND"
+      },
+      "breite": 52.530075,
+      "laenge": 13.4108775
+    }
+  ],
+  "homeofficemoeglich": true,
+  "homeofficetyp": "NACH_VEREINBARUNG",
+  "istPrivateArbeitsvermittlung": false,
+  "istArbeitnehmerUeberlassung": false,
+  "veroeffentlichungszeitraum": {
+    "von": "2026-09-15"
+  },
+  "datumErsteVeroeffentlichung": "2026-06-19",
+  "aenderungsdatum": "2026-10-06T08:20:39.372",
+  "istBetreut": true,
+  "hauptberuf": "Data Scientist",
+  "firma": "Forto Logistics SE & Co. KG",
+  "arbeitgeberKundennummerHash": "NqX-X-znFZc29vuGDx4ILEfIA_rKooiO0S-BbFfAYro=",
+  "allianzpartnerUrl": "http://www.arbeitsagentur.de",
+  "allianzpartnerName": "arbeitsagentur.de",
+  "referenznummer": "10001-1003259403-S"
+}

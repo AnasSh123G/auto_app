@@ -1,0 +1,42 @@
+{
+  "data": [
+    {
+      "slug": "backend-developer-berlin-123",
+      "company_name": "Muster GmbH",
+      "title": "Backend Developer (m/w/d)",
+      "description": "<h2>Backend team</h2><p>Build Python services.</p><ul><li>PostgreSQL</li></ul><script>not part of the job</script>",
+      "remote": false,
+      "url": "https://www.arbeitnow.com/jobs/companies/muster/backend-developer-berlin-123",
+      "tags": ["Backend"],
+      "job_types": ["Full Time", "Permanent"],
+      "location": "Berlin",
+      "created_at": 1791504000
+    },
+    {
+      "slug": "backend-developer-london-456",
+      "company_name": "Other Ltd",
+      "title": "Backend Developer",
+      "description": "<p>Python</p>",
+      "remote": true,
+      "url": "https://www.arbeitnow.co.uk/jobs/companies/other/backend-developer-london-456",
+      "tags": [],
+      "job_types": [],
+      "location": "London",
+      "created_at": 1791504000
+    },
+    {
+      "slug": "accountant-789",
+      "company_name": "Accounting GmbH",
+      "title": "Accountant",
+      "description": "<p>Finance and accounting.</p>",
+      "remote": false,
+      "url": "https://www.arbeitnow.com/jobs/companies/accounting/accountant-789",
+      "tags": [],
+      "job_types": [],
+      "location": "Berlin",
+      "created_at": 1791504000
+    }
+  ],
+  "links": {"next": null},
+  "meta": {"per_page": 325}
+}

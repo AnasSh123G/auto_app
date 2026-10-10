@@ -1,0 +1,224 @@
+# Example configuration for autoapp.
+# Copy this to your workspace as config.yaml and customize the search profiles and settings.
+
+search_profiles:
+  # At least one search profile is required. Only keywords are mandatory.
+  - name: ml-engineer
+    keywords:
+      - Machine Learning Engineer
+      - AI Engineer
+      - Data Scientist
+    # Optional filters; omitted or empty means no restriction:
+    # exclude_keywords:
+    #   - Internship
+    #   - Junior
+    # exclude_companies:
+    #   - Bogus Corp
+    # locations:
+    #   - name: Berlin
+    #     radius_km: 30
+    # work_mode: onsite  # onsite, hybrid, remote, or any (default: any)
+    # working_time: full_time  # full_time, part_time, or any (default: any)
+    # contract_type: permanent  # permanent, fixed_term, or any (default: any)
+    # exclude_position_types:
+    #   - Trainee
+    # experience_levels:
+    #   - Mid
+    #   - Senior
+    # max_posting_age_days: 30  # Only jobs posted within this many days
+    # min_salary: 60000  # Minimum annual salary in EUR (before LLM evaluation)
+    # exclude_agencies: true  # Skip recruitment agencies and temp work
+    # writing_instructions: |
+    #   Keep it brief. Emphasize Docker and Python expertise.
+
+# Job discovery sources.
+sources:
+  arbeitsagentur:
+    enabled: true  # German federal employment agency (free, no key needed)
+  adzuna:
+    enabled: true  # Job search API (requires ADZUNA_APP_ID and ADZUNA_APP_KEY in .env)
+    # Request caps that keep the free tier safe (reported limits: 25/min, 250/day, 1000/month).
+    max_requests_per_run: 40
+    max_requests_per_day: 150
+    max_requests_per_month: 900
+  alerts:
+    enabled: true  # Email alerts from LinkedIn, StepStone, Indeed and Workwise
+    folder: Jobalerts  # Gmail label or IMAP folder name
+  arbeitnow:
+    enabled: false  # Free public feed, no key; enable in setup or here.
+    max_pages_per_run: 40
+    max_requests_per_run: 40
+    max_requests_per_day: 200
+    max_requests_per_month: 1000
+    min_delay_s: 3  # App-selected courtesy limits, not provider quotas.
+  # Workwise's public job search (no key, no login), once per profile keyword; the distance to your
+  # profile's cities is checked locally. Applying on Workwise needs a login: `autoapp login workwise`.
+  workwise:
+    enabled: true
+    max_pages_per_keyword: 2
+    page_size: 50
+    max_requests_per_run: 30
+    max_requests_per_day: 100
+    max_requests_per_month: 1500
+    min_delay_s: 2
+  # Looks up the employer's own careers site for alert jobs (public pages only), reads the original
+  # vacancy there and finds other matching openings. Off by default; needs PARALLEL_API_KEY in .env to
+  # look up employers not yet saved (about $1 per 1,000 searches, max 2 per new employer).
+  employer_careers:
+    enabled: false
+    max_employers_per_run: 10
+    max_search_requests_per_run: 300
+    max_search_requests_per_day: 1000
+    reserved_for_own_ad_search: 25  # searches discovery leaves for the company+title search of LinkedIn/Arbeitsagentur jobs
+    max_search_requests_per_month: 5000
+    max_pages_per_employer: 20
+    max_pages_per_run: 100  # all employers together; when used up, the rest wait for the next run
+    max_openings_per_employer: 50
+    max_openings_per_run: 100
+    scan_ttl_hours: 24  # a complete listing scan is reused for this long
+    failure_ttl_hours: 24  # an unresolved employer is not looked up again for this long
+    search_cost_per_1000_usd: 1.0  # estimate shown in reports only
+  # LinkedIn, StepStone and Indeed hide the employer's apply address without a login. The default way past
+  # them is employer_careers above. Switched on per site here, the app also opens the job page with YOUR login
+  # (log in once: `autoapp login linkedin`) to read where "apply on company website" leads. Never Easy Apply,
+  # never typing. Against these sites' terms: low but real risk for the account, so off by default.
+  apply_links_with_login:
+    linkedin: false
+    stepstone: false
+    indeed: false
+    max_per_run: 20  # job pages read this way per run
+    min_delay_s: 20  # pause between two pages of one site (seconds)
+    max_delay_s: 40
+
+# Detail page fetching from LinkedIn, Indeed, StepStone.
+detail_fetch:
+  linkedin: true  # Fetch LinkedIn job pages
+  indeed: true  # Fetch Indeed job pages
+  stepstone: true  # Fetch StepStone job pages
+  max_per_site: 20  # At most 20 detail fetches per run per site
+  min_delay_s: 20  # Minimum delay between fetches (seconds)
+  max_delay_s: 40  # Maximum delay between fetches (seconds)
+
+# Job evaluation thresholds (0–100, apply >= maybe >= 0).
+evaluation:
+  apply_threshold: 75  # Auto-apply jobs with this score or higher (if not auto_send, prepare them)
+  maybe_threshold: 60  # Review jobs with this score (below apply_threshold)
+
+# Per-run limits to control costs and volume.
+limits:
+  max_llm_calls_per_run: 500  # Stop after this many LLM calls
+  max_cost_per_run_usd: 3.0  # Stop asking the AI once this run has cost about this many US dollars (0 = no AI calls)
+  max_evaluate_per_run: 200  # At most 200 evaluation calls per run
+  max_prepare_per_run: 50  # At most 50 cover letters per run
+
+# LLM provider configuration.
+llm:
+  # One model per task. provider: anthropic, google or openrouter. effort (optional): low, medium or high.
+  # instructions (optional): your own directions for that model, added to its built-in prompt. They can never
+  # switch off the safety rules (no invented facts, fixed output format, page text is not obeyed).
+  tasks:
+    evaluate:  # judges each job against your CV (many calls: a cheap model works well)
+      provider: anthropic
+      model: claude-sonnet-5-5
+      # instructions: |
+      #   I only want roles with Python as the main language. Treat pure frontend roles as a mismatch.
+    write:  # writes the cover letters (few calls: a strong writer is worth it)
+      provider: anthropic
+      model: claude-sonnet-5-5
+      # instructions: |
+      #   Mention my open-source work when it fits. Keep the tone warm but direct.
+    form_fill:  # answers free-text questions when `assist` fills a web form
+      provider: anthropic
+      model: claude-sonnet-5-5
+      # instructions: |
+      #   For "years of experience" questions, count from my first full-time job.
+    form_find:  # picks the right link when a job page has several
+      provider: anthropic
+      model: claude-sonnet-5-5
+      # instructions: |
+      #   Prefer the company's own career site over job boards.
+
+  # Alternative LLM providers (add these to .env first):
+  # anthropic: Set ANTHROPIC_API_KEY
+  # google: Set GOOGLE_API_KEY (Note: free tier may use your inputs for training)
+  # openrouter: Set OPENROUTER_API_KEY and choose models like openrouter/deepseek-v4.1-flash
+
+  # Effort level for reasoning (low, medium, high); unset = task default (low for evaluate, medium for write).
+  # effort: low
+
+  # (optional) Custom prices per 1M tokens; overrides the shipped price table.
+  # prices:
+  #   claude-sonnet-5-5:
+  #     input: 3.0
+  #     output: 15.0
+  #     cached_input: 0.30
+
+  max_retries: 4  # Retry on transient errors (429, 5xx)
+
+# Email alert and sending configuration.
+mail:
+  alerts:
+    preset: gmail  # gmail, proton_bridge, or custom
+    address: your.name@gmail.com  # Email address to read alerts from
+    # (optional for custom) imap_host: imap.example.com
+    # (optional for custom) imap_port: 993
+    # (optional for custom) imap_tls: ssl  # ssl, starttls, or none
+    # (optional) password_env: AUTOAPP_ALERTS_PASSWORD  # Env var with the password (or app password for Gmail)
+  sending:
+    preset: gmail  # Same account or a different one
+    address: your.name@gmail.com
+    # (optional for custom) smtp_host: smtp.example.com
+    # (optional for custom) smtp_port: 465
+    # (optional for custom) smtp_tls: ssl
+    # (optional) password_env: AUTOAPP_SMTP_PASSWORD
+    # (optional) drafts_folder: Drafts  # found automatically; set it only if drafts cannot be saved
+
+# How runs handle emails. A run you start yourself asks every time; scheduled runs use this.
+#   review:    save each email as a draft in your mailbox; you read it and send it yourself
+#   automatic: send emails that pass the safeguards below to employers
+# (`autoapp run --mode test` sends everything to yourself instead; it cannot be the default.)
+run:
+  default_mode: review
+
+# Safeguards for automatic sending (also used to decide what a test run would send).
+email:
+  daily_cap: 100  # Max emails per calendar day (Europe/Berlin)
+  min_score: 80  # Only auto-send jobs with this score or higher
+  company_cooldown_days: 14  # Do not send again to the same company within this many days
+  max_attempts: 3  # Retry a failed send up to 3 times
+  max_bundle_mb: 10.0  # Max attachment size in MB
+  # free_mail_domains: [gmail.com, ...]  # Domain list; matching addresses go to manual review
+
+# Cover letter writing rules.
+writing:
+  max_words: 300  # Body word limit (shorter = more professional)
+  max_assumed_skills: 5  # At most this many "familiarity" claims per letter (basic skills not in CV)
+  language: auto  # auto (detect from ad), de, or en
+  always_attach_certificates: false  # Include Zeugnisse even if not requested
+  # banned_phrases: [my personal phrase]  # Add to the built-in list
+  # allowed_phrases: [sometimes okay phrase]  # Whitelist a phrase that would otherwise be banned
+
+# CSV export settings.
+tracking:
+  delimiter: ";"  # Column separator (;, ,, \t, or |)
+  include_skipped: false  # Include jobs that were filtered out (default: only review and later)
+
+# Assisted form filling (on employer web sites).
+assist:
+  # Domains that never get auto-fill (require manual submission).
+  # restricted_domains: [linkedin.com, indeed.com, indeed.de, stepstone.de]
+  llm_answers: true  # Use LLM to fill unrecognized form fields
+  # model: the form_fill model reads the form's fields and fills them from your CV, profile and saved answers
+  #        (form_answers.md); fixed answers (how found, referral, prior employment) and uploads stay rule-based.
+  # rules: the built-in rules fill your facts; the model only gets the fields they cannot place.
+  fill_mode: model
+  # model: the form_find model chooses each click on the way from the job page to the application form (it never
+  #        types, logs in or submits; restricted sites stay blocked). Falls back to the rules without a model.
+  # rules: only follow links and buttons whose text says "apply".
+  navigate_mode: model
+  navigate_max_steps: 8  # clicks before the app hands over to you (1-15)
+
+# Setup progress tracking (managed by `autoapp setup`).
+setup:
+  completed_sections: []
+  version: 1

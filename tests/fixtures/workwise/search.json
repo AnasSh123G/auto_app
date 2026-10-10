@@ -1,0 +1,380 @@
+{
+ "data": {
+  "search": {
+   "id": 221778162,
+   "enquiryTypeId": null,
+   "start": null,
+   "end": null,
+   "ongoing": true,
+   "hoursStart": null,
+   "hoursEnd": null,
+   "salary": null,
+   "salaryType": null,
+   "salaryFlexible": true,
+   "description": null,
+   "originalDescription": null,
+   "untokenizedDescription": null,
+   "priority": "medium",
+   "worldwide": true,
+   "workExperience": "does_not_matter",
+   "leadershipExperience": "does_not_matter",
+   "mobileWork": null,
+   "remoteWork": "does_not_matter",
+   "createdBySystem": false,
+   "isSameDistribution": true,
+   "created": "2026-10-10T12:14:11.000Z",
+   "modified": "2026-10-10T12:14:11.000Z",
+   "locationLevels": [],
+   "competencyLevels": [],
+   "occupations": [],
+   "languageLevels": [],
+   "searchCompanyLevels": [],
+   "searchCompanyTagLevels": [],
+   "searchesEnquiryTypes": [],
+   "enquiryTypes": []
+  },
+  "matchingResult": {
+   "data": {
+    "assistedSearches": {},
+    "matchings": [
+     {
+      "enquiries": {
+       "id": 129201,
+       "name": "Stellvertretende Wohnbereichsleitung in der Pflege (m/w/d)",
+       "status": "open",
+       "shortDescription": "Werden Sie stellvertretende/r Wohnbereichsleiter/in (m/w/d) und unterstützen Sie uns in der Pflegeleitung und Dienstplangestaltung.",
+       "maxSalary": "57804.00",
+       "minSalary": "51480.00",
+       "isSalaryFlexible": true,
+       "hoursStart": 40,
+       "hoursEnd": 40,
+       "remoteWork": "not_possible",
+       "minimumRemoteWorkDaysPerWeekPossible": null,
+       "maximumRemoteWorkDaysPerWeekPossible": null,
+       "jobLocationTypes": [
+        "location"
+       ],
+       "slug": "stellvertretende-wohnbereichsleitung-in-der-pflege-m-w-d",
+       "travelType": "none",
+       "travelDetails": null,
+       "type": {
+        "id": 2,
+        "name": "Festanstellung",
+        "pluralName": "Festanstellungen",
+        "shortName": "employment",
+        "salaryType": "per year"
+       },
+       "isEnquiryNew": true,
+       "locationLevels": [
+        {
+         "id": 212463190,
+         "city": "Bischofswerda",
+         "country": "Deutschland",
+         "countryCode": "DE",
+         "enquiryId": 129201,
+         "googlePlaceId": "ChIJT1wvaA2tCUcRRwtVnnyOHEA",
+         "isMandatory": false,
+         "lat": 51.1234391,
+         "level": 0,
+         "limiter": "zip",
+         "lon": 14.1982327,
+         "prefix": "01877 Bischofswerda, Deutschland",
+         "state": "Sachsen",
+         "stateCode": "SN",
+         "zip": "01877",
+         "created": "2026-10-09T15:23:04+02:00",
+         "modified": "2026-10-09T15:35:47+02:00"
+        }
+       ],
+       "residenceRequirements": [],
+       "company": {
+        "id": 2316400,
+        "name": "Oberlausitz Pflegeheim & Kurzzeitpflege gGmbH",
+        "slug": "oberlausitz-pflegeheim-kurzzeitpflege-ggmbh-1",
+        "privacyPolicySite": null,
+        "displayAnonymously": false,
+        "logo": {
+         "small": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company/photo/2316400/small_2316400-260306101240.jpeg",
+         "thumb": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company/photo/2316400/thumb_2316400-260306101240.jpeg",
+         "big": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company/photo/2316400/big_2316400-260306101240.jpeg"
+        },
+        "photo": {
+         "file": "2316400-260306101240.jpeg",
+         "directory": "2316400"
+        },
+        "kununu": {
+         "url": null,
+         "slug": null
+        }
+       },
+       "checks": {
+        "hasAppliedToCompanyBefore": false,
+        "hasViewedEnquiry": false,
+        "visibleNudge": "fast_reply",
+        "canEditApplicationDraft": false,
+        "canEditApplicationInProcess": false,
+        "hasNonEditableApplicationInProcess": false,
+        "canApply": false,
+        "canNotApplyReasons": [
+         "unauthorized"
+        ],
+        "isBookmarked": false
+       }
+      },
+      "score": 1,
+      "metaData": {
+       "algorithmVersion": "base_matching_algorithm",
+       "candidateId": null,
+       "enquiryId": 129201,
+       "searchId": 221778162,
+       "timeStamp": "2026-10-10T14:14:11.899+02:00"
+      }
+     },
+     {
+      "enquiries": {
+       "id": 129200,
+       "name": "Ausbildungskoordinator Pflege (m/w/d)",
+       "status": "open",
+       "shortDescription": "Werden Sie Ausbildungskoordinator/in (m/w/d) bei Westlausitz Pflegeheim & Kurzzeitpflege gGmbH und gestalten Sie die Pflegeausbildung aktiv mit.",
+       "maxSalary": "43353.00",
+       "minSalary": "38610.00",
+       "isSalaryFlexible": true,
+       "hoursStart": 30,
+       "hoursEnd": 30,
+       "remoteWork": "not_possible",
+       "minimumRemoteWorkDaysPerWeekPossible": null,
+       "maximumRemoteWorkDaysPerWeekPossible": null,
+       "jobLocationTypes": [
+        "location",
+        "mobile"
+       ],
+       "slug": "ausbildungskoordinator-pflege-m-w-d",
+       "travelType": "day_trip",
+       "travelDetails": "Betreuung der verschiedenen Standorte in Pulsnitz, Ohorn, Elstra und Kamenz.",
+       "type": {
+        "id": 2,
+        "name": "Festanstellung",
+        "pluralName": "Festanstellungen",
+        "shortName": "employment",
+        "salaryType": "per year"
+       },
+       "isEnquiryNew": true,
+       "locationLevels": [
+        {
+         "id": 212463180,
+         "city": "Bischofswerda",
+         "country": "Deutschland",
+         "countryCode": "DE",
+         "enquiryId": 129200,
+         "googlePlaceId": "ChIJT1wvaA2tCUcRRwtVnnyOHEA",
+         "isMandatory": false,
+         "lat": 51.1234391,
+         "level": 0,
+         "limiter": "zip",
+         "lon": 14.1982327,
+         "prefix": "01877 Bischofswerda, Deutschland",
+         "state": "Sachsen",
+         "stateCode": "SN",
+         "zip": "01877",
+         "created": "2026-10-09T15:22:14+02:00",
+         "modified": "2026-10-09T15:33:59+02:00"
+        }
+       ],
+       "residenceRequirements": [],
+       "company": {
+        "id": 2316400,
+        "name": "Oberlausitz Pflegeheim & Kurzzeitpflege gGmbH",
+        "slug": "oberlausitz-pflegeheim-kurzzeitpflege-ggmbh-1",
+        "privacyPolicySite": null,
+        "displayAnonymously": false,
+        "logo": {
+         "small": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company/photo/2316400/small_2316400-260306101240.jpeg",
+         "thumb": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company/photo/2316400/thumb_2316400-260306101240.jpeg",
+         "big": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company/photo/2316400/big_2316400-260306101240.jpeg"
+        },
+        "photo": {
+         "file": "2316400-260306101240.jpeg",
+         "directory": "2316400"
+        },
+        "kununu": {
+         "url": null,
+         "slug": null
+        }
+       },
+       "checks": {
+        "hasAppliedToCompanyBefore": false,
+        "hasViewedEnquiry": false,
+        "visibleNudge": "fast_reply",
+        "canEditApplicationDraft": false,
+        "canEditApplicationInProcess": false,
+        "hasNonEditableApplicationInProcess": false,
+        "canApply": false,
+        "canNotApplyReasons": [
+         "unauthorized"
+        ],
+        "isBookmarked": false
+       }
+      },
+      "score": 1,
+      "metaData": {
+       "algorithmVersion": "base_matching_algorithm",
+       "candidateId": null,
+       "enquiryId": 129200,
+       "searchId": 221778162,
+       "timeStamp": "2026-10-10T14:14:11.899+02:00"
+      }
+     },
+     {
+      "enquiries": {
+       "id": 129187,
+       "name": "Recruiter Schwerpunkt Active Sourcing",
+       "status": "open",
+       "shortDescription": "Suchstrings bauen, Gespräche führen, neue Kollegen begeistern. Klingt nach Deinem Ding? Dann werde Recruiter bei meap!",
+       "maxSalary": null,
+       "minSalary": null,
+       "isSalaryFlexible": false,
+       "hoursStart": 40,
+       "hoursEnd": 40,
+       "remoteWork": "not_possible",
+       "minimumRemoteWorkDaysPerWeekPossible": 2,
+       "maximumRemoteWorkDaysPerWeekPossible": 5,
+       "jobLocationTypes": [
+        "location",
+        "homeOffice"
+       ],
+       "slug": "recruiter-schwerpunkt-active-sourcing",
+       "travelType": "none",
+       "travelDetails": null,
+       "type": {
+        "id": 2,
+        "name": "Festanstellung",
+        "pluralName": "Festanstellungen",
+        "shortName": "employment",
+        "salaryType": "per year"
+       },
+       "isEnquiryNew": true,
+       "locationLevels": [
+        {
+         "id": 212461500,
+         "city": "Witten",
+         "country": "Deutschland",
+         "countryCode": "DE",
+         "enquiryId": 129187,
+         "googlePlaceId": "ChIJswAH8IkhuUcREIhUMYHyJwQ",
+         "isMandatory": false,
+         "lat": 51.4438926,
+         "level": 0,
+         "limiter": "zip",
+         "lon": 7.353197,
+         "prefix": "58455 Witten, Deutschland",
+         "state": "Nordrhein-Westfalen",
+         "stateCode": "NRW",
+         "zip": "58455",
+         "created": "2026-10-09T14:30:03+02:00",
+         "modified": "2026-10-09T14:30:03+02:00"
+        }
+       ],
+       "residenceRequirements": [
+        {
+         "id": 3224,
+         "regionId": null,
+         "countryId": 47,
+         "state": null,
+         "stateCode": null,
+         "city": null,
+         "zip": null,
+         "lat": null,
+         "lon": null,
+         "radius": null,
+         "googlePlaceId": "ChIJa76xwh5ymkcRW-WRjmtd6HU",
+         "isStrict": false,
+         "region": null,
+         "country": {
+          "id": 47,
+          "countryCode": "DE",
+          "nameEn": "Germany",
+          "name": "Deutschland",
+          "memberOfEuropeanUnion": true
+         }
+        }
+       ],
+       "company": {
+        "id": 11850,
+        "name": "meap GmbH",
+        "slug": "meap-gmbh",
+        "privacyPolicySite": "https://www.meap.de/datenschutz/",
+        "displayAnonymously": false,
+        "logo": {
+         "small": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company/photo/11850/small_11850-191114150047.png",
+         "thumb": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company/photo/11850/thumb_11850-191114150047.png",
+         "big": "https://s3.eu-west-1.amazonaws.com/static.campusjaeger.de/company/photo/11850/big_11850-191114150047.png"
+        },
+        "photo": {
+         "file": "11850-191114150047.png",
+         "directory": "11850"
+        },
+        "kununu": {
+         "url": "https://www.kununu.com/de/meap",
+         "slug": "/de/meap",
+         "score": {
+          "id": 268,
+          "companyId": 11850,
+          "reviewsCount": 55,
+          "averageCompanyScore": 4.4,
+          "averageApplicationScore": 4.3,
+          "averageEmployeeScore": 4.4,
+          "averageApprenticeScore": 0,
+          "averageSupervisorBehaviorScore": 4.455,
+          "averageColleagueSolidarityScore": 4.7143,
+          "averageInterestingTasksScore": 4.2011,
+          "averageWorkClimateScore": 4.4221,
+          "averageWorkCommunicationScore": 4.2222,
+          "averageEqualOpportunitiesScore": 4.7302,
+          "averageTrainingOpportunitiesScore": 3.9253,
+          "averageSalaryScore": 4.0899,
+          "averageLaborConditionsScore": 4.6614,
+          "averageWorkLifeBalanceScore": 4.5132,
+          "averageImageScore": 4.6596,
+          "averageHandlingOlderEmployeesScore": 4.6848,
+          "averageEnvironmentalAndSocialAwarenessScore": 4.4969,
+          "isTopCompany": true,
+          "isOpenCompany": true,
+          "created": "2021-06-26T04:23:42+02:00",
+          "modified": "2026-09-29T06:23:51+02:00"
+         }
+        }
+       },
+       "checks": {
+        "hasAppliedToCompanyBefore": false,
+        "hasViewedEnquiry": false,
+        "visibleNudge": null,
+        "canEditApplicationDraft": false,
+        "canEditApplicationInProcess": false,
+        "hasNonEditableApplicationInProcess": false,
+        "canApply": false,
+        "canNotApplyReasons": [
+         "unauthorized"
+        ],
+        "isBookmarked": false
+       }
+      },
+      "score": 1,
+      "metaData": {
+       "algorithmVersion": "base_matching_algorithm",
+       "candidateId": null,
+       "enquiryId": 129187,
+       "searchId": 221778162,
+       "timeStamp": "2026-10-10T14:14:11.899+02:00"
+      }
+     }
+    ]
+   },
+   "paging": {
+    "page": 1,
+    "pages": 1,
+    "size": 14,
+    "total": 3
+   }
+  }
+ }
+}

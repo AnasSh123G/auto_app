@@ -1,0 +1,41 @@
+{
+  "count": 3,
+  "results": [
+    {
+      "id": "4901",
+      "title": "Senior Data Scientist (m/w/d)",
+      "company": {"display_name": "Acme Analytics GmbH"},
+      "location": {"display_name": "Berlin", "area": ["Deutschland", "Berlin"]},
+      "description": "Wir suchen eine erfahrene Data Scientistin ... Python, SQL, Machine Learning &hellip;",
+      "redirect_url": "https://www.adzuna.de/land/ad/4901?se=abc&v=123",
+      "created": "2026-10-05T08:12:44Z",
+      "salary_min": 55000.0,
+      "salary_max": 70000.0,
+      "salary_is_predicted": "0",
+      "contract_type": "permanent",
+      "contract_time": "full_time"
+    },
+    {
+      "id": "4902",
+      "title": "Data Analyst",
+      "company": {"display_name": "Beta AG"},
+      "location": {"display_name": "Hamburg", "area": ["Deutschland", "Hamburg"]},
+      "description": "Analyse von Daten ...",
+      "redirect_url": "https://www.adzuna.de/land/ad/4902?se=def",
+      "created": "2026-10-06T10:00:00Z",
+      "salary_min": 48000.0,
+      "salary_max": 52000.0,
+      "salary_is_predicted": "1"
+    },
+    {
+      "id": "4903",
+      "title": "ML Engineer",
+      "company": {"display_name": "Gamma SE"},
+      "location": {"display_name": "München"},
+      "description": "ML ...",
+      "redirect_url": "https://www.adzuna.de/land/ad/4903",
+      "created": "2026-10-07T10:00:00Z",
+      "contract_type": "contract"
+    }
+  ]
+}

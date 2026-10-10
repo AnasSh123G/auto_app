@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="de">
+<head><meta charset="utf-8"><title>Bewerbung (plain)</title></head>
+<body>
+  <h1>Jetzt bewerben</h1>
+  <form id="apply" action="#" method="post">
+    <p><label for="vorname">Vorname *</label> <input id="vorname" name="vorname" type="text" required maxlength="40"></p>
+    <p><label for="nachname">Nachname *</label> <input id="nachname" name="nachname" type="text" required></p>
+    <p><label for="email">E-Mail *</label> <input id="email" name="email" type="email" required></p>
+    <p><label for="tel">Telefon</label> <input id="tel" name="telefon" type="tel"></p>
+    <p><label for="strasse">Straße</label> <input id="strasse" name="strasse" type="text"></p>
+    <p><label for="plz">PLZ</label> <input id="plz" name="plz" type="text" maxlength="5"></p>
+    <p><label>Ort <input name="ort" type="text"></label></p>
+    <p><label for="gehalt">Gehaltsvorstellung (brutto/Jahr)</label> <input id="gehalt" name="gehalt" type="text"></p>
+    <p><label for="eintritt">Eintrittstermin</label> <input id="eintritt" name="eintritt" type="text"></p>
+    <p><label for="cv">Lebenslauf *</label> <input id="cv" name="cv" type="file" required></p>
+    <p><label for="anschreiben">Anschreiben</label> <input id="anschreiben" name="anschreiben" type="file"></p>
+    <p><label for="quelle">Wie haben Sie von uns erfahren? *</label> <textarea id="quelle" name="quelle" required maxlength="300"></textarea></p>
+    <p><input id="datenschutz" name="datenschutz" type="checkbox" required>
+       <label for="datenschutz">Ich habe die Datenschutzerklärung gelesen</label></p>
+    <p><button type="submit" id="submit">Bewerbung absenden</button></p>
+  </form>
+  <script>
+  // Submit listener: counts every submit event and blocks navigation.
+  window.__submits = 0;
+  document.addEventListener("submit", function (e) { window.__submits += 1; e.preventDefault(); }, true);
+</script>
+</body>
+</html>

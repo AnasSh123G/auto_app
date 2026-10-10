@@ -1,0 +1,12 @@
+[Unit]
+Description=Run autoapp daily
+Requires=autoapp.service
+
+# The run it starts uses run.default_mode from config.yaml (review by default: drafts, nothing sent).
+[Timer]
+OnCalendar=*-*-* 08:00:00
+RandomizedDelaySec=30m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,27 @@
+# {{ job.title }}
+
+- **Company:** {{ job.company }}
+{% if job.locations %}
+- **Location{{ "s" if job.locations|length > 1 }}:** {{ job.locations|join("; ") }}
+{% endif %}
+{% if ad_salary %}
+- **Salary (stated in the ad):** {{ ad_salary }}
+{% endif %}
+{% if estimate %}
+- **Salary ({{ job.salary_estimate_source }} estimate, not stated by the employer):** {{ estimate }}
+{% endif %}
+{% if not ad_salary and not estimate %}
+- **Salary:** not stated
+{% endif %}
+- **Job ad:** {{ job.job_url or "not available" }}
+{% if arbeitnow_url %}
+- **Source link:** [Arbeitnow]({{ arbeitnow_url }})
+{% endif %}
+- **Application page:** {{ job.application_url or "not available" }}
+{% if job.sources %}
+- **Source{{ "s" if job.sources|length > 1 }}:** {{ job.sources|join(", ") }}
+{% endif %}
+
+## Description
+
+{{ job.description.strip() if job.description else "(no description available)" }}

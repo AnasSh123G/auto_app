@@ -1,0 +1,13 @@
+# Form answers
+
+Ready to paste into application forms.
+{% for it in items %}
+
+## {{ it.label }}
+
+{{ it.value }}
+{% if it.hint %}
+
+_{{ it.hint }}_
+{% endif %}
+{% endfor %}

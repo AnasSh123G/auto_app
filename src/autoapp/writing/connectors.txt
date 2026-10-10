@@ -1,0 +1,10 @@
+# Sentence connectors checked for overuse (not banned, but flagged if used > 2 times per letter)
+darüber hinaus
+zudem
+außerdem
+ferner
+des weiteren
+moreover
+furthermore
+additionally
+in addition

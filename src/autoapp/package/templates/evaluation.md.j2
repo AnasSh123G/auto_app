@@ -1,0 +1,38 @@
+# Evaluation{% if extra.title %}: {{ extra.title }}{% if extra.company %} at {{ extra.company }}{% endif %}{% endif %}
+
+
+- **Fit score:** {{ ev.fit_score }}/100
+- **Decision:** {{ ev.decision }}
+
+## Rationale
+
+{{ result.rationale }}
+
+## Requirements
+
+{% for heading, group in (("Matched", matched), ("Bridgeable", bridgeable), ("Missing", missing)) %}
+### {{ heading }} ({{ group|length }})
+
+{% for r in group %}
+- {{ r.text }}{% if r.core %} (core){% endif %}{% if r.years_required %}, {{ r.years_required }}+ years{% endif %}{% if r.evidence %} - evidence: "{{ r.evidence }}"{% endif %}
+
+{% else %}
+- none
+
+{% endfor %}
+{% endfor %}
+## Dealbreakers
+
+{% for d in result.dealbreakers %}
+- {{ d }}
+{% else %}
+- none
+{% endfor %}
+
+## Rule notes
+
+{% for n in notes %}
+- {{ n }}
+{% else %}
+- none
+{% endfor %}

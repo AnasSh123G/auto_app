@@ -1,0 +1,80 @@
+# {{ d.title }} at {{ d.company }}
+{% if d.needs_review_reasons %}
+
+## NEEDS REVIEW before you apply
+
+{% for r in d.needs_review_reasons %}
+- {{ r }}
+{% endfor %}
+{% endif %}
+{% if d.bundle_too_large or d.warnings %}
+
+## Warnings
+
+{% if d.bundle_too_large %}
+- Bewerbungsmappe.pdf is {{ "%.1f"|format(d.bundle_size_mb or 0) }} MB, over the {{ "%g"|format(d.bundle_max_mb or 0) }} MB limit. Reduce the attached documents or send it by hand.
+{% endif %}
+{% for w in d.warnings %}
+- {{ w }}
+{% endfor %}
+{% endif %}
+
+## Apply
+
+- **Channel:** {{ channel_label }}
+{% if d.reference %}
+- **Reference number:** {{ d.reference }}
+{% endif %}
+{% if d.channel == "email" %}
+- **Send to:** {{ d.apply_email or "(address missing)" }}
+{% else %}
+- **Application link:** {{ d.application_url or d.job_url or "not available" }}
+{% endif %}
+{% if d.job_url %}
+- **Job ad:** {{ d.job_url }}
+{% endif %}
+{% if arbeitnow_url %}
+- **Source link:** [Arbeitnow]({{ arbeitnow_url }})
+{% endif %}
+
+### Next step
+
+{% if d.channel == "email" %}
+Check `cover_letter.md` and `email.eml`, then let auto-send handle it or run `autoapp send {{ d.job_id }}`.
+{% elif d.channel == "employer_form" %}
+Run `autoapp assist {{ d.job_id }}` to fill the form, or open `apply.html` and copy the answers by hand.
+{% elif d.channel == "platform" %}
+Open the job link, apply on the site, and use `apply.html` to copy your answers.
+{% else %}
+The application channel is unknown. Open the job link, find how to apply, and use `apply.html` to copy your answers.
+{% endif %}
+{% if d.salary_note %}
+
+> The ad asks for a salary expectation, but none is configured in your profile. Add a salary target to `profile.yaml` or answer by hand.
+{% endif %}
+{% if d.missing_documents %}
+
+## Missing documents
+
+The ad asks for documents you have not provided:
+
+{% for m in d.missing_documents %}
+- {{ m }}
+{% endfor %}
+{% endif %}
+{% if d.assumed_skills %}
+
+## Before an interview, brush up on
+
+The letter claims basic familiarity with these skills that are not in your CV:
+
+{% for s in d.assumed_skills %}
+- {{ s }}
+{% endfor %}
+{% endif %}
+
+## Files
+
+{% for f in d.files %}
+- `{{ f }}`
+{% endfor %}
