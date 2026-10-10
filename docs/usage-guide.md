@@ -762,6 +762,65 @@ llm:
 Providers: `anthropic`, `google`, `openrouter`. Keys in `.env`: `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`,
 `OPENROUTER_API_KEY`. Redo it with `uv run autoapp setup --section llm`.
 
+### What each model does
+
+The four tasks can use four different models, or the same one. The alert-job search in search-first mode is **not** a
+fifth model: it is Parallel Search, a web search.
+
+**`evaluate`: judges each job against your CV.** Runs on every new job (alert jobs first), up to
+`max_evaluate_per_run`.
+- *Gets:* the ad text, your CV and your profile.
+- *Returns:* a fit score (0 to 100) with a short reason; every requirement of the ad marked matched, bridgeable or
+  missing, with evidence; dealbreakers, seniority, German level, work mode; the application channel (email, employer
+  form, platform or unknown); the apply email exactly as the ad words it, contact person, reference number, requested
+  documents, ad language and any stated salary.
+- *The model only classifies.* The program makes the decision: it re-checks which gaps are really bridgeable and
+  re-checks dealbreakers against your profile, applies your `apply_threshold` (75) and `maybe_threshold` (60) to get
+  apply, maybe or skip, and keeps an apply email only if it appears word for word in the ad.
+- *If a call fails,* the job becomes `evaluation_failed` and is tried again on a later run.
+- *Size:* many calls, so a cheap model with low effort (the default) is enough.
+
+**`write`: writes the cover letter and the email text.** Runs on approved jobs, up to `max_prepare_per_run`.
+- *Gets:* the job, your CV, your profile, your writing instructions and the requirements that matched or are
+  bridgeable.
+- *Returns:* the letter paragraphs, a short motivation line, the email body and a list of claims, each tied to
+  evidence.
+- *Checked by the program:* every claim against your CV and profile, every number, and your style rules (dashes,
+  banned phrases, exclamation marks, connectors, length). If anything fails, the model gets **one** combined rewrite
+  request listing every problem. Whatever it cannot fix is marked `needs_review`, which blocks automatic sending and
+  drafting. A PDF longer than one page is rewritten once, shorter.
+- *Also used* for free-text questions in web forms, under the same rules (see `form_fill`).
+- *Size:* few calls, so a stronger model is worth it. The default effort is medium.
+
+**`form_fill`: fills in what the rule-based filler could not.** Runs only in `autoapp assist` (you start it; never part
+of a normal run).
+- *Gets:* the form fields the program could not place, plus the facts it knows about you.
+- *Free-text questions* are answered under the same truth and style rules as the letters, within the field's
+  `maxlength`.
+- *Short text, dropdowns and radio buttons* get one structured call. The answer must be one of the field's own options
+  or one of your known facts; anything else is dropped, so it cannot invent a value.
+- *Never given to it:* file uploads, checkboxes and consent fields.
+- You review the form and press Submit yourself. Every generated answer and every field left empty is listed.
+- *Privacy:* it does use your details, because you started it.
+
+**`form_find`: finds the right link to an application form.** Runs while preparing applications, and in assist when
+`assist.navigate_mode` is `model`.
+- *Choosing a link:* a clear apply link needs no model call. When a job page has several plausible links, the model
+  picks one or none: at most four calls per attempt, no retries.
+- *Navigating (assist):* at each step it sees the page title, address, a short text excerpt and a numbered list of
+  clickable elements, and picks one to click or stops with a reason.
+- *Limits the program enforces:* only listed elements can be clicked, and the list never contains anything that
+  submits, signs in or creates an account. Nothing is ever typed. A login or robot check is handed to you. Restricted
+  sites stay blocked and the number of pages is capped. The form detector, not the model, decides that a form was
+  found. If the model cannot be used, the rule-based navigation takes over.
+- *Privacy:* it sees only public job hints and short page texts and addresses. Your profile, CV, letters and answers
+  are never sent, and tokens and email addresses are removed.
+- *Size:* cheap and rare; the default effort is low.
+
+**Shared by all four:** one budget (`max_llm_calls_per_run` and `max_cost_per_run_usd`, see section 12), usage counted
+per task on the statistics page, and `llm.tasks.<task>.instructions` for your own directions (section 10). The quick
+test exercises `evaluate`, `write` and `form_find`; `form_fill` is not covered because it only runs in assist.
+
 ### Run mode, safeguards and limits
 
 ```yaml
