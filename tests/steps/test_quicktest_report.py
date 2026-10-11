@@ -138,5 +138,12 @@ def test_warn_links_do_not_set_the_failure_flag(tmp_path):
     assert not report.failed and [c.status for c in report.form_links] == [WARN]
 
 
+def test_an_ad_only_on_the_arbeitsagentur_warns_instead_of_failing(tmp_path):
+    links = _links(("arbeitsagentur", "https://www.arbeitsagentur.de/jobsuche/jobdetail/10000-1", "restricted",
+                    "only on the Arbeitsagentur: posted directly on the Arbeitsagentur", "job page"))
+    report = build_report(config(tmp_path), healthy(), ENV, links)
+    assert not report.failed and [c.status for c in report.form_links] == [WARN]
+
+
 def test_no_form_jobs_means_no_form_links_section(tmp_path):
     assert "form links:" not in "\n".join(build_report(config(tmp_path), healthy(), ENV).lines())

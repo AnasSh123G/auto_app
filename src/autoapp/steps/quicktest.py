@@ -14,7 +14,7 @@ from typing import Any
 from autoapp.assist.filler import is_restricted
 from autoapp.config.models import Config
 from autoapp.employers.scope import is_directory
-from autoapp.formfinder.employer_link import _raw_facts
+from autoapp.formfinder.employer_link import ONLY_ON_ARBEITSAGENTUR, _raw_facts
 
 OK, WARN, FAILED, SKIPPED = "OK", "WARN", "FAILED", "SKIPPED"
 _FAILURE_WORDS = ("error", "invalid", "rejected", "401", "403", "unauthorized", "not reachable")
@@ -231,8 +231,8 @@ def _form_links(report: QuickTestReport, config: Config, links: list[FormLink]) 
     restricted = config.assist.restricted_domains
     for link in links:
         url = link.url or ""
-        if url and (is_directory(url) or is_restricted(url, restricted)):
-            status = FAILED  # a job board is never the employer's application page
+        if url and (is_directory(url) or is_restricted(url, restricted)) and ONLY_ON_ARBEITSAGENTUR not in link.note:
+            status = FAILED  # a job board is never the employer's application page (unless the ad exists only there)
         else:
             status = OK if link.status == "found" else WARN
         report.form_links.append(Check(link.text(), status))
