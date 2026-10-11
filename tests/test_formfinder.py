@@ -522,3 +522,19 @@ def test_an_apply_page_built_by_javascript_is_handed_to_the_browser(ctx):
     ctx._http = Http()
     out = find(ctx, "https://www.employer.example/software-engineer-m-w-d-40624.htm", title="Software Engineer")
     assert out.status == "needs_browser" and out.url == "https://portal.example/stellenangebot/bewerben/3531"
+
+
+def test_an_arbeitsagentur_entry_gives_way_to_the_matched_employer_posting(ctx):
+    jid = approved_job(ctx)
+    ba = "https://www.arbeitsagentur.de/jobsuche/jobdetail/10001-1-S"
+    ctx.repo.update_job(jid, job_url=ba, application_url=None)
+    row = ctx.repo.current_evaluation(jid)
+    payload = json.loads(row["payload"])
+    payload["result"]["application_url"] = None
+    ctx.conn.execute("UPDATE evaluations SET payload=? WHERE id=?", (json.dumps(payload), row["id"]))
+    ctx.conn.commit()
+    assert entry_url(ctx, ctx.repo.get_job(jid)) == ba  # nothing matched yet: the page is all there is
+    posting = "https://karriere.acme.example/job-3102.html"
+    ctx.conn.execute("INSERT INTO employer_seeds (job_id, outcome, posting_url, checked_at) VALUES (?, 'matched', ?, ?)",
+                     (jid, posting, "2026-10-09T12:00:00+00:00"))
+    assert entry_url(ctx, ctx.repo.get_job(jid)) == posting

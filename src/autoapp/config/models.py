@@ -49,7 +49,8 @@ DEFAULT_FREE_MAIL_DOMAINS: list[str] = [
     "posteo.de",
 ]
 
-DEFAULT_RESTRICTED_DOMAINS: list[str] = ["linkedin.com", "indeed.com", "indeed.de", "stepstone.de"]
+# The Arbeitsagentur page is a job board too: the application goes to the employer's own ad, never to this page.
+DEFAULT_RESTRICTED_DOMAINS: list[str] = ["linkedin.com", "indeed.com", "indeed.de", "stepstone.de", "arbeitsagentur.de"]
 
 
 class _Model(BaseModel):
@@ -572,6 +573,13 @@ def load_config(ws: Workspace) -> Config:
             f"email.auto_send is replaced by run.default_mode; using {config.run.default_mode}"
             + (" (run.default_mode is set and wins)" if has_new else "")
             + ". Run `autoapp setup --section email` or edit config.yaml to remove the old key."
+        )
+    if "arbeitsagentur.de" not in (d.strip().lower() for d in config.assist.restricted_domains):
+        # An explicit list written before the Arbeitsagentur counted as a job board: add it (in memory).
+        config.assist.restricted_domains.append("arbeitsagentur.de")
+        config._notices.append(
+            "assist.restricted_domains now includes arbeitsagentur.de (its pages are no application page); "
+            "add it to the list in config.yaml to silence this notice."
         )
     llm = raw.get("llm") if isinstance(raw, dict) else None
     if isinstance(llm, dict):

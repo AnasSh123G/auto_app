@@ -208,7 +208,7 @@ tracking:
 # Assisted form filling (on employer web sites).
 assist:
   # Domains that never get auto-fill (require manual submission).
-  # restricted_domains: [linkedin.com, indeed.com, indeed.de, stepstone.de]
+  # restricted_domains: [linkedin.com, indeed.com, indeed.de, stepstone.de, arbeitsagentur.de]
   llm_answers: true  # Use LLM to fill unrecognized form fields
   # model: the form_fill model reads the form's fields and fills them from your CV, profile and saved answers
   #        (form_answers.md); fixed answers (how found, referral, prior employment) and uploads stay rule-based.

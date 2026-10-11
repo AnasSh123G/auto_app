@@ -313,3 +313,48 @@ def test_search_command_orders_the_alert_steps_by_mode(tmp_path, monkeypatch, mo
     monkeypatch.setattr("autoapp.steps.fetch.fetch_details", step("fetch", FetchSummary()))
     cli(ws, "search")
     assert order == expected
+
+
+@pytest.mark.parametrize("mode", ["search_first", "platform"])
+@pytest.mark.parametrize("careers, arbeitsagentur", [(False, False), (False, True), (True, False), (True, True)])
+def test_search_and_run_run_the_same_employer_passes(tmp_path, monkeypatch, mode, careers, arbeitsagentur):
+    from autoapp.employers.service import AlertResolutionSummary, DiscoverySummary, OwnAdsSummary
+    from autoapp.steps.fetch import FetchSummary
+    from autoapp.steps.pipeline import run_pipeline
+    from autoapp.steps.search import SearchSummary
+
+    monkeypatch.setenv("AUTOAPP_NON_INTERACTIVE", "1")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-not-real")
+    config = (CONFIG + SETUP + f"sources:\n  arbeitsagentur:\n    enabled: {str(arbeitsagentur).lower()}\n"
+              f"  employer_careers:\n    enabled: {str(careers).lower()}\n")
+    ws = make_workspace(tmp_path, config=config, alert_mode=mode)
+
+    def passes(*modules):
+        seen: list[str] = []
+
+        def step(name, result):
+            def fn(*a, **k):
+                seen.append(name)
+                return result
+            return fn
+
+        steps = {"find_alert_ads": AlertResolutionSummary(mode=mode), "run_discovery": DiscoverySummary(),
+                 "find_own_ads": OwnAdsSummary(missed=["x"]), "seed_arbeitsagentur_misses": None}
+        for module in modules:
+            for name, result in steps.items():
+                monkeypatch.setattr(f"{module}.{name}", step(name, result))
+        monkeypatch.setattr("autoapp.steps.fetch.fetch_details", lambda ctx, **kw: FetchSummary())
+        monkeypatch.setattr("autoapp.steps.pipeline.fetch_details", lambda ctx, **kw: FetchSummary())
+        monkeypatch.setattr("autoapp.steps.search.run_search", lambda ctx, *a, **kw: SearchSummary())
+        monkeypatch.setattr("autoapp.steps.pipeline.run_search", lambda ctx, *a, **kw: SearchSummary())
+        return seen
+
+    seen_search = passes("autoapp.employers.service")
+    cli(ws, "search")
+    search_steps = list(seen_search)
+    seen_run = passes("autoapp.steps.pipeline")
+    ctx = RunContext.open(ws)
+    run_pipeline(ctx)
+    ctx.close()
+    assert seen_run == search_steps
+    assert ("find_own_ads" in search_steps) == (careers or arbeitsagentur)

@@ -174,6 +174,26 @@ class Repo:
             )
         return cur.rowcount > 0
 
+    def merge_source_raw(self, source: str, source_job_id: str, extra: dict[str, Any]) -> bool:
+        """Add ``extra``'s keys to the stored ``raw`` of an existing source posting (a later call knew more).
+        Returns True if the row changed."""
+        row = self.conn.execute("SELECT id, raw FROM job_sources WHERE source = ? AND source_job_id = ?",
+                                (source, source_job_id)).fetchone()
+        if row is None or not extra:
+            return False
+        try:
+            current = json.loads(row["raw"]) if row["raw"] else {}
+        except json.JSONDecodeError:
+            current = {}
+        if not isinstance(current, dict):
+            return False
+        merged = {**current, **extra}
+        if merged == current:
+            return False
+        with self.conn:
+            self.conn.execute("UPDATE job_sources SET raw = ? WHERE id = ?", (_json(merged), row["id"]))
+        return True
+
     def sources(self, job_id: str) -> list[sqlite3.Row]:
         return self.conn.execute(
             "SELECT * FROM job_sources WHERE job_id = ? ORDER BY id", (job_id,)

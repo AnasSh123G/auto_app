@@ -20,7 +20,9 @@ from autoapp.employers.service import (
     alerts_search_first,
     find_alert_ads,
     find_own_ads,
+    own_ads_wanted,
     run_discovery,
+    seed_arbeitsagentur_misses,
 )
 from autoapp.llm.cost import CostSummary, format_cost
 from autoapp.steps.context import RunContext
@@ -39,6 +41,7 @@ class RunSummary:
     alerts: AlertResolutionSummary | None = None
     employers: DiscoverySummary | None = None
     own_ads: OwnAdsSummary | None = None
+    late_employers: DiscoverySummary | None = None  # careers pages for the Arbeitsagentur jobs the own-ad search missed
     fetch: FetchSummary | None = None
     evaluate: EvaluateSummary | None = None
     prepare: PrepareSummary | None = None
@@ -85,6 +88,8 @@ class RunSummary:
             out += self.employers.lines()
         if self.own_ads:
             out += self.own_ads.lines()
+        if self.late_employers:
+            out += self.late_employers.lines()
         if self.fetch:
             out.append(f"details: {self.fetch.fetched} fetched, {self.fetch.unavailable} unavailable"
                        + (f", blocked: {', '.join(self.fetch.blocked_sites)}" if self.fetch.blocked_sites else ""))
@@ -182,11 +187,18 @@ def run_pipeline(ctx: RunContext, profile_name: str | None = None, **overrides: 
     elif s.evaluate and s.evaluate.stopped:
         s.warnings.append(s.evaluate.stopped)
 
-    if ctx.config.sources.employer_careers.enabled or ctx.config.sources.arbeitsagentur.enabled:
+    if own_ads_wanted(ctx.config):
         # The jobs worth applying to are known now, with their ads' texts: search "<company> <job title>" for those
         # still on a job board or the Arbeitsagentur, before their folders and forms are prepared.
         s.own_ads = _guard(s, "own ads", find_own_ads, ctx, ctx=ctx, fetch=overrides.get("employer_fetch"),
                            api=overrides.get("employer_api"))
+        # What that search missed on the Arbeitsagentur goes to the employer's careers pages, like the alert jobs.
+        if s.own_ads and s.own_ads.missed:
+            s.late_employers = _guard(s, "employer sites (Arbeitsagentur)", seed_arbeitsagentur_misses, ctx, s.own_ads,
+                                      ctx=ctx, fetch=overrides.get("employer_fetch"), api=overrides.get("employer_api"))
+        if s.late_employers:
+            s.errors += [f"employer sites: {e}" for e in s.late_employers.errors]
+            s.warnings += s.late_employers.warnings
 
     prepare_kwargs = {"renderer_factory": overrides["renderer_factory"]} if "renderer_factory" in overrides else {}
     s.prepare = _guard(s, "prepare", prepare_jobs, ctx, ctx=ctx, **prepare_kwargs)

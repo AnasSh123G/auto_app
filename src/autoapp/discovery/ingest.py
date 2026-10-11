@@ -156,6 +156,9 @@ def ingest(repo: Repo, raw: RawJob, *, home_city: str | None = None, now: dateti
         if employer_posting and city and norm_text(city) != norm_text(existing["location"]):
             # The same employer requisition listed in another place: one vacancy, one more location.
             repo.add_location(existing["id"], city, raw.source_job_id, raw.url)
+        # A detail call re-ingests the posting it just enriched: its contact fields and detail belong in the row.
+        later = {k: v for k, v in _source_raw(raw).items() if k in ("contact_fields", "detail")}
+        repo.merge_source_raw(raw.source, raw.source_job_id, later)
         _fill_gaps(repo, existing["id"], raw)
         return IngestOutcome(existing["id"], False, "source")
 

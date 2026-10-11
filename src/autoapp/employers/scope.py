@@ -25,7 +25,7 @@ DIRECTORY_HOSTS = frozenset({
     "hrb.de", "unternehmen24.info", "wlw.de", "europages.de", "yellowpages.com", "dnb.com", "zoominfo.com",
     "crunchbase.com", "jobted.de", "talent.com", "jobrapido.com", "whatjobs.com", "ziprecruiter.com", "welcometothejungle.com",
     "tracxn.com", "owler.com", "pitchbook.com", "rocketreach.co", "cbinsights.com", "wellfound.com", "companyhouse.de",
-    "handelsregister.de", "unternehmensregister.de", "workwise.io", "bundesanzeiger.de", "firmenabc.at", "dnb.de", "lusha.com",
+    "handelsregister.de", "unternehmensregister.de", "workwise.io", "jobvector.de", "bundesanzeiger.de", "firmenabc.at", "dnb.de", "lusha.com",
 })
 
 
@@ -61,6 +61,19 @@ def host_matches(host: str, domains: frozenset[str] | set[str]) -> bool:
 
 def is_directory(url: str) -> bool:
     return host_matches(url, DIRECTORY_HOSTS)
+
+
+def is_partner_board(partner: str | None, company: str | None) -> bool:
+    """An Arbeitsagentur ad's ``allianzpartnerName`` (``jobvector.de``) names the site that carries the ad. It is a
+    board unless it is the employer itself; the Arbeitsagentur as the partner means a direct posting there."""
+    name = (partner or "").strip().lower()
+    if not name:
+        return False
+    family = site_family(name)
+    if family == "arbeitsagentur":
+        return False
+    squashed = "".join(ch for ch in (company or "").lower() if ch.isalnum())
+    return not (len(family) >= 3 and family in squashed)
 
 
 def is_shared_host(url: str) -> bool:

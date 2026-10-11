@@ -137,7 +137,9 @@ def search(
         alerts_search_first,
         find_alert_ads,
         find_own_ads,
+        own_ads_wanted,
         run_discovery,
+        seed_arbeitsagentur_misses,
     )
     from autoapp.steps.fetch import fetch_details
     from autoapp.steps.pipeline import RunSummary
@@ -153,8 +155,9 @@ def search(
             if s.alerts is not None:
                 add_careers_matches(ctx, s.alerts)
         s.fetch = fetch_details(ctx)
-        if ctx.config.sources.employer_careers.enabled:
+        if own_ads_wanted(ctx.config):
             s.own_ads = find_own_ads(ctx)
+            s.late_employers = seed_arbeitsagentur_misses(ctx, s.own_ads)
         _echo_lines(s.lines(), ctx)
         for error in (s.employers.errors if s.employers else []):
             _echo_error(error, ctx)

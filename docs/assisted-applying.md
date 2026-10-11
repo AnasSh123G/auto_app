@@ -132,7 +132,7 @@ Once logged in on a site, future `assist` runs will have access to your account 
 - **Submit buttons:** you must click Submit manually
 - **Consent/privacy checkboxes:** these are never touched, even if unchecked
 - **CAPTCHAs:** autoapp cannot solve these; you fill them manually
-- **Restricted domains:** LinkedIn, Indeed, StepStone and Indeed.de forms are blocked (require manual form or Easy-Apply)
+- **Restricted domains:** LinkedIn, Indeed, StepStone, Arbeitsagentur and Indeed.de forms are blocked (require manual form or Easy-Apply)
 
 ## Restricted domains
 
@@ -142,6 +142,7 @@ These sites are not supported for automatic form filling:
 - `indeed.com` (Indeed Apply form)
 - `indeed.de` (Indeed Germany)
 - `stepstone.de` (StepStone direct apply)
+- `arbeitsagentur.de` (the Arbeitsagentur job page: the application goes to the employer's own ad)
 
 For these sites, use the `apply.html` page to copy your answers and fill the form manually.
 Assist opens **only this local helper**, not the restricted website. Restricted subdomains,

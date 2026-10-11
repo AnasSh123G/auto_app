@@ -334,3 +334,14 @@ def test_alert_mode_typo_lists_the_allowed_values(tmp_path):
     with pytest.raises(ConfigError) as err:
         load_config(ws_with(tmp_path, MIN_CONFIG + "sources:\n  alerts: {mode: serch_first}\n"))
     assert "search_first" in str(err.value) and "platform" in str(err.value)
+
+
+def test_an_explicit_restricted_list_gets_the_arbeitsagentur_added(tmp_path: Path) -> None:
+    old = MIN_CONFIG + "assist:\n  restricted_domains: [linkedin.com, stepstone.de]\n"
+    cfg = load_config(ws_with(tmp_path, old))
+    assert cfg.assist.restricted_domains == ["linkedin.com", "stepstone.de", "arbeitsagentur.de"]
+    assert any("arbeitsagentur.de" in n for n in cfg.notices)
+    new = load_config(ws_with(tmp_path, MIN_CONFIG))
+    assert "arbeitsagentur.de" in new.assist.restricted_domains and not new.notices
+    listed = MIN_CONFIG + "assist:\n  restricted_domains: [Arbeitsagentur.de]\n"
+    assert load_config(ws_with(tmp_path, listed)).assist.restricted_domains == ["Arbeitsagentur.de"]

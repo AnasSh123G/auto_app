@@ -79,3 +79,22 @@ def test_stepstone_card_never_keeps_tracking_link(tmp_path):
     assert not any("click.stepstone.de" in (r["url"] or "") + (r["raw"] or "") for r in rows)
     recommended = [card_to_raw(c) for c in cards if c.section == "recommended"]
     assert len(recommended) == 4 and all(r.source == "stepstone-alert-recommended" for r in recommended)
+
+
+def test_the_detail_call_adds_its_contact_fields_to_the_source_row(tmp_path):
+    import json
+
+    repo = _repo(tmp_path)
+    raw = RawJob(source="arbeitsagentur", source_job_id="10001-1", title="Dev", company="A GmbH", location="Bonn",
+                 raw={"referenznummer": "10001-1"})
+    job_id = ingest(repo, raw).job_id
+    detailed = raw.model_copy(update={"contact_fields": "kontakt.email: jobs@a-gmbh.example",
+                                      "raw": {**raw.raw, "detail": {"allianzpartnerName": "arbeitsagentur.de"}}})
+    again = ingest(repo, detailed)
+    assert again.job_id == job_id and again.matched_by == "source"
+    (row,) = repo.sources(job_id)
+    stored = json.loads(row["raw"])
+    assert stored["contact_fields"] == "kontakt.email: jobs@a-gmbh.example"
+    assert stored["detail"] == {"allianzpartnerName": "arbeitsagentur.de"} and stored["referenznummer"] == "10001-1"
+    ingest(repo, raw)  # a search that sees the posting again does not wipe what the detail added
+    assert json.loads(repo.sources(job_id)[0]["raw"])["contact_fields"].startswith("kontakt.email")

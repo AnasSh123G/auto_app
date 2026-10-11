@@ -60,6 +60,13 @@ sources:
     enabled: true
 ```
 
+An Arbeitsagentur job is applied to at the **employer**, never on arbeitsagentur.de: `arbeitsagentur.de` is
+in `assist.restricted_domains`, so its page is not followed or saved as the application link. Jobs whose
+ad is only a link to a partner board such as jobvector.de count as board jobs too: the employer's own ad is
+searched by company and title (like alert jobs). What that search misses goes on to the employer's careers
+pages, after evaluation. A contact email in the Arbeitsagentur detail is read at evaluation, so the job can
+be an email application.
+
 ## Adzuna job search API
 
 1. Sign up for a free developer account at [developer.adzuna.com](https://developer.adzuna.com/)

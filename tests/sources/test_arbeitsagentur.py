@@ -189,3 +189,13 @@ def test_http_error_propagates() -> None:
         assert exc.response.status_code == 503
     else:  # pragma: no cover
         raise AssertionError("expected HTTPStatusError")
+
+
+def test_the_detail_keeps_the_partner_board_and_the_contact_fields_for_the_job_row() -> None:
+    requests: list[httpx.Request] = []
+    source = make_source(requests)
+    raw = next(j for j in source.search(SearchProfile(name="p", keywords=["Data Scientist"]))
+               if j.source_job_id.startswith("14225"))
+    assert raw.application_url.startswith("https://www.jobvector.de/") and "allianzpartnerName" not in raw.raw
+    detailed = source.fetch_detail(raw)
+    assert detailed.raw["detail"]["allianzpartnerName"] == "jobvector.de"

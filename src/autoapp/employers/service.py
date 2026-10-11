@@ -31,7 +31,7 @@ from autoapp.employers.reconcile import ENRICHABLE, Reconciler, wanted_priority
 from autoapp.employers.repo import EmployerRepo, Listing
 from autoapp.employers.resolver import Group, IdentityResolver, Seed, group_seeds
 from autoapp.employers.scanner import EmployerScanner, ScanReport
-from autoapp.employers.scope import is_directory
+from autoapp.employers.scope import is_directory, is_partner_board
 from autoapp.employers.verify import is_unnamed_client
 from autoapp.sources.alerts.models import AlertSource
 from autoapp.steps.context import RunContext
@@ -46,6 +46,11 @@ SEARCH_FIRST_ALERT_SOURCES = tuple(get_args(AlertSource))
 def alerts_search_first(config) -> bool:  # noqa: ANN001
     """True when alert jobs get their ad by searching for the employer's own posting (``sources.alerts.mode``)."""
     return config.sources.alerts.mode == "search_first"
+
+
+def own_ads_wanted(config) -> bool:  # noqa: ANN001
+    """True when jobs on a platform or the Arbeitsagentur get their own ad searched (``run`` and ``search`` alike)."""
+    return config.sources.employer_careers.enabled or config.sources.arbeitsagentur.enabled
 
 
 def alert_sources(config) -> tuple[str, ...]:  # noqa: ANN001
@@ -193,11 +198,12 @@ def make_fetch(ctx: RunContext) -> tuple[Callable, Callable[[], None]]:
 
 def run_discovery(ctx: RunContext, *, job_ids: list[str] | None = None, profile: str | None = None, again: bool = False,
                   refresh_site: bool = False, website: str | None = None, force: bool = False,
-                  import_related: bool | None = None,
+                  import_related: bool | None = None, sources: tuple[str, ...] | None = None,
                   fetch: Callable | None = None, api: ParallelSearch | None = None, today: date | None = None,
                   now: Callable[[], datetime] | None = None) -> DiscoverySummary:
     """``import_related`` says whether other relevant openings of an employer are added as jobs; by default they
-    are, except that search-first alert handling alone (``employer_careers`` off) only looks for the alert's own job."""
+    are, except that search-first alert handling alone (``employer_careers`` off) only looks for the alert's own job.
+    ``sources`` replaces the alert sources the jobs are taken from (the Arbeitsagentur misses of the own-ad search)."""
     cfg = ctx.config.sources.employer_careers
     search_first = alerts_search_first(ctx.config)
     summary = DiscoverySummary(enabled=cfg.enabled or force or search_first)
@@ -206,7 +212,8 @@ def run_discovery(ctx: RunContext, *, job_ids: list[str] | None = None, profile:
     if import_related is None:
         import_related = cfg.enabled or force or not search_first
     profiles = [p for p in ctx.config.search_profiles if profile in (None, p.name)]
-    rows = eligible_seed_rows(ctx.conn, job_ids=job_ids, profiles=profiles, again=again, sources=alert_sources(ctx.config))
+    rows = eligible_seed_rows(ctx.conn, job_ids=job_ids, profiles=profiles, again=again,
+                              sources=sources or alert_sources(ctx.config))
     if search_first:
         rows = [r for r in rows if not _company_unknown(ctx, r)]  # nothing to look up without an employer name
     if not rows:
@@ -344,6 +351,7 @@ def _process_group(ctx, group: Group, report: EmployerReport, summary: Discovery
 class OwnAdsSummary:
     searched: int = 0
     found: list[str] = field(default_factory=list)
+    missed: list[str] = field(default_factory=list)  # searched for, and no usable ad: not deferred by a cap or a key
     search_requests: int = 0
 
     def lines(self) -> list[str]:
@@ -351,6 +359,25 @@ class OwnAdsSummary:
             return []
         return [f"own ads: {len(self.found)} of {self.searched} LinkedIn/StepStone/Indeed/Arbeitsagentur jobs found on "
                 f"the employer's site by searching company and title ({self.search_requests} search requests)"]
+
+
+def seed_arbeitsagentur_misses(ctx: RunContext, own_ads: OwnAdsSummary | None, *, fetch: Callable | None = None,
+                               api: ParallelSearch | None = None, now: Callable[[], datetime] | None = None,
+                               ) -> DiscoverySummary | None:
+    """Arbeitsagentur jobs whose own-ad search found nothing go to the employer's careers pages, like alert jobs.
+
+    Runs after evaluation (the own-ad search needs the ad's text), so only jobs worth applying to are looked up;
+    the Arbeitsagentur rule applies whether or not ``employer_careers`` is switched on, but related openings are
+    only imported when it is.
+    """
+    if own_ads is None:
+        return None
+    missed = [j for j in own_ads.missed if (job := ctx.repo.get_job(j)) is not None
+              and any(s["source"] == "arbeitsagentur" for s in ctx.repo.sources(job["id"]))]
+    if not missed:
+        return None
+    return run_discovery(ctx, job_ids=missed, sources=("arbeitsagentur",), force=True,
+                         import_related=ctx.config.sources.employer_careers.enabled, fetch=fetch, api=api, now=now)
 
 
 NO_EMPLOYER_NAME = "alert does not name the employer"
@@ -527,9 +554,13 @@ def find_own_ads(ctx: RunContext, *, job_ids: list[str] | None = None, again: bo
     api = api or ParallelSearch(os.environ.get("PARALLEL_API_KEY", ""))
     gateway = SearchGateway(ctx.conn, cfg, api)
     run_budget = RunBudget(pages=cfg.max_pages_per_run, openings=cfg.max_openings_per_run)
+    def heard(job_id: str, kind: str, _reason: str) -> None:
+        if kind == "miss":
+            summary.missed.append(job_id)
+
     try:
         summary.found = _direct_postings(ctx, rows, EmployerRepo(ctx.conn), gateway, fetch, run_budget, _emitter(ctx),
-                                         summary, again=again, now=now)
+                                         summary, again=again, now=now, on_result=heard)
     finally:
         close_fetch()
         if own_api:
@@ -561,8 +592,9 @@ def _direct_postings(ctx, rows, emp: EmployerRepo, gateway: SearchGateway, fetch
         current = job["application_url"]
         if app is not None and app["form_status"] == "found":
             continue
-        if current and not is_restricted(current, restricted) and not is_directory(current) and current != job["job_url"]:
-            continue  # the alert already gave an address that is not a job board
+        if (current and not is_restricted(current, restricted) and not is_directory(current) and current != job["job_url"]
+                and not _on_partner_board(ctx, job)):
+            continue  # the source already gave an address that is not a job board
         miss = None if again else memo.recent_miss(job["id"])
         if miss:
             emit("posting_searched", f"own ad not searched again before {cfg.failure_ttl_hours} hours pass "
@@ -591,6 +623,21 @@ def _direct_postings(ctx, rows, emp: EmployerRepo, gateway: SearchGateway, fetch
         found.append(job["id"])
         report(job["id"], "found", result.reason)
     return found
+
+
+def _on_partner_board(ctx, job) -> bool:  # noqa: ANN001
+    """An Arbeitsagentur job whose ``externeURL`` leads to a partner board (``allianzpartnerName``), not the employer."""
+    for source in ctx.repo.sources(job["id"]):
+        if source["source"] != "arbeitsagentur":
+            continue
+        try:
+            raw = json.loads(source["raw"] or "{}")
+        except json.JSONDecodeError:
+            continue
+        detail = raw.get("detail") if isinstance(raw.get("detail"), dict) else {}
+        if is_partner_board(detail.get("allianzpartnerName") or raw.get("allianzpartnerName"), job["company"]):
+            return True
+    return False
 
 
 def _attach_direct(ctx, emp: EmployerRepo, job, app, hit: PostingHit, restricted, emit) -> None:  # noqa: ANN001
