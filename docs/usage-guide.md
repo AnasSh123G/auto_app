@@ -597,13 +597,16 @@ instead of simulating a whole run. In a throwaway workspace under `workspace/tes
 - asks each enabled source (Arbeitsagentur, Adzuna, Workwise, Arbeitnow) for a couple of jobs, keeping at most 2 from each (Arbeitnow, which is
   read page by page, only 3 pages);
 - looks up at most 2 alert employers online: the own-ad search, then the employer's website and careers page;
-- evaluates at most 4 jobs and prepares at most 2: one email and one online-form application, **even if they score
-  below your threshold**, so that letter writing and the read-only form search are exercised (nothing is filled in,
-  uploaded or submitted);
+- evaluates at most 6 jobs and prepares at most 4: one email application and up to three online-form applications,
+  taken from different sources (one Arbeitsagentur job, one alert job, one other; a source with no candidate gives
+  its slot to the next best score), **even if they score below your threshold**, so that letter writing and the
+  read-only form search are exercised (nothing is filled in, uploaded or submitted);
 - sends at most one `TEST_RUN:` email, to your own address only. The fit score does not stop it, every other
   send rule does.
 
-It ends with a checklist, one line per part, each `OK`, `FAILED` or `SKIPPED` with the reason:
+It ends with a checklist, one line per part, each `OK`, `WARN`, `FAILED` or `SKIPPED` with the reason. A "form links" section adds one line per
+prepared form job: job id, source, the final link, the form status with its note, and in brackets how the link was
+found (`direct search`, `careers page`, `externeURL` or `job page`):
 
 ```
 quick test checklist:
@@ -620,7 +623,11 @@ quick test checklist:
   OK       letter writing: 2 applications prepared
   OK       form finding: 1 found, 1 partial
   SKIPPED  test email: no email application was prepared
-quick test: 10 OK, 1 FAILED, 2 SKIPPED
+form links:
+  OK       a1b2c3  arbeitsagentur → https://careers.ejot.com/job/123#apply  found (employer page, 2 hops) [careers page]
+  FAILED   d4e5f6  linkedin-alert → https://www.linkedin.com/jobs/view/1  restricted (own ad not found) [job page]
+  WARN     0789ab  arbeitsagentur → no link  no_employer_link (employer ad not found yet) [job page]
+quick test: 11 OK, 1 WARN, 2 FAILED, 2 SKIPPED
 ```
 
 (An example; yours depends on your sources and on what the newest alert emails contain.)
@@ -630,6 +637,8 @@ or no email application among the jobs it prepared, so no test email); run the q
 **test run** for those parts;
 After the checklist it prints the read-only form-link audit of your real workspace (`autoapp forms --audit`), as a
 baseline for the form finding.
+`WARN` marks a form link that was not found (for example `no_employer_link`, `partial` or `needs_browser`) and does not
+change the exit code; a form link that ends on a job board (LinkedIn, Arbeitsagentur, ...) is `FAILED`.
 `FAILED` makes the command exit with code 1. Your real jobs, statuses, folders and CSV are not touched. The searches
 and AI calls are real, a handful in total, and are added to your real counters and limits. `--profile NAME` uses one
 search profile only. It cannot be set as `run.default_mode`. `uv run autoapp test` without `--quick` or `--full`

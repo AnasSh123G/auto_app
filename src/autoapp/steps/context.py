@@ -30,11 +30,16 @@ class SampleLimits:
     alert_emails: int = 2  # the newest alert emails read
     jobs_per_source: int = 2  # jobs kept from each search source
     employer_lookups: int = 2  # alert jobs / employers looked up online
-    evaluations: int = 4
-    preparations: int = 2
+    evaluations: int = 6  # enough for the form slots below to be filled from different sources
+    email_applications: int = 1
+    form_applications: int = 3  # online-form applications prepared, from different sources
     test_emails: int = 1
     arbeitnow_pages: int = 3  # Arbeitnow is read page by page and matched locally: a few pages are enough to try it
     ignore_threshold: bool = True  # prepare (and test-mail) the best evaluated jobs whatever their score
+
+    @property
+    def preparations(self) -> int:
+        return self.email_applications + self.form_applications
 
     def apply_to(self, config: Config) -> None:
         """Lower the per-run limits of ``config`` (the in-memory copy of this run) to this sample."""

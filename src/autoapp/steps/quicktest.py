@@ -11,10 +11,29 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from autoapp.assist.filler import is_restricted
 from autoapp.config.models import Config
+from autoapp.employers.scope import is_directory
+from autoapp.formfinder.employer_link import _raw_facts
 
-OK, FAILED, SKIPPED = "OK", "FAILED", "SKIPPED"
+OK, WARN, FAILED, SKIPPED = "OK", "WARN", "FAILED", "SKIPPED"
 _FAILURE_WORDS = ("error", "invalid", "rejected", "401", "403", "unauthorized", "not reachable")
+
+
+@dataclass(frozen=True)
+class FormLink:
+    """One prepared form job of the quick test: where its application link ended up and how it was found."""
+
+    job_id: str
+    source: str
+    url: str | None
+    status: str
+    note: str
+    path: str  # direct search | careers page | externeURL | job page
+
+    def text(self) -> str:
+        return (f"{self.job_id[:6]}  {self.source} \u2192 {self.url or 'no link'}  {self.status}"
+                + (f" ({self.note})" if self.note else "") + f" [{self.path}]")
 
 
 @dataclass(frozen=True)
@@ -30,18 +49,22 @@ class Check:
 @dataclass
 class QuickTestReport:
     checks: list[Check] = field(default_factory=list)
+    form_links: list[Check] = field(default_factory=list)  # one per prepared form job, printed as its own section
 
     def add(self, name: str, status: str, reason: str = "") -> None:
         self.checks.append(Check(name, status, reason))
 
     @property
     def failed(self) -> bool:
-        return any(c.status == FAILED for c in self.checks)
+        return any(c.status == FAILED for c in (*self.checks, *self.form_links))
 
     def lines(self) -> list[str]:
-        counts = {s: sum(1 for c in self.checks if c.status == s) for s in (OK, FAILED, SKIPPED)}
-        return ["quick test checklist:", *(c.line() for c in self.checks),
-                f"quick test: {counts[OK]} OK, {counts[FAILED]} FAILED, {counts[SKIPPED]} SKIPPED"]
+        every = (*self.checks, *self.form_links)
+        counts = {s: sum(1 for c in every if c.status == s) for s in (OK, WARN, FAILED, SKIPPED)}
+        section = ["form links:", *(f"  {c.status:<8} {c.name}" for c in self.form_links)] if self.form_links else []
+        return ["quick test checklist:", *(c.line() for c in self.checks), *section,
+                f"quick test: {counts[OK]} OK, {counts[WARN]} WARN, {counts[FAILED]} FAILED, "
+                f"{counts[SKIPPED]} SKIPPED"]
 
 
 def _first(items: Any) -> str:
@@ -177,7 +200,46 @@ def _test_email(report: QuickTestReport, summary: Any) -> None:
         report.add("test email", SKIPPED, "no email application was prepared")
 
 
-def build_report(config: Config, summary: Any, env: Mapping[str, str] | None = None) -> QuickTestReport:
+def _resolution_path(ctx: Any, job: Any, sources: list[str]) -> str:
+    """How the application link was reached: the direct company-and-title search, the careers page, the
+    Arbeitsagentur's externeURL, or the job page itself."""
+    seed = ctx.conn.execute("SELECT reason FROM employer_seeds WHERE job_id = ? AND outcome = 'matched'",
+                            (job["id"],)).fetchone()
+    if seed is not None:
+        return "direct search" if (seed["reason"] or "").startswith("found by searching company and title") \
+            else "careers page"
+    if "arbeitsagentur" in sources and _raw_facts(ctx, job)[1]:
+        return "externeURL"
+    return "job page"
+
+
+def form_links(ctx: Any, job_ids: list[str]) -> list[FormLink]:
+    """One entry per prepared online-form job (an email application has no form link)."""
+    links: list[FormLink] = []
+    for job_id in job_ids:
+        app = ctx.repo.get_application(job_id)
+        job = ctx.repo.get_job(job_id)
+        if job is None or app is None or app["channel"] == "email":
+            continue
+        sources = list(dict.fromkeys(s["source"] for s in ctx.repo.sources(job_id))) or ["unknown"]
+        links.append(FormLink(job_id, ", ".join(sources), job["application_url"], app["form_status"] or "unchecked",
+                              " ".join((app["form_note"] or "").split())[:120], _resolution_path(ctx, job, sources)))
+    return links
+
+
+def _form_links(report: QuickTestReport, config: Config, links: list[FormLink]) -> None:
+    restricted = config.assist.restricted_domains
+    for link in links:
+        url = link.url or ""
+        if url and (is_directory(url) or is_restricted(url, restricted)):
+            status = FAILED  # a job board is never the employer's application page
+        else:
+            status = OK if link.status == "found" else WARN
+        report.form_links.append(Check(link.text(), status))
+
+
+def build_report(config: Config, summary: Any, env: Mapping[str, str] | None = None,
+                 links: list[FormLink] | None = None) -> QuickTestReport:
     """The checklist for one quick test, from the config it ran with and the run summary it produced."""
     env = os.environ if env is None else env
     report = QuickTestReport()
@@ -187,6 +249,7 @@ def build_report(config: Config, summary: Any, env: Mapping[str, str] | None = N
     _pages(report, summary)
     _model_and_letters(report, summary)
     _test_email(report, summary)
+    _form_links(report, config, links or [])
     if summary.errors:
         report.add("run steps", FAILED, "; ".join(str(e) for e in summary.errors[:3])[:200])
     return report

@@ -827,9 +827,10 @@ def run_with_mode(tctx: typer.Context, *, profile: str | None, mode: str | None,
             s = run_pipeline(ctx, profile)
             _echo_lines(s.lines(), ctx)
             if sample:
-                from autoapp.steps.quicktest import build_report
+                from autoapp.steps.quicktest import build_report, form_links
 
-                checklist = build_report(ctx.config, s)
+                links = form_links(ctx, s.prepare.prepared_ids if s.prepare else [])
+                checklist = build_report(ctx.config, s, links=links)
                 _echo_lines(checklist.lines(), ctx)
             forms = len(s.forms_to_finish) if interactive and not dry_run and not sample else 0  # no forms to finish in a quick test
         if forms:

@@ -34,7 +34,7 @@ def test_the_quick_test_samples_in_a_test_workspace_and_leaves_the_real_one_alon
     result = invoke_quick(real)
     assert result.exit_code == 0, result.output
     assert seen["mode"] == "test" and seen["jobs"] == 0 and seen["root"].parent == real.root / "test-runs"
-    assert (seen["sample"].alert_emails, seen["evaluate_limit"], seen["prepare_limit"]) == (2, 4, 2)
+    assert (seen["sample"].alert_emails, seen["evaluate_limit"], seen["prepare_limit"]) == (2, 6, 4)
     assert "quick test checklist:" in result.output and "OK       alert mailbox" in result.output
     assert "SKIPPED  source arbeitnow: disabled" in result.output
     assert result.output.index("existing form links (real workspace, 0 prepared):") > result.output.index("quick test:")

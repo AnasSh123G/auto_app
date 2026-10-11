@@ -9,7 +9,7 @@ from autoapp.steps.evaluate import EvaluateSummary
 from autoapp.steps.fetch import FetchSummary
 from autoapp.steps.pipeline import RunSummary
 from autoapp.steps.prepare import PrepareSummary
-from autoapp.steps.quicktest import FAILED, OK, SKIPPED, build_report
+from autoapp.steps.quicktest import FAILED, OK, SKIPPED, WARN, FormLink, build_report
 from autoapp.steps.search import SearchSummary, SourceReport
 from tests.helpers import make_workspace
 
@@ -109,3 +109,34 @@ def test_a_partial_source_that_found_jobs_is_ok_and_one_that_found_none_at_its_l
     checks = by_name(build_report(config(tmp_path), summary, ENV))
     assert checks["source workwise"].status == OK and "partial" in checks["source workwise"].reason
     assert checks["source adzuna"].status == SKIPPED
+
+
+def _links(*specs):
+    return [FormLink(f"job{i}abc", source, url, status, note, path) for i, (source, url, status, note, path)
+            in enumerate(specs)]
+
+
+def test_each_prepared_form_job_gets_a_line_and_only_job_boards_fail(tmp_path):
+    links = _links(
+        ("arbeitsagentur", "https://careers.ejot.com/job/123#apply", "found", "employer page", "careers page"),
+        ("linkedin-alert", "https://www.linkedin.com/jobs/view/1", "found", "", "job page"),
+        ("arbeitsagentur", "https://jobs.partner-example.de/job/9", "partial", "partner board", "externeURL"),
+        ("arbeitsagentur", None, "no_employer_link", "employer ad not found yet", "job page"),
+    )
+    report = build_report(config(tmp_path), healthy(), ENV, links)
+    statuses = [c.status for c in report.form_links]
+    assert statuses == [OK, FAILED, WARN, WARN] and report.failed
+    text = "\n".join(report.lines())
+    assert "form links:" in text and "WARN     job2ab  arbeitsagentur" in text and "[careers page]" in text
+    assert "no link  no_employer_link" in text
+    assert "2 WARN, 2 FAILED" not in text and "2 WARN, 1 FAILED" in text
+
+
+def test_warn_links_do_not_set_the_failure_flag(tmp_path):
+    links = _links(("arbeitsagentur", None, "no_employer_link", "not found", "job page"))
+    report = build_report(config(tmp_path), healthy(), ENV, links)
+    assert not report.failed and [c.status for c in report.form_links] == [WARN]
+
+
+def test_no_form_jobs_means_no_form_links_section(tmp_path):
+    assert "form links:" not in "\n".join(build_report(config(tmp_path), healthy(), ENV).lines())

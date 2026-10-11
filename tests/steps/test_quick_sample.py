@@ -32,7 +32,7 @@ def test_a_normal_run_has_no_sample(ctx):
 def test_the_sample_lowers_only_the_per_run_limits(ctx):
     ctx.config.limits.max_evaluate_per_run, ctx.config.limits.max_prepare_per_run = 200, 50
     SampleLimits().apply_to(ctx.config)
-    assert (ctx.config.limits.max_evaluate_per_run, ctx.config.limits.max_prepare_per_run) == (4, 2)
+    assert (ctx.config.limits.max_evaluate_per_run, ctx.config.limits.max_prepare_per_run) == (6, 4)
     ctx.config.limits.max_evaluate_per_run = 1
     SampleLimits().apply_to(ctx.config)
     assert ctx.config.limits.max_evaluate_per_run == 1  # never raised
@@ -69,18 +69,20 @@ def test_each_source_keeps_a_few_jobs_and_asks_one_profile(ctx):
     assert s.sources["fakeapi"].new == 2 and len(ctx.repo.jobs_by_status("new")) == 2
 
 
-def _evaluated(ctx, company, score, channel, status):
+def _evaluated(ctx, company, score, channel, status, source=None):
     jid = ctx.repo.insert_job(title="Backend Developer (m/w/d)", company=company, location="Berlin", description=AD,
                               job_url="https://jobs.example.de/" + company.replace(" ", "-"))
     payload = evaluation_payload(ctx).model_dump(mode="json")
     payload.update(fit_score=score, channel=channel)  # the writer's checks use the evaluation's own bridgeable gaps
     ctx.repo.add_evaluation(jid, fit_score=score, decision=payload["decision"], payload=payload)
     ctx.repo.transition(jid, status)
+    if source:
+        ctx.repo.add_source(jid, source, source_job_id=jid)
     return jid
 
 
 def test_prepare_takes_the_best_email_and_the_best_form_job_below_the_threshold(ctx):
-    ctx.sample = SampleLimits(preparations=2)
+    ctx.sample = SampleLimits(email_applications=1, form_applications=1)
     ctx.config.limits.max_prepare_per_run = 2
     low_email = _evaluated(ctx, "Firma EmailLow", 40, "email", "skipped")
     best_form = _evaluated(ctx, "Firma FormMid", 55, "employer_form", "review")
@@ -117,3 +119,30 @@ def test_the_quick_test_sends_at_most_one_test_email_whatever_the_score(ctx):
     assert len(result.sent) == 1 and len(mailer.sent) == 1 and result.not_sent == {}
     assert mailer.envelopes == [["max.mustermann@example.com"]]  # only to myself
     assert all(j["status"] == Status.PREPARED.value for j in ctx.repo.jobs_by_status("prepared"))
+
+
+def test_the_sample_limits_add_up_and_cover_three_form_jobs():
+    limits = SampleLimits()
+    assert (limits.email_applications, limits.form_applications, limits.preparations, limits.evaluations) == (1, 3, 4, 6)
+
+
+def test_prepare_takes_form_jobs_from_arbeitsagentur_an_alert_and_another_source(ctx):
+    ctx.sample = SampleLimits()
+    ctx.config.limits.max_prepare_per_run = 4
+    email = _evaluated(ctx, "Firma Mail", 50, "email", "skipped", "adzuna")
+    top_other = _evaluated(ctx, "Firma OtherTop", 90, "employer_form", "review", "adzuna")
+    _evaluated(ctx, "Firma OtherTop2", 89, "employer_form", "review", "workwise")
+    arbeit = _evaluated(ctx, "Firma Arbeit", 30, "employer_form", "review", "arbeitsagentur")
+    alert = _evaluated(ctx, "Firma Alert", 20, "platform", "skipped", "linkedin-alert")
+    ctx.clients["write"] = FakeLLM(script={"write": [LETTER] * 4})
+    s = prepare_jobs(ctx, renderer_factory=factory(FakeRenderer([1] * 4)))
+    assert set(s.prepared_ids) == {email, top_other, arbeit, alert}  # one per source, not the three best scores
+
+
+def test_a_source_without_a_candidate_gives_its_slot_to_the_next_best_score(ctx):
+    ctx.sample = SampleLimits()
+    ctx.config.limits.max_prepare_per_run = 4
+    forms = [_evaluated(ctx, f"Firma F{i}", 80 - i, "employer_form", "review", "adzuna") for i in range(4)]
+    ctx.clients["write"] = FakeLLM(script={"write": [LETTER] * 4})
+    s = prepare_jobs(ctx, renderer_factory=factory(FakeRenderer([1] * 4)))
+    assert set(s.prepared_ids) == set(forms)  # no email, Arbeitsagentur or alert job: every free slot goes to the next best score
