@@ -136,10 +136,14 @@ fetch step.
 Applications on Workwise are made on Workwise with a Workwise account. Log in once in the app's browser with
 `uv run autoapp login workwise`; the form finder and the assisted filling then work on the Workwise job page.
 
-**Workwise alert emails** (any `@workwise.io` sender) are parsed provisionally until a real alert email is available
-as a template: every link to a Workwise job page is taken, also inside a tracking link that carries it URL-encoded.
-The title comes from the link text when it reads like a title (otherwise from the address, marked as shortened);
-the company is filled in from the job page. Workwise alert jobs are not sent to employer discovery: they are applied
+**Workwise alert emails** (any `@workwise.io` sender) are HTML only. Each job card is one link to
+`workwise.io/jobsuche?eTT=...&id=<jobId>&lT=...` whose text gives the title, the company, the city and tags
+("Homeoffice möglich" is read as hybrid, "40 Stunden" / "20 bis 40 Stunden" as the working time). The `eTT` (email
+tracking) and `lT` (login) tokens are never stored or followed: the card's address is the token-free
+`https://www.workwise.io/job/<id>`. The salary tag is not stored (the card fields only hold platform estimates).
+"Alle passenden Jobs anschauen" links carry no job id and are not cards; a Workwise mail without a job id link is
+account mail. Links of the older form `workwise.io/job/<id>-<slug>` (also inside a tracking link that carries it
+URL-encoded) are still taken. Workwise alert jobs are not sent to employer discovery: they are applied
 to on Workwise, which the app can open.
 
 ## Email alerts from LinkedIn, StepStone, Indeed and Workwise

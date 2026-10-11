@@ -30,7 +30,7 @@ _TRACKING_PATH = re.compile(r"unsub|abbestell|opt-?out|austragen|preferences|ein
 _PLACEHOLDER = "[link removed]"
 # The first line of a mail's footer: nothing from here on describes a card.
 _FOOTER = re.compile(r"abbestell|unsubscribe|e-mail-einstellungen|email settings|m\u00f6chten sie mehr|weitere passende jobs|"
-                     r"datenschutz|privacy|hilfebereich|help center|see all jobs|view all jobs", re.IGNORECASE)
+                     r"alle passenden jobs|datenschutz|privacy|hilfebereich|help center|see all jobs|view all jobs", re.IGNORECASE)
 
 
 def _digits(text: str) -> str:

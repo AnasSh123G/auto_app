@@ -1,4 +1,4 @@
-"""Search-first dry run over the real sample alert emails in samples/ (LinkedIn, Indeed, StepStone).
+"""Search-first dry run over the real sample alert emails in samples/ (LinkedIn, Indeed, StepStone, Workwise, ...).
 
 Nothing may be requested from a job board: the job-board fetchers record every call, the employer web and the
 search service are fakes, and the run is a dry run.
@@ -9,6 +9,8 @@ from __future__ import annotations
 import email
 from email import policy
 from pathlib import Path
+
+import pytest
 
 from autoapp.llm.fake import FakeLLM
 from autoapp.sources.alerts.imap_reader import FakeMailbox
@@ -32,7 +34,8 @@ def mailbox() -> FakeMailbox:
 
 
 def test_the_sample_alerts_are_resolved_by_search_without_touching_a_job_board(tmp_path):
-    assert len(list(SAMPLES.glob("*.eml"))) == 3
+    if not list(SAMPLES.glob("*.eml")):
+        pytest.skip("no real sample alert emails in samples/ (they are private and not committed)")
     ctx = RunContext.open(make_workspace(tmp_path, alert_mode="search_first"), dry_run=True)
     ctx.mode = "review"
     ctx.clients["evaluate"] = FakeLLM(script={"evaluate": [verdict(20)] * 80})
