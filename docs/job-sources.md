@@ -64,7 +64,12 @@ An Arbeitsagentur job is applied to at the **employer**, never on arbeitsagentur
 in `assist.restricted_domains`, so its page is not followed or saved as the application link. Jobs whose
 ad is only a link to a partner board such as jobvector.de count as board jobs too: the employer's own ad is
 searched by company and title (like alert jobs). What that search misses goes on to the employer's careers
-pages, after evaluation. A contact email in the Arbeitsagentur detail is read at evaluation, so the job can
+pages, after evaluation. When both found nothing, the job is still prepared but marked `no_employer_link`
+(folder ending `_NOEMPLOYER`): the Arbeitsagentur page appears only as **Job ad**, never as the application
+page, and both lookups repeat after `failure_ttl_hours`. A lookup that did not run (no `PARALLEL_API_KEY`, a
+used-up limit) leaves the job `restricted` with that reason instead. An ad posted only on the Arbeitsagentur
+(no `externeURL`, the Arbeitsagentur as partner) keeps its Arbeitsagentur link, labelled "only on the
+Arbeitsagentur". A contact email in the Arbeitsagentur detail is read at evaluation, so the job can
 be an email application.
 
 ## Adzuna job search API

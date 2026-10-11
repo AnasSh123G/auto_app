@@ -384,8 +384,10 @@ def seed_arbeitsagentur_misses(ctx: RunContext, own_ads: OwnAdsSummary | None, *
               and any(s["source"] == "arbeitsagentur" for s in ctx.repo.sources(job["id"]))]
     if not missed:
         return None
-    return run_discovery(ctx, job_ids=missed, sources=("arbeitsagentur",), force=True,
-                         import_related=ctx.config.sources.employer_careers.enabled, fetch=fetch, api=api, now=now)
+    summary = run_discovery(ctx, job_ids=missed, sources=("arbeitsagentur",), force=True,
+                            import_related=ctx.config.sources.employer_careers.enabled, fetch=fetch, api=api, now=now)
+    _recheck_no_employer_forms(ctx, missed, _emitter(ctx))
+    return summary
 
 
 NO_EMPLOYER_NAME = "alert does not name the employer"
@@ -738,6 +740,19 @@ def _attach_direct(ctx, emp: EmployerRepo, job, app, hit: PostingHit, restricted
     emit("employer_matched", f"{hit.url} (found by searching \"{job['company']} {job['title']}\")", job_id=job["id"],
          recovered=recovered, direct=True)
     _recheck_form(ctx, job["id"], emit)
+
+
+def _recheck_no_employer_forms(ctx, job_ids: list[str], emit) -> None:  # noqa: ANN001
+    """Both lookups have now run for these Arbeitsagentur jobs: a job already prepared (while they were still
+    pending) gets its form status, folder marker and links brought up to date (``no_employer_link`` or a match)."""
+    from autoapp.formfinder.employer_link import employer_link, is_arbeitsagentur_job
+
+    for job_id in job_ids:
+        job, app = ctx.repo.get_job(job_id), ctx.repo.get_application(job_id)
+        if job is None or app is None or not app["folder"] or app["channel"] == "email" or app["form_status"] == "found":
+            continue
+        if is_arbeitsagentur_job(ctx, job) and employer_link(ctx, job, app).kind != "employer":
+            _recheck_form(ctx, job_id, emit)
 
 
 def _recheck_form(ctx, job_id: str, emit) -> None:  # noqa: ANN001

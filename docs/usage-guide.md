@@ -386,7 +386,8 @@ why, without opening the folder:
 | `_NOFORM` | No application form found, or only part of the way |
 | `_BROWSER` | The site refuses plain requests; it needs a real browser |
 | `_LOGIN` / `_CAPTCHA` | A login or a robot check is in the way |
-| `_RESTRICTED` | The form is on LinkedIn, Indeed or StepStone |
+| `_RESTRICTED` | The form is on LinkedIn, Indeed or StepStone (or an Arbeitsagentur ad not yet searched at the employer) |
+| `_NOEMPLOYER` | An Arbeitsagentur job whose employer's own ad was not found; the letter is ready, apply once the ad turns up |
 | `_UNREACHABLE` | The page could not be loaded (often: the ad is gone) |
 
 When a later look changes the result, the folder is renamed and the paths inside its files are updated. A folder you
@@ -431,6 +432,9 @@ Jobs the program can fill come first. The bracket says what the job needs from y
 | `click through yourself` | No apply button the program may safely click (many Arbeitsagentur ads build their button with scripts) | Click "apply" yourself, then press `f` when the form shows |
 | `apply yourself` | The job is on LinkedIn, Indeed or StepStone, and neither the employer's own site nor (if switched on) the page read with your login gave a company apply address | Open it in your normal browser. If it has "Apply on company website", click it, copy that address and choose **paste its address**: the app opens and fills the employer's form. Otherwise apply there with `apply.html` |
 | `apply on the site` | Read with your login: the job only takes applications on LinkedIn/Indeed/StepStone itself (for example Easy Apply) | Apply there yourself with the answers in `apply.html`, then mark it submitted |
+| `employer ad not found` | An Arbeitsagentur job: the search by company and title and the employer's careers pages both ran and found no ad (folder ending `_NOEMPLOYER`) | The letter is ready. The app looks again on later searches; or open the job in your browser, follow it to the employer and **paste its address** |
+| `employer ad not searched` | An Arbeitsagentur job whose employer search has not run (no `PARALLEL_API_KEY`, a used-up limit or no company name) | Set the key (or wait for the limit), then search again; or paste the employer's address |
+| `apply on the Arbeitsagentur` | The ad is posted only on the Arbeitsagentur (no employer ad exists) | Apply on the Arbeitsagentur page with the answers in `apply.html` |
 | `ad gone` / `page not loading` | The job page no longer loads | Check the link in your own browser; if the ad is gone, mark it skipped |
 
 ### What happens when you pick a job
@@ -933,8 +937,12 @@ own. There are two ways to still reach the employer's form:
      job where nothing matched is searched again after `failure_ttl_hours` at the earliest. The log line
      `AD SEARCH` gives the reason for every result that was not taken.
 
-   Either way the job then points at the employer's ad. If its folder was already prepared (`_RESTRICTED`), the
-   form is checked again at once and the folder renamed. An application form that is drawn by JavaScript (some job
+   Either way the job then points at the employer's ad. If its folder was already prepared (`_RESTRICTED` or
+   `_NOEMPLOYER`), the form is checked again at once and the folder renamed. An Arbeitsagentur job whose search
+   **and** careers lookup both ran without finding the employer's ad is marked `_NOEMPLOYER` ("employer ad not
+   found"): its letter is still prepared, the Arbeitsagentur page is shown only as **Job ad**, and the lookups are
+   repeated after `failure_ttl_hours`. A lookup that did not run at all (no key, a limit) is not a miss; the job
+   stays `_RESTRICTED` with the reason. An application form that is drawn by JavaScript (some job
    portals) is marked `need your browser`; **Finish forms** opens it in the app's browser.
 2. **Read the company apply link with your login (off by default).** In **Settings > sources** choose "Also read
    them from the job page with my login" and the sites. Then log in once in the app's browser:

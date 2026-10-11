@@ -59,6 +59,25 @@ def explain(status: str | None, note: str | None = "") -> Explanation:
         return Explanation("blocked the quick check",
                            "The site refused the app's quick background check, which often still works in a real browser window.",
                            "Open it; if the page loads, click through to the form yourself and press [f].")
+    if status == "no_employer_link":
+        reason = note.split(":", 1)[1].strip() if ":" in note else ""
+        return Explanation("employer ad not found",
+                           "The job is on the Arbeitsagentur, but the app could not find the employer's own ad or "
+                           "application page for it" + (f" ({reason})." if reason else "."),
+                           "Your cover letter is ready. Open the job in your browser: if it has an apply link to the "
+                           "employer, paste that address here and the app opens and fills the form. The app looks "
+                           "again on later searches.")
+    if status == "restricted" and "only on the Arbeitsagentur" in note:
+        return Explanation("apply on the Arbeitsagentur",
+                           "This ad is posted only on the Arbeitsagentur; the employer's own site has no ad for it.",
+                           "Apply on the Arbeitsagentur page yourself, using the answers in apply.html.")
+    if status == "restricted" and "employer ad not searched yet" in note:
+        why = note.split("employer ad not searched yet:", 1)[1].strip()
+        return Explanation("employer ad not searched",
+                           "The job is on the Arbeitsagentur. The app has not looked for the employer's own ad yet "
+                           f"({why}).",
+                           "Fix that and search again (the app then finds the employer's application page), or open the "
+                           "job in your browser and paste the employer's application address here.")
     if status == "restricted":
         host = re.search(r"restricted target: ([^\s;]+)", note)
         site = host.group(1).removeprefix("www.") if host else "this site"

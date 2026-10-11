@@ -66,7 +66,7 @@ def _rows(ws: Workspace, sql: str, args: tuple = ()) -> list[sqlite3.Row]:
 
 # Order of the forms list: what the app can fill first, what only you can do last.
 FORM_ORDER = {"found": 0, None: 1, "needs_browser": 2, "login_required": 3, "captcha": 3, "partial": 4,
-              "none": 4, "restricted": 5, "unreachable": 6}
+              "none": 4, "no_employer_link": 5, "restricted": 5, "unreachable": 6}
 
 
 def form_jobs(ws: Workspace) -> list[sqlite3.Row]:
@@ -251,7 +251,9 @@ def form_actions(tctx: typer.Context, p: Prompter, job: sqlite3.Row) -> None:
     p.say(_job_label(job))
     for line in found.lines():
         p.say(line)
-    if job["form_status"] == "restricted":
+    if job["form_status"] == "no_employer_link":
+        actions = []  # nothing to open in the app's browser: there is no employer page yet
+    elif job["form_status"] == "restricted":
         from autoapp.cli import load_config_or_default
         from autoapp.fetch.apply_links import PLATFORM_LABELS, platform_of
 

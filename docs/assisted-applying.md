@@ -142,7 +142,9 @@ These sites are not supported for automatic form filling:
 - `indeed.com` (Indeed Apply form)
 - `indeed.de` (Indeed Germany)
 - `stepstone.de` (StepStone direct apply)
-- `arbeitsagentur.de` (the Arbeitsagentur job page: the application goes to the employer's own ad)
+- `arbeitsagentur.de` (the Arbeitsagentur job page: the application goes to the employer's own ad). An Arbeitsagentur
+  job without it is `no_employer_link` ("employer ad not found", folder ending `_NOEMPLOYER`): assist has no page to
+  open and shows only `apply.html`; paste the employer's address in **Finish forms** to continue
 
 For these sites, use the `apply.html` page to copy your answers and fill the form manually.
 Assist opens **only this local helper**, not the restricted website. Restricted subdomains,

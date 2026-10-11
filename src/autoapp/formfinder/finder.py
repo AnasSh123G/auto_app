@@ -18,7 +18,7 @@ log = logging.getLogger("autoapp")
 LABELS = {
     "found": "found", "partial": "partial", "needs_browser": "need your browser",
     "login_required": "login required", "captcha": "CAPTCHA required", "restricted": "restricted",
-    "unreachable": "unreachable", "none": "no application found",
+    "unreachable": "unreachable", "none": "no application found", "no_employer_link": "employer ad not found",
 }
 
 

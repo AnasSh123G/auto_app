@@ -113,6 +113,7 @@ class JobInfo:
     salary_estimate_max: int | None = None
     salary_estimate_source: str = "StepStone"
     arbeitnow_url: str | None = None
+    no_employer: bool = False  # an Arbeitsagentur job whose employer ad was not found: no application page yet
 
 
 def render_job_md(job: JobInfo) -> str:
@@ -253,6 +254,7 @@ class ReadmeData:
     bundle_too_large: bool = False
     warnings: list[str] = field(default_factory=list)  # e.g. a DOCX CV excluded from the bundle
     arbeitnow_url: str | None = None
+    no_employer: bool = False  # the employer's ad was not found: the job page is a job ad, not an application page
 
 
 def render_readme_md(data: ReadmeData) -> str:
@@ -282,6 +284,7 @@ class ApplyData:
     job_url: str | None = None
     application_url: str | None = None
     arbeitnow_url: str | None = None
+    no_employer: bool = False
 
 
 def render_apply_html(data: ApplyData) -> str:

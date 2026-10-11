@@ -15,8 +15,8 @@ from autoapp.assist.filler import is_restricted
 from autoapp.employers.scope import bare_host, is_directory
 
 UNCHECKED = "unchecked"
-_ORDER = ("found", "partial", "none", "needs_browser", "login_required", "captcha", "restricted", "unreachable",
-          UNCHECKED)
+_ORDER = ("found", "partial", "none", "needs_browser", "login_required", "captcha", "restricted", "no_employer_link",
+          "unreachable", UNCHECKED)
 
 
 def open_readonly(db_path: Path) -> sqlite3.Connection | None:

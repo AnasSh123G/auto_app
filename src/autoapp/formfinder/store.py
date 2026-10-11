@@ -7,6 +7,13 @@ from pathlib import Path
 from autoapp.assist.filler import is_restricted
 from autoapp.config.models import DEFAULT_RESTRICTED_DOMAINS
 from autoapp.db.repo import now_iso
+from autoapp.formfinder.employer_link import (
+    NO_EMPLOYER_LINK,
+    ONLY_ON_ARBEITSAGENTUR,
+    employer_link,
+    is_arbeitsagentur_job,
+    outcome_for,
+)
 from autoapp.formfinder.finder import LABELS, Outcome, find
 
 START = "<!-- autoapp application -->"
@@ -15,7 +22,11 @@ END = "<!-- /autoapp application -->"
 
 def entry_url(ctx, job, app=None):
     """Where form finding starts. A restricted platform link (LinkedIn, Indeed, StepStone) gives way to the
-    vacancy's own posting when employer discovery matched it; the job's stored data is not changed."""
+    vacancy's own posting when employer discovery matched it; the job's stored data is not changed.
+    An Arbeitsagentur job never starts at its Arbeitsagentur (or partner board) page: its entry is the employer's
+    address, or None when there is none yet (see ``employer_link``)."""
+    if is_arbeitsagentur_job(ctx, job):
+        return employer_link(ctx, job, app).entry
     url = _stored_entry(ctx, job, app)
     if not url or is_restricted(url, _restricted_domains(ctx)):
         return _employer_posting(ctx, job) or url
@@ -54,17 +65,42 @@ def _employer_posting(ctx, job):
     return row["posting_url"] if row and row["posting_url"] else None
 
 
+def _status_text(outcome: Outcome) -> str:
+    """``Form status`` text: the note already says what is missing for a job without an employer link."""
+    return outcome.note if outcome.status == NO_EMPLOYER_LINK else f"{LABELS[outcome.status]}: {outcome.note}"
+
+
+def _only_on_arbeitsagentur(outcome: Outcome) -> bool:
+    return outcome.status == "restricted" and outcome.note.startswith(ONLY_ON_ARBEITSAGENTUR)
+
+
+def _block(name: str, label: str, outcome: Outcome) -> str:
+    """The marked application section of README.md, job.md or apply.html for an outcome. The Arbeitsagentur page
+    is the application link only when the ad is posted nowhere else; a job without an employer link shows no
+    application link at all (the page stays under "Job ad")."""
+    status = _status_text(outcome)
+    url = outcome.url
+    if outcome.status == NO_EMPLOYER_LINK:
+        url = None
+    suffix = f" ({ONLY_ON_ARBEITSAGENTUR})" if _only_on_arbeitsagentur(outcome) else ""
+    if name == "apply.html":
+        if not url:
+            return f"<p>{html.escape(status)}</p>"
+        return (f'<p><a href="{html.escape(url, quote=True)}" rel="noopener">Application page</a>'
+                f"{html.escape(suffix)}</p>\n<p>{html.escape(status)}</p>")
+    shown = f"{url}{suffix}" if url else ("none yet" if outcome.status == NO_EMPLOYER_LINK else "not available")
+    return f"- **{label}:** {shown}\n- **Form status:** {status}"
+
+
 def refresh(folder: Path, outcome: Outcome):
     updates = {}
     for name, label in (("README.md", "Application link"), ("job.md", "Application page"), ("apply.html", "")):
         path = folder / name
         text = path.read_text(encoding="utf-8")
-        status = f"{LABELS[outcome.status]}: {outcome.note}"
+        block = _block(name, label, outcome)
         if name == "apply.html":
-            block = f'<p><a href="{html.escape(outcome.url or "", quote=True)}" rel="noopener">Application page</a></p>\n<p>{html.escape(status)}</p>'
             legacy = r'<a href="[^"]*" rel="noopener">Application page</a>'
         else:
-            block = f"- **{label}:** {outcome.url or 'not available'}\n- **Form status:** {status}"
             legacy = rf"^- \*\*{label}:\*\* .*?$"
         marked = f"{START}\n{block}\n{END}"
         if START in text and END in text:
@@ -108,7 +144,7 @@ def save(ctx, job, entry, outcome: Outcome, *, refresh_package=False):
 
         tracking = ctx.config.tracking
         export_csv(ctx.conn, ctx.ws.csv_path, tracking.delimiter, include_skipped=tracking.include_skipped)
-    ctx.emit("form_resolved", job, detail=f"{LABELS[outcome.status]}: {outcome.note}", form_status=outcome.status)
+    ctx.emit("form_resolved", job, detail=_status_text(outcome), form_status=outcome.status)
 
 
 def resolve(ctx, job, *, again=False, refresh_package=False):
@@ -116,6 +152,11 @@ def resolve(ctx, job, *, again=False, refresh_package=False):
     entry = entry_url(ctx, job, app)
     if app and app["form_status"] == "found" and not again:
         return Outcome("found", job["application_url"], app["form_reached_url"], app["form_note"])
+    if is_arbeitsagentur_job(ctx, job) and (link := employer_link(ctx, job, app)).kind != "employer":
+        # The Arbeitsagentur page is a job ad, not an application page: it is never crawled or kept as the link.
+        outcome = outcome_for(ctx, job, link)
+        save(ctx, job, None, outcome, refresh_package=refresh_package)
+        return outcome
     evaluation = ctx.repo.current_evaluation(job["id"])
     reference = json.loads(evaluation["payload"]).get("result", {}).get("reference") if evaluation else None
     note = ""

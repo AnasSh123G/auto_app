@@ -17,7 +17,7 @@
 {% if arbeitnow_url %}
 - **Source link:** [Arbeitnow]({{ arbeitnow_url }})
 {% endif %}
-- **Application page:** {{ job.application_url or "not available" }}
+- **Application page:** {{ "none yet" if job.no_employer else (job.application_url or "not available") }}
 {% if job.sources %}
 - **Source{{ "s" if job.sources|length > 1 }}:** {{ job.sources|join(", ") }}
 {% endif %}

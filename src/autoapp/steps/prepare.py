@@ -20,6 +20,7 @@ from autoapp.db.repo import now_iso
 from autoapp.db.status import Status
 from autoapp.employers.posting import email_text_reasons
 from autoapp.evaluation.schema import FinalEvaluation
+from autoapp.formfinder.employer_link import NO_EMPLOYER_LINK
 from autoapp.llm.base import LLMAuthError, LLMCallLimitReached, LLMError
 from autoapp.package import render as R
 from autoapp.package.documents_select import select_documents
@@ -280,12 +281,16 @@ def _prepare_one(ctx: RunContext, job, folder: Path, writer: LetterWriter, rende
     upload += [R.FileItem("Other", p.resolve()) for p in extra_copies]
     from autoapp.sources.arbeitnow import source_link
 
+    now_app = repo.get_application(job["id"])
+    no_employer = now_app is not None and now_app["form_status"] == NO_EMPLOYER_LINK
+    application_url = None if no_employer else job["application_url"] or r.application_url
+
     sources = repo.sources(job["id"])
     arbeitnow_link = source_link(sources)
     (folder / "apply.html").write_text(
         R.render_apply_html(R.ApplyData(job["title"], job["company"], answers.items(), upload,
-                                        job["job_url"], job["application_url"] or r.application_url,
-                                        arbeitnow_url=arbeitnow_link)),
+                                        job["job_url"], application_url, arbeitnow_url=arbeitnow_link,
+                                        no_employer=no_employer)),
         encoding="utf-8",
     )
     files += ["form_answers.md", "apply.html"]
@@ -305,11 +310,11 @@ def _prepare_one(ctx: RunContext, job, folder: Path, writer: LetterWriter, rende
     locations += [loc["city"] for loc in repo.locations(job["id"])]
     (folder / "job.md").write_text(R.render_job_md(R.JobInfo(
         title=job["title"], company=job["company"], description=job["description"] or "",
-        locations=locations, job_url=job["job_url"], application_url=job["application_url"] or r.application_url,
+        locations=locations, job_url=job["job_url"], application_url=application_url,
         sources=sorted({s["source"] for s in sources}), ad_salary_min=job["ad_salary_min"],
         ad_salary_max=job["ad_salary_max"], salary_estimate_min=job["salary_estimate_min"],
         salary_estimate_max=job["salary_estimate_max"],
-        arbeitnow_url=arbeitnow_link,
+        arbeitnow_url=arbeitnow_link, no_employer=no_employer,
     )), encoding="utf-8")
     (folder / "evaluation.md").write_text(
         R.render_evaluation_md(final, R.EvaluationExtra(job["title"], job["company"])), encoding="utf-8")
@@ -318,12 +323,12 @@ def _prepare_one(ctx: RunContext, job, folder: Path, writer: LetterWriter, rende
     review = list(outcome.needs_review) + page_problems + email_text_reasons(repo, job["id"])  # found from email text
     (folder / "README.md").write_text(R.render_readme_md(R.ReadmeData(
         title=job["title"], company=job["company"], channel=channel, job_id=job["id"], files=files,
-        apply_email=r.apply_email, application_url=job["application_url"] or r.application_url,
+        apply_email=r.apply_email, application_url=application_url,
         job_url=job["job_url"], reference=r.reference, missing_documents=selection.missing,
         needs_review_reasons=review, assumed_skills=letter.assumed_skills,
         salary_note=needs_salary_note(expectation, asks), bundle_size_mb=round(b.size_bytes / 1024 / 1024, 2),
         bundle_max_mb=ctx.config.email.max_bundle_mb, bundle_too_large=b.too_large, warnings=list(b.skipped),
-        arbeitnow_url=arbeitnow_link,
+        arbeitnow_url=arbeitnow_link, no_employer=no_employer,
     )), encoding="utf-8")
 
     repo.upsert_application(
