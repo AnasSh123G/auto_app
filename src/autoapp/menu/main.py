@@ -506,7 +506,7 @@ def entry_tests(tctx: typer.Context, p: Prompter) -> str:
     choice = p.select("Which test?", [
         ("quick", "Quick test: a small sample of every step (a few emails, jobs, employers, one application), then a checklist"),
         ("testrun", "Test run: a full run where every email comes to you, marked TEST_RUN"),
-        ("fresh", "Fresh test run: as above, but every job counts as new (your history is not touched)"),
+        ("fresh", "Full test run (fresh): as above, but every job counts as new (your history is not touched)"),
         ("email", "Send a test email for one application to myself"),
         ("logins", "Check the logins (mailboxes, AI model, Adzuna)"),
         ("dry", "Dry run: a full run that sends nothing, saves no drafts and marks no emails"),
@@ -523,7 +523,7 @@ def entry_tests(tctx: typer.Context, p: Prompter) -> str:
     if choice == "fresh":
         code = _call(run_with_mode, tctx, profile=None, mode="test", dry_run=False, interactive=True, prompter=p,
                      ask_mode=False, fresh=True)
-        return "Fresh test run finished." if code == 0 else f"Fresh test run finished with problems (exit code {code})."
+        return "Full test run finished." if code == 0 else f"Full test run finished with problems (exit code {code})."
     if choice == "email":
         jobs = _rows(tctx.obj.workspace, "SELECT j.* FROM jobs j JOIN applications a ON a.job_id = j.id "
                                          "WHERE j.status IN ('prepared', 'drafted') AND a.channel = 'email' "

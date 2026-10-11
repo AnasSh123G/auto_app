@@ -22,7 +22,7 @@ from autoapp.llm.cost import PriceTable
 
 @dataclass(frozen=True)
 class SampleLimits:
-    """The quick test (``autoapp test``): a small sample of every step instead of a whole run (run-modes spec).
+    """The quick test (``autoapp test --quick``): a small sample of every step instead of a whole run (run-modes spec).
 
     ``RunContext.sample`` is None in every normal run, so steps only ever look at it where they already limit work.
     """

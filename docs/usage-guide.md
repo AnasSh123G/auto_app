@@ -181,7 +181,7 @@ Redo unsent · Add a job by URL · Tests · Settings · Quit
 | **Employer sites** | Careers sites found for your alert jobs | Show, preview, look up, scan again, confirm a website for one job (section 14) |
 | **Redo unsent** | Process every unsent job again | Section 11 |
 | **Add a job by URL** | One job you found yourself | Paste the link. If the page cannot be read, it offers to let you paste the ad text |
-| **Tests** | Safe experiments | Quick test (the default), test run, fresh test run, test email, check logins, dry run |
+| **Tests** | Safe experiments | Quick test (the default), test run, full test run (fresh), test email, check logins, dry run |
 | **Settings** | Change setup | Edit a section, default run mode for scheduled runs, redo or reset, delete all job data (keeps the setup) |
 | **Quit** | Leave | |
 
@@ -564,15 +564,15 @@ Five ways to try the program without sending anything to employers. They differ 
 
 | Option | Command | Emails | Your real job history | Costs AI money? |
 |---|---|---|---|---|
-| **Quick test** | `uv run autoapp test` (menu: Tests > Quick test) | At most one, to **you**, subject `TEST_RUN: ...` | **Not touched.** A small sample of every step in `workspace/test-runs/<time>/`, then a checklist | a little |
+| **Quick test** | `uv run autoapp test --quick` (menu: Tests > Quick test) | At most one, to **you**, subject `TEST_RUN: ...` | **Not touched.** A small sample of every step in `workspace/test-runs/<time>/`, then a checklist | a little |
 | **Dry run** | `uv run autoapp run --dry-run` (menu: Tests > Dry run) | none sent, none drafted; shows `WOULD ...` | Evaluations and folders are still made; mails are not marked processed | yes |
 | **Test run** | `uv run autoapp run --mode test` | Each goes to **you**, subject `TEST_RUN: ...` | Normal run; skips jobs already in the history | yes |
-| **Fresh test run** | `uv run autoapp run --mode test --fresh` | Each goes to **you** | **Not touched.** Runs in `workspace/test-runs/<time>/` with an empty history, so every job counts as new | yes |
+| **Full test run (fresh)** | `uv run autoapp test --full` (or `run --mode test --fresh`; menu: Tests > Full test run (fresh)) | Each goes to **you** | **Not touched.** Runs in `workspace/test-runs/<time>/` with an empty history, so every job counts as new | yes |
 | **Redo unsent** | `uv run autoapp run --redo` | Whatever mode you pick | **Reset on purpose** for unsent jobs (a backup is made first) | yes |
 
 ### Quick test
 
-`uv run autoapp test` (menu: **Tests > Quick test**, the pre-selected entry) checks the whole chain in a few minutes
+`uv run autoapp test --quick` (menu: **Tests > Quick test**, the pre-selected entry) checks the whole chain in a few minutes
 instead of simulating a whole run. In a throwaway workspace under `workspace/test-runs/<time>/` it:
 
 - reads the 1-2 newest alert emails (they are **not** marked as processed, so your next real run still reads them);
@@ -612,7 +612,8 @@ or no email application among the jobs it prepared, so no test email); run the q
 **test run** for those parts;
 `FAILED` makes the command exit with code 1. Your real jobs, statuses, folders and CSV are not touched. The searches
 and AI calls are real, a handful in total, and are added to your real counters and limits. `--profile NAME` uses one
-search profile only. It cannot be set as `run.default_mode`.
+search profile only. It cannot be set as `run.default_mode`. `uv run autoapp test` without `--quick` or `--full`
+starts nothing: it prints the two choices and exits with code 2.
 
 ### Dry run
 
@@ -629,7 +630,7 @@ every job found is already in it.
 
 ### Fresh test run
 
-`uv run autoapp run --mode test --fresh` (menu: **Tests > Fresh test run**) solves exactly that. It copies your
+`uv run autoapp run --mode test --fresh` (or `uv run autoapp test --full`; menu: **Tests > Full test run (fresh)**) solves exactly that. It copies your
 settings, documents and saved employer sites into `workspace/test-runs/<time>/`, starts with an empty job history,
 and treats every ad found, including all alert emails of the last 30 days, as new. Your real jobs, folders and CSV are
 not touched. The AI calls it makes are real, so they are added to your real statistics. Delete the `test-runs/`

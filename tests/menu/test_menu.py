@@ -454,3 +454,12 @@ def test_a_linkedin_job_offers_reading_the_company_link_only_when_switched_on(ws
                           ("What do you want to do", "browser"), ("Which application", menu.BACK),
                           ("What would you like", "quit")])
     assert "browser" in p.choice_values[2] and opened == [job]
+
+
+def test_the_full_test_run_entry_is_a_fresh_unsampled_test_run(ws, monkeypatch):
+    calls = []
+    monkeypatch.setattr("autoapp.commands.run_with_mode", lambda tctx, **kw: calls.append(kw))
+    r, p = open_menu(ws, [("What would you like", "tests"), ("Which test", "fresh"), ("What would you like", "quit")])
+    assert [(c["mode"], c["fresh"], c["sample"] if "sample" in c else False, c["ask_mode"]) for c in calls] == [
+        ("test", True, False, False)]
+    assert any("Full test run finished." in line for line in p.output)

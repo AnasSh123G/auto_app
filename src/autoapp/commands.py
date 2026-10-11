@@ -668,18 +668,34 @@ def run(
 @app.command(name="test")
 def quick_test(
     tctx: typer.Context,
+    quick: bool = typer.Option(False, "--quick", help="A small sample of every step, then a pass/fail checklist."),
+    full: bool = typer.Option(False, "--full", help="A whole test run in a fresh test workspace "
+                              "(same as `run --mode test --fresh`)."),
     profile: str | None = typer.Option(None, "--profile", "-p", help="Use only this search profile."),
     no_dashboard: bool = typer.Option(False, "--no-dashboard", help="Print plain lines instead of the live view."),
 ) -> None:
-    """Quick test: a small sample of every step in a throwaway workspace, then a pass/fail checklist.
+    """Test the app in a throwaway workspace: pick --quick or --full (without either, nothing starts; exit code 2).
 
-    Reads the newest one or two alert emails (not marked as processed), asks each job source for a couple of jobs,
-    looks up a couple of employers online, evaluates a few jobs, prepares one email and one form application and
-    sends at most one TEST_RUN email to yourself. Your real jobs, statuses and CSV are not touched; the searches
-    and AI calls are real and count against your limits. Exit code 1 when any part FAILED.
+    --quick reads the newest one or two alert emails (not marked as processed), asks each job source for a couple
+    of jobs, looks up a couple of employers online, evaluates a few jobs, prepares one email and one form
+    application and sends at most one TEST_RUN email to yourself, then prints a pass/fail checklist. Exit code 1
+    when any part FAILED.
+
+    --full is a whole test run with every job counted as new, every email coming to you marked TEST_RUN.
+
+    Your real jobs, statuses and CSV are not touched; the searches and AI calls are real and count against your limits.
     """
+    if quick and full:
+        typer.echo("error: --quick and --full cannot be combined: pick one", err=True)
+        raise typer.Exit(code=2)
+    if not quick and not full:
+        typer.echo("autoapp test needs a choice:\n"
+                   "  autoapp test --quick   a small sample of every step, then a checklist\n"
+                   "  autoapp test --full    a whole test run in a fresh test workspace (like run --mode test --fresh)",
+                   err=True)
+        raise typer.Exit(code=2)
     run_with_mode(tctx, profile=profile, mode="test", dry_run=False, interactive=_interactive(False),
-                  no_dashboard=no_dashboard, ask_mode=False, fresh=True, sample=True)
+                  no_dashboard=no_dashboard, ask_mode=False, fresh=True, sample=quick)
 
 
 def run_with_mode(tctx: typer.Context, *, profile: str | None, mode: str | None, dry_run: bool, interactive: bool,
@@ -688,7 +704,7 @@ def run_with_mode(tctx: typer.Context, *, profile: str | None, mode: str | None,
     """``run`` and the menu's "Run now": resolve the mode, run, then offer to finish forms.
 
     ``fresh`` (test mode only) runs in a new test workspace with an empty job history (``steps.sandbox``).
-    ``sample`` (the quick test, ``autoapp test``) takes a small sample of every step and ends with a checklist.
+    ``sample`` (the quick test, ``autoapp test --quick``) takes a small sample of every step and ends with a checklist.
     """
     if fresh:
         from autoapp.steps import sandbox
