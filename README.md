@@ -37,7 +37,7 @@ Run each command from the project folder as `uv run autoapp <command>`, for exam
 | `add <url>`, `describe <id>` | Add a job by link; paste an ad whose page could not be read |
 | `render <id>` | Rebuild PDFs and the email after editing `cover_letter.md` |
 | `assist <id>` | Open the application form and fill it on request; you submit |
-| `forms [--job <id>] [--again] [--dry-run]` | Find and refresh prepared application links; dry run only lists candidates |
+| `forms [--job <id>] [--again] [--dry-run] [--audit [--json]]` | Find and refresh prepared application links; dry run only lists candidates; `--audit` is a read-only report of the saved links (status, job boards, sources, causes) |
 | `employers [--discover] [--job <id>] [--profile NAME] [--again] [--refresh-site] [--website URL] [--dry-run]` | Show saved employer careers sites; with `--discover`, look up and scan the employers of your alert jobs (opt-in). `--dry-run` makes no request and writes nothing |
 | `status`, `list --status S`, `mark <id> STATUS [--note]` | Track applications (`mark <id> apply` promotes a review job) |
 | `export` | Write `applications.csv` (also done after every command) |

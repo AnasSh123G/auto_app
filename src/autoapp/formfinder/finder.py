@@ -1,5 +1,8 @@
+import json
 import logging
 import re
+import sqlite3
+import time
 from dataclasses import dataclass
 from urllib.parse import urlsplit, urlunsplit
 
@@ -90,11 +93,40 @@ def choose(ctx, candidates: list[Candidate], title: str, company: str) -> Candid
     return None
 
 
-def find(ctx, entry: str | None, *, title: str = "", company: str = "", reference: str | None = None) -> Outcome:
+def find(ctx, entry: str | None, *, title: str = "", company: str = "", reference: str | None = None,
+         job_id: str | None = None) -> Outcome:
+    """Walk from ``entry`` to the application form. With ``job_id`` the run leaves a trace in ``form_attempts``
+    (strategy ``http``; ``browser`` and ``ats`` are reserved for later phases)."""
+    hops: list[dict[str, str]] = []
+    started = time.monotonic()
+    outcome = _walk(ctx, entry, title, company, reference, hops)
+    if job_id is not None:
+        _record(ctx, job_id, hops, outcome, round((time.monotonic() - started) * 1000))
+    return outcome
+
+
+def _record(ctx, job_id: str, hops: list[dict[str, str]], outcome: Outcome, duration_ms: int) -> None:
+    """Store the trace; a trace that cannot be stored never fails form finding."""
+    from autoapp.db.repo import now_iso
+
+    note = " ".join(outcome.note.split())[:200]
+    try:
+        with ctx.conn:
+            ctx.conn.execute(
+                "INSERT INTO form_attempts (job_id, strategy, hops, status, note, duration_ms, created_at) "
+                "VALUES (?, 'http', ?, ?, ?, ?, ?)",
+                (job_id, json.dumps(hops, ensure_ascii=False), outcome.status, note, duration_ms, now_iso()))
+    except (sqlite3.Error, AttributeError) as error:
+        log.warning("form attempt trace not stored: %s", error)
+
+
+def _walk(ctx, entry: str | None, title: str, company: str, reference: str | None,
+          hops: list[dict[str, str]]) -> Outcome:
     if not entry or not valid_url(entry):
         return Outcome("none", None, None, "no usable application entry address")
     current, usable, reached = entry, entry, None
     visited = set()
+    via = "entry"
     for step in range(5):
         if not valid_url(current):
             return Outcome("partial", usable, reached, "unsupported navigation target")
@@ -104,6 +136,7 @@ def find(ctx, entry: str | None, *, title: str = "", company: str = "", referenc
         if address in visited:
             return Outcome("partial", usable, reached, "navigation loop")
         visited.add(address)
+        hops.append({"url": address, "reason": via})
         response = ctx.http.fetch_once(address)
         if response.blocked:
             return Outcome("needs_browser", usable, reached, response.reason or "host blocked")
@@ -111,7 +144,7 @@ def find(ctx, entry: str | None, *, title: str = "", company: str = "", referenc
             reached = address
             if step == 4:
                 break
-            current = response.redirect_url
+            current, via = response.redirect_url, "redirect"
             continue
         if not response.ok:
             return Outcome("unreachable", usable, reached, response.reason or f"HTTP {response.status}")
@@ -137,5 +170,5 @@ def find(ctx, entry: str | None, *, title: str = "", company: str = "", referenc
                 candidate = choose(ctx, safe, title, company)
         if candidate is None:
             return Outcome("partial", usable, reached, "ambiguous links or model budget unavailable")
-        current = candidate.url
+        current, via = candidate.url, ("link" if clear else "model choice")
     return Outcome("partial", usable, reached, "no form within 4 steps")

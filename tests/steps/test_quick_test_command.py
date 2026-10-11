@@ -37,6 +37,7 @@ def test_the_quick_test_samples_in_a_test_workspace_and_leaves_the_real_one_alon
     assert (seen["sample"].alert_emails, seen["evaluate_limit"], seen["prepare_limit"]) == (2, 4, 2)
     assert "quick test checklist:" in result.output and "OK       alert mailbox" in result.output
     assert "SKIPPED  source arbeitnow: disabled" in result.output
+    assert result.output.index("existing form links (real workspace, 0 prepared):") > result.output.index("quick test:")
     conn = open_db(real.db_path)
     assert conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 1  # the real history is untouched
     assert [r[0] for r in conn.execute("SELECT message_id FROM processed_emails")] == ["<m1>"]
@@ -56,6 +57,7 @@ def test_a_failed_part_makes_the_command_exit_with_one(tmp_path, monkeypatch):
     result = invoke_quick(real)
     assert result.exit_code == 1
     assert "FAILED   source adzuna" in result.output and "1 FAILED" in result.output
+    assert "existing form links (real workspace" in result.output  # the audit is printed after a failed checklist too
 
 
 def test_a_normal_run_never_prints_a_checklist_or_samples(tmp_path, monkeypatch):

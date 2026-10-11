@@ -122,7 +122,7 @@ def resolve(ctx, job, *, again=False, refresh_package=False):
     if entry and is_restricted(entry, _restricted_domains(ctx)):
         # 1. the employer's own posting was not found (entry_url would have used it); 2. with the login, if allowed.
         entry, note = platform_apply_link(ctx, job, entry)
-    outcome = find(ctx, entry, title=job["title"], company=job["company"], reference=reference)
+    outcome = find(ctx, entry, title=job["title"], company=job["company"], reference=reference, job_id=job["id"])
     if note and outcome.status == "restricted":
         outcome = Outcome(outcome.status, outcome.url, outcome.reached, f"{outcome.note}; {note}")
     save(ctx, job, entry, outcome, refresh_package=refresh_package)

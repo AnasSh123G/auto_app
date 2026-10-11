@@ -554,7 +554,21 @@ uv run autoapp forms --dry-run            # list what would be looked up (no req
 uv run autoapp forms                      # look for forms that have no result yet
 uv run autoapp forms --job <id> --again   # look again from the original link
 uv run autoapp assist <id>                # open one job directly in the browser
+uv run autoapp forms --audit [--json]     # read-only report of the saved form links (no requests, no changes)
 ```
+
+`forms --audit` counts the prepared web-form applications by form status (found, partial, none, need your browser,
+restricted, ...), how many links point at a job board (and which), the split by source and the most common reasons
+a link was not found:
+
+```
+existing form links (42 prepared):
+  found 18 (43%) · partial 9 · none 5 · needs browser 4 · restricted 3 · unchecked 3 · on job board: 6 (arbeitsagentur.de 5, linkedin.com 1)
+  by source: arbeitsagentur 20 (found 6) · linkedin-alert 12 (found 8) · stepstone-alert 10 (found 4)
+  causes: partial: no usable application continuation 5 · none: no usable application continuation 3
+```
+
+The quick test prints the same report for your real workspace after its checklist.
 
 ---
 
@@ -610,6 +624,8 @@ quick test: 10 OK, 1 FAILED, 2 SKIPPED
 `SKIPPED` means that part could not be tried this time (for example no alert email in the folder, a disabled source,
 or no email application among the jobs it prepared, so no test email); run the quick test again later or use a
 **test run** for those parts;
+After the checklist it prints the read-only form-link audit of your real workspace (`autoapp forms --audit`), as a
+baseline for the form finding.
 `FAILED` makes the command exit with code 1. Your real jobs, statuses, folders and CSV are not touched. The searches
 and AI calls are real, a handful in total, and are added to your real counters and limits. `--profile NAME` uses one
 search profile only. It cannot be set as `run.default_mode`. `uv run autoapp test` without `--quick` or `--full`

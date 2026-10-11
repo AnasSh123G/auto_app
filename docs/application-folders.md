@@ -65,6 +65,7 @@ the original entry and the last reached address, so a stale link can be retried.
 autoapp forms --dry-run             # Inspect unresolved prepared forms; no changes or requests
 autoapp forms                       # Backfill only prepared non-email jobs without a result
 autoapp forms --job <id> --again     # Retry from the original entry, even if previously found
+autoapp forms --audit [--json]       # Read-only report of the saved links; changes nothing
 ```
 
 Refreshing links changes only generated application-link/status blocks, not your letters,
