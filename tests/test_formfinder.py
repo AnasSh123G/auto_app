@@ -593,7 +593,7 @@ def test_both_lookups_missing_prepares_the_letter_and_marks_the_folder_noemploye
     assert f'<a href="{BA_PAGE}" rel="noopener">Job ad</a>' in texts["apply.html"]
     assert "Application page</a>" not in texts["apply.html"]
     assert "Application page:** none yet" in texts["job.md"]
-    for name, text in texts.items():
+    for text in texts.values():
         assert f"Application page:** {BA_PAGE}" not in text and f"Application link:** {BA_PAGE}" not in text
     from autoapp.tracking.csv_export import export_csv
 
