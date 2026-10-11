@@ -522,3 +522,176 @@ def test_an_apply_page_built_by_javascript_is_handed_to_the_browser(ctx):
     ctx._http = Http()
     out = find(ctx, "https://www.employer.example/software-engineer-m-w-d-40624.htm", title="Software Engineer")
     assert out.status == "needs_browser" and out.url == "https://portal.example/stellenangebot/bewerben/3531"
+
+
+def test_an_arbeitsagentur_entry_gives_way_to_the_matched_employer_posting(ctx):
+    jid = approved_job(ctx)
+    ba = "https://www.arbeitsagentur.de/jobsuche/jobdetail/10001-1-S"
+    ctx.repo.update_job(jid, job_url=ba, application_url=None)
+    row = ctx.repo.current_evaluation(jid)
+    payload = json.loads(row["payload"])
+    payload["result"]["application_url"] = None
+    ctx.conn.execute("UPDATE evaluations SET payload=? WHERE id=?", (json.dumps(payload), row["id"]))
+    ctx.conn.commit()
+    assert entry_url(ctx, ctx.repo.get_job(jid)) == ba  # nothing matched yet: the page is all there is
+    posting = "https://karriere.acme.example/job-3102.html"
+    ctx.conn.execute("INSERT INTO employer_seeds (job_id, outcome, posting_url, checked_at) VALUES (?, 'matched', ?, ?)",
+                     (jid, posting, "2026-10-09T12:00:00+00:00"))
+    assert entry_url(ctx, ctx.repo.get_job(jid)) == posting
+
+
+# --- Arbeitsagentur jobs without an employer link (no_employer_link) ---------------------------------------------
+
+BA_PAGE = "https://www.arbeitsagentur.de/jobsuche/jobdetail/10001-77-S"
+EMPLOYER_AD = "https://karriere.cbc.example/job-77.html"
+
+
+def aa_job(ctx, *, partner="jobvector.de", external="https://www.jobvector.de/job/x/"):
+    """An approved form job from the Arbeitsagentur whose externeURL (if any) leads to a partner board."""
+    jid = form_job(ctx)
+    row = ctx.repo.current_evaluation(jid)
+    payload = json.loads(row["payload"])
+    payload["result"]["application_url"] = None
+    ctx.conn.execute("UPDATE evaluations SET payload=? WHERE id=?", (json.dumps(payload), row["id"]))
+    ctx.conn.execute("DELETE FROM job_sources WHERE job_id = ?", (jid,))
+    ctx.conn.commit()
+    ctx.repo.update_job(jid, job_url=BA_PAGE, application_url=external)
+    detail = {"allianzpartnerName": partner, **({"externeURL": external} if external else {})}
+    ctx.repo.add_source(jid, "arbeitsagentur", "10001-77-S", raw={"detail": detail})
+    return jid
+
+
+def record_misses(ctx, jid, *, search=True, careers=True):
+    if search:
+        ctx.conn.execute("INSERT INTO posting_searches (job_id, found, reason, checked_at) VALUES (?, 0, ?, ?)",
+                         (jid, "the search found only job boards", "2026-10-11T12:00:00+00:00"))
+    if careers:
+        ctx.conn.execute("INSERT INTO employer_seeds (job_id, outcome, reason, checked_at) VALUES (?, 'not_found', ?, ?)",
+                         (jid, "no matching opening on the careers site", "2026-10-11T12:00:00+00:00"))
+    ctx.conn.commit()
+
+
+def prepared_texts(ctx, jid):
+    folder = Path(ctx.repo.get_application(jid)["folder"])
+    return folder, {n: (folder / n).read_text() for n in ("README.md", "job.md", "apply.html")}
+
+
+def test_both_lookups_missing_prepares_the_letter_and_marks_the_folder_noemployer(ctx):
+    jid = aa_job(ctx)
+    record_misses(ctx, jid)
+    seen = transport(ctx, lambda r: httpx.Response(200, text=FORM))
+    assert prepare_jobs(ctx, [jid], renderer_factory=factory(FakeRenderer([1]))).prepared == 1
+    assert seen == []  # the Arbeitsagentur (or partner board) page is never crawled
+    app = ctx.repo.get_application(jid)
+    assert app["form_status"] == "no_employer_link" and app["form_note"].startswith("employer ad not found yet: ")
+    assert ctx.repo.get_job(jid)["application_url"] is None and ctx.repo.get_job(jid)["status"] == "prepared"
+    folder, texts = prepared_texts(ctx, jid)
+    assert folder.name.endswith(f"_{jid}_NOEMPLOYER") and (folder / "cover_letter.pdf").exists()
+    for name, text in texts.items():
+        assert "employer ad not found yet" in text, name
+    assert f"- **Job ad:** {BA_PAGE}" in texts["README.md"] and "Application link:** none yet" in texts["README.md"]
+    assert f'<a href="{BA_PAGE}" rel="noopener">Job ad</a>' in texts["apply.html"]
+    assert "Application page</a>" not in texts["apply.html"]
+    assert "Application page:** none yet" in texts["job.md"]
+    for text in texts.values():
+        assert f"Application page:** {BA_PAGE}" not in text and f"Application link:** {BA_PAGE}" not in text
+    from autoapp.tracking.csv_export import export_csv
+
+    export_csv(ctx.conn, ctx.ws.csv_path, ctx.config.tracking.delimiter, include_skipped=True)
+    assert "employer ad not found" in ctx.ws.csv_path.read_text()
+
+
+def test_the_employers_ad_found_later_refreshes_status_marker_and_links(ctx):
+    jid = aa_job(ctx)
+    record_misses(ctx, jid)
+    transport(ctx, lambda r: httpx.Response(200, text=FORM))
+    prepare_jobs(ctx, [jid], renderer_factory=factory(FakeRenderer([1])))
+    old, _ = prepared_texts(ctx, jid)
+    assert old.name.endswith("_NOEMPLOYER")
+    ctx.conn.execute("INSERT INTO employer_seeds (job_id, outcome, posting_url, checked_at) VALUES (?, 'matched', ?, ?) "
+                     "ON CONFLICT(job_id) DO UPDATE SET outcome = 'matched', posting_url = excluded.posting_url",
+                     (jid, EMPLOYER_AD, "2026-10-12T12:00:00+00:00"))
+    ctx.repo.update_job(jid, application_url=EMPLOYER_AD)
+    seen = transport(ctx, lambda r: httpx.Response(200, text=FORM))
+    assert resolve(ctx, ctx.repo.get_job(jid), again=True, refresh_package=True).status == "found"
+    assert seen and seen[0] == EMPLOYER_AD
+    folder, texts = prepared_texts(ctx, jid)
+    assert not folder.name.endswith("_NOEMPLOYER") and not old.exists()
+    assert ctx.repo.get_application(jid)["form_status"] == "found"
+    assert EMPLOYER_AD in texts["README.md"] and EMPLOYER_AD in texts["apply.html"] and "none yet" not in texts["job.md"]
+
+
+def test_a_job_prepared_before_the_lookups_ran_follows_them(ctx):
+    from autoapp.employers.service import _recheck_no_employer_forms
+
+    jid = aa_job(ctx)
+    seen = transport(ctx, lambda r: httpx.Response(200, text=FORM))
+    prepare_jobs(ctx, [jid], renderer_factory=factory(FakeRenderer([1])))
+    assert seen == []
+    assert ctx.repo.get_application(jid)["form_status"] == "restricted"
+    folder, _ = prepared_texts(ctx, jid)
+    assert folder.name.endswith("_RESTRICTED")
+    record_misses(ctx, jid)
+    _recheck_no_employer_forms(ctx, [jid], lambda *a, **k: None)
+    folder, texts = prepared_texts(ctx, jid)
+    assert ctx.repo.get_application(jid)["form_status"] == "no_employer_link" and folder.name.endswith("_NOEMPLOYER")
+    assert "employer ad not found yet" in texts["README.md"] and seen == []
+
+
+def test_a_search_that_has_not_run_is_not_a_miss(ctx, monkeypatch):
+    jid = aa_job(ctx)
+    seen = transport(ctx, lambda r: httpx.Response(200, text=FORM))
+    monkeypatch.delenv("PARALLEL_API_KEY", raising=False)
+    for misses in ({}, {"careers": False}, {"search": False}):  # neither lookup, or only one of them, ran
+        ctx.conn.execute("DELETE FROM posting_searches")
+        ctx.conn.execute("DELETE FROM employer_seeds")
+        if misses == {"careers": False}:
+            record_misses(ctx, jid, careers=False)
+        elif misses == {"search": False}:
+            record_misses(ctx, jid, search=False)
+        outcome = resolve(ctx, ctx.repo.get_job(jid), again=True)
+        assert outcome.status == "restricted" and outcome.url is None, misses
+        assert "employer ad not searched yet" in outcome.note
+        assert ctx.repo.get_job(jid)["application_url"] is None
+    assert "PARALLEL_API_KEY" in resolve(ctx, ctx.repo.get_job(jid), again=True).note
+    assert seen == []
+
+
+def test_an_ad_posted_only_on_the_arbeitsagentur_keeps_that_link_with_a_label(ctx):
+    jid = aa_job(ctx, partner="arbeitsagentur.de", external=None)
+    record_misses(ctx, jid)
+    seen = transport(ctx, lambda r: httpx.Response(200, text=FORM))
+    prepare_jobs(ctx, [jid], renderer_factory=factory(FakeRenderer([1])))
+    app = ctx.repo.get_application(jid)
+    assert app["form_status"] == "restricted" and app["form_note"].startswith("only on the Arbeitsagentur")
+    assert ctx.repo.get_job(jid)["application_url"] == BA_PAGE and seen == []
+    _, texts = prepared_texts(ctx, jid)
+    assert f"Application link:** {BA_PAGE} (only on the Arbeitsagentur)" in texts["README.md"]
+    assert "only on the Arbeitsagentur" in texts["apply.html"] and "NOEMPLOYER" not in ctx.repo.get_application(jid)["folder"]
+
+
+def test_a_direct_posting_still_waits_for_both_lookups(ctx):
+    jid = aa_job(ctx, partner="arbeitsagentur.de", external=None)
+    transport(ctx, lambda r: httpx.Response(200, text=FORM))
+    outcome = resolve(ctx, ctx.repo.get_job(jid), again=True)
+    assert outcome.status == "restricted" and outcome.url is None and "not searched yet" in outcome.note
+
+
+def test_an_employers_own_externe_url_is_still_followed(ctx):
+    jid = aa_job(ctx, partner="cbc.example", external="https://cbc.example/start")
+    seen = transport(ctx, lambda r: httpx.Response(200, text=FORM))
+    assert resolve(ctx, ctx.repo.get_job(jid)).status == "found" and seen == ["https://cbc.example/start"]
+
+
+def test_the_new_status_in_labels_markers_and_explanations():
+    from autoapp.formfinder.explain import explain
+    from autoapp.formfinder.finder import LABELS
+    from autoapp.package.folders import marker_for
+
+    assert LABELS["no_employer_link"] == "employer ad not found"
+    assert marker_for("employer_form", "no_employer_link") == "NOEMPLOYER" and marker_for("email", "no_employer_link") is None
+    found = explain("no_employer_link", "employer ad not found yet: the search found only job boards")
+    assert found.short == "employer ad not found" and "job boards" in found.what
+    assert explain("restricted", "only on the Arbeitsagentur: x").short == "apply on the Arbeitsagentur"
+    assert explain("restricted", "restricted target: arbeitsagentur.de; employer ad not searched yet: no key").short \
+        == "employer ad not searched"

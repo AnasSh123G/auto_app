@@ -66,7 +66,7 @@ def _rows(ws: Workspace, sql: str, args: tuple = ()) -> list[sqlite3.Row]:
 
 # Order of the forms list: what the app can fill first, what only you can do last.
 FORM_ORDER = {"found": 0, None: 1, "needs_browser": 2, "login_required": 3, "captcha": 3, "partial": 4,
-              "none": 4, "restricted": 5, "unreachable": 6}
+              "none": 4, "no_employer_link": 5, "restricted": 5, "unreachable": 6}
 
 
 def form_jobs(ws: Workspace) -> list[sqlite3.Row]:
@@ -251,7 +251,9 @@ def form_actions(tctx: typer.Context, p: Prompter, job: sqlite3.Row) -> None:
     p.say(_job_label(job))
     for line in found.lines():
         p.say(line)
-    if job["form_status"] == "restricted":
+    if job["form_status"] == "no_employer_link":
+        actions = []  # nothing to open in the app's browser: there is no employer page yet
+    elif job["form_status"] == "restricted":
         from autoapp.cli import load_config_or_default
         from autoapp.fetch.apply_links import PLATFORM_LABELS, platform_of
 
@@ -506,7 +508,7 @@ def entry_tests(tctx: typer.Context, p: Prompter) -> str:
     choice = p.select("Which test?", [
         ("quick", "Quick test: a small sample of every step (a few emails, jobs, employers, one application), then a checklist"),
         ("testrun", "Test run: a full run where every email comes to you, marked TEST_RUN"),
-        ("fresh", "Fresh test run: as above, but every job counts as new (your history is not touched)"),
+        ("fresh", "Full test run (fresh): as above, but every job counts as new (your history is not touched)"),
         ("email", "Send a test email for one application to myself"),
         ("logins", "Check the logins (mailboxes, AI model, Adzuna)"),
         ("dry", "Dry run: a full run that sends nothing, saves no drafts and marks no emails"),
@@ -523,7 +525,7 @@ def entry_tests(tctx: typer.Context, p: Prompter) -> str:
     if choice == "fresh":
         code = _call(run_with_mode, tctx, profile=None, mode="test", dry_run=False, interactive=True, prompter=p,
                      ask_mode=False, fresh=True)
-        return "Fresh test run finished." if code == 0 else f"Fresh test run finished with problems (exit code {code})."
+        return "Full test run finished." if code == 0 else f"Full test run finished with problems (exit code {code})."
     if choice == "email":
         jobs = _rows(tctx.obj.workspace, "SELECT j.* FROM jobs j JOIN applications a ON a.job_id = j.id "
                                          "WHERE j.status IN ('prepared', 'drafted') AND a.channel = 'email' "

@@ -137,7 +137,9 @@ def search(
         alerts_search_first,
         find_alert_ads,
         find_own_ads,
+        own_ads_wanted,
         run_discovery,
+        seed_arbeitsagentur_misses,
     )
     from autoapp.steps.fetch import fetch_details
     from autoapp.steps.pipeline import RunSummary
@@ -148,13 +150,16 @@ def search(
         search_first = alerts_search_first(ctx.config)
         if search_first:
             s.alerts = find_alert_ads(ctx)
+            if s.search is not None:
+                s.alerts.llm_extracted = s.search.alert_llm_extracted
         if search_first or ctx.config.sources.employer_careers.enabled:
             s.employers = run_discovery(ctx, profile=profile)
             if s.alerts is not None:
                 add_careers_matches(ctx, s.alerts)
         s.fetch = fetch_details(ctx)
-        if ctx.config.sources.employer_careers.enabled:
+        if own_ads_wanted(ctx.config):
             s.own_ads = find_own_ads(ctx)
+            s.late_employers = seed_arbeitsagentur_misses(ctx, s.own_ads)
         _echo_lines(s.lines(), ctx)
         for error in (s.employers.errors if s.employers else []):
             _echo_error(error, ctx)
@@ -400,11 +405,24 @@ def forms(
     job: str | None = typer.Option(None, "--job", "-j"),
     again: bool = typer.Option(False, "--again", help="Retry every status, including found, from the original entry."),
     dry_run: bool = typer.Option(False, "--dry-run", help="List starting addresses without any changes or requests."),
+    audit: bool = typer.Option(False, "--audit", help="Read-only report of the saved form links: status, job boards, "
+                                                      "sources and causes. Changes nothing, makes no requests."),
+    as_json: bool = typer.Option(False, "--json", help="With --audit: print the report as JSON."),
 ) -> None:
     """Find application forms for prepared non-email jobs and refresh their links."""
     import sqlite3
 
     from autoapp.formfinder.store import entry_url, resolve, selected
+
+    if as_json and not audit:
+        typer.echo("error: --json needs --audit", err=True)
+        raise typer.Exit(2)
+    if audit:
+        if job or again or dry_run:
+            typer.echo("error: --audit cannot be combined with --job, --again or --dry-run", err=True)
+            raise typer.Exit(2)
+        _forms_audit(get_context(tctx).workspace, as_json)
+        return
 
     if dry_run:
         ws = get_context(tctx).workspace
@@ -455,6 +473,42 @@ def forms(
             from autoapp.formfinder.finder import LABELS
 
             typer.echo(f"{row['id']}: {LABELS[result.status]}: {result.url} ({result.note})")
+
+
+def _audit_data(ws) -> dict:  # noqa: ANN001
+    """The form-link audit of a workspace, read-only; an empty one when it has no database yet."""
+    from autoapp.config.models import DEFAULT_RESTRICTED_DOMAINS, ConfigError, load_config
+    from autoapp.formfinder import audit as form_audit
+
+    try:
+        restricted = load_config(ws).assist.restricted_domains
+    except (ConfigError, OSError):
+        restricted = DEFAULT_RESTRICTED_DOMAINS
+    conn = form_audit.open_readonly(ws.db_path)
+    if conn is None:
+        return form_audit.empty()
+    try:
+        return form_audit.audit(conn, restricted)
+    finally:
+        conn.close()
+
+
+def _forms_audit(ws, as_json: bool) -> None:  # noqa: ANN001
+    import json
+    import sqlite3
+
+    from autoapp.formfinder import audit as form_audit
+
+    try:
+        data = _audit_data(ws)
+    except sqlite3.Error as error:
+        typer.echo(f"error: cannot inspect the database read-only: {error}", err=True)
+        raise typer.Exit(1) from error
+    if as_json:
+        typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        for line in form_audit.lines(data):
+            typer.echo(line)
 
 
 @app.command()
@@ -668,18 +722,34 @@ def run(
 @app.command(name="test")
 def quick_test(
     tctx: typer.Context,
+    quick: bool = typer.Option(False, "--quick", help="A small sample of every step, then a pass/fail checklist."),
+    full: bool = typer.Option(False, "--full", help="A whole test run in a fresh test workspace "
+                              "(same as `run --mode test --fresh`)."),
     profile: str | None = typer.Option(None, "--profile", "-p", help="Use only this search profile."),
     no_dashboard: bool = typer.Option(False, "--no-dashboard", help="Print plain lines instead of the live view."),
 ) -> None:
-    """Quick test: a small sample of every step in a throwaway workspace, then a pass/fail checklist.
+    """Test the app in a throwaway workspace: pick --quick or --full (without either, nothing starts; exit code 2).
 
-    Reads the newest one or two alert emails (not marked as processed), asks each job source for a couple of jobs,
-    looks up a couple of employers online, evaluates a few jobs, prepares one email and one form application and
-    sends at most one TEST_RUN email to yourself. Your real jobs, statuses and CSV are not touched; the searches
-    and AI calls are real and count against your limits. Exit code 1 when any part FAILED.
+    --quick reads the newest one or two alert emails (not marked as processed), asks each job source for a couple
+    of jobs, looks up a couple of employers online, evaluates a few jobs, prepares one email and one form
+    application and sends at most one TEST_RUN email to yourself, then prints a pass/fail checklist. Exit code 1
+    when any part FAILED.
+
+    --full is a whole test run with every job counted as new, every email coming to you marked TEST_RUN.
+
+    Your real jobs, statuses and CSV are not touched; the searches and AI calls are real and count against your limits.
     """
+    if quick and full:
+        typer.echo("error: --quick and --full cannot be combined: pick one", err=True)
+        raise typer.Exit(code=2)
+    if not quick and not full:
+        typer.echo("autoapp test needs a choice:\n"
+                   "  autoapp test --quick   a small sample of every step, then a checklist\n"
+                   "  autoapp test --full    a whole test run in a fresh test workspace (like run --mode test --fresh)",
+                   err=True)
+        raise typer.Exit(code=2)
     run_with_mode(tctx, profile=profile, mode="test", dry_run=False, interactive=_interactive(False),
-                  no_dashboard=no_dashboard, ask_mode=False, fresh=True, sample=True)
+                  no_dashboard=no_dashboard, ask_mode=False, fresh=True, sample=quick)
 
 
 def run_with_mode(tctx: typer.Context, *, profile: str | None, mode: str | None, dry_run: bool, interactive: bool,
@@ -688,7 +758,7 @@ def run_with_mode(tctx: typer.Context, *, profile: str | None, mode: str | None,
     """``run`` and the menu's "Run now": resolve the mode, run, then offer to finish forms.
 
     ``fresh`` (test mode only) runs in a new test workspace with an empty job history (``steps.sandbox``).
-    ``sample`` (the quick test, ``autoapp test``) takes a small sample of every step and ends with a checklist.
+    ``sample`` (the quick test, ``autoapp test --quick``) takes a small sample of every step and ends with a checklist.
     """
     if fresh:
         from autoapp.steps import sandbox
@@ -705,6 +775,8 @@ def run_with_mode(tctx: typer.Context, *, profile: str | None, mode: str | None,
         finally:
             app_ctx.workspace = real
             sandbox.merge_back(box)
+            if sample:
+                _echo_form_audit(real)
             typer.echo(sandbox.describe(box))
         return
     from autoapp.dashboard.live import PlainPrinter, can_use_live
@@ -755,9 +827,10 @@ def run_with_mode(tctx: typer.Context, *, profile: str | None, mode: str | None,
             s = run_pipeline(ctx, profile)
             _echo_lines(s.lines(), ctx)
             if sample:
-                from autoapp.steps.quicktest import build_report
+                from autoapp.steps.quicktest import build_report, form_links
 
-                checklist = build_report(ctx.config, s)
+                links = form_links(ctx, s.prepare.prepared_ids if s.prepare else [])
+                checklist = build_report(ctx.config, s, links=links)
                 _echo_lines(checklist.lines(), ctx)
             forms = len(s.forms_to_finish) if interactive and not dry_run and not sample else 0  # no forms to finish in a quick test
         if forms:
@@ -783,6 +856,19 @@ def run_with_mode(tctx: typer.Context, *, profile: str | None, mode: str | None,
         screen.stop(wait_for_key=not forms)
     if s is not None and (not s.ok or (checklist is not None and checklist.failed)):
         raise typer.Exit(code=1)
+
+
+def _echo_form_audit(real) -> None:  # noqa: ANN001
+    """The quick test's baseline: the real workspace's form links, read-only (a failure only skips the lines)."""
+    import sqlite3
+
+    from autoapp.formfinder import audit as form_audit
+
+    try:
+        for line in form_audit.lines(_audit_data(real), "real workspace"):
+            typer.echo(line)
+    except sqlite3.Error as error:
+        typer.echo(f"existing form links: not available ({error})")
 
 
 def _start_redo(ctx, *, dry_run: bool, interactive: bool, prompter) -> bool:  # noqa: ANN001

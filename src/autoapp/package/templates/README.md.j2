@@ -27,6 +27,8 @@
 {% endif %}
 {% if d.channel == "email" %}
 - **Send to:** {{ d.apply_email or "(address missing)" }}
+{% elif d.no_employer %}
+- **Application link:** none yet
 {% else %}
 - **Application link:** {{ d.application_url or d.job_url or "not available" }}
 {% endif %}
@@ -41,6 +43,8 @@
 
 {% if d.channel == "email" %}
 Check `cover_letter.md` and `email.eml`, then let auto-send handle it or run `autoapp send {{ d.job_id }}`.
+{% elif d.no_employer %}
+The cover letter is ready, but the employer's own ad was not found yet (see the form status above), so there is no application page. The job ad link only shows the ad. `autoapp search` looks again on later runs; when you find the employer's application page yourself, paste it in the forms menu.
 {% elif d.channel == "employer_form" %}
 Run `autoapp assist {{ d.job_id }}` to fill the form, or open `apply.html` and copy the answers by hand.
 {% elif d.channel == "platform" %}

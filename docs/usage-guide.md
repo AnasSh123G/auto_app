@@ -181,7 +181,7 @@ Redo unsent · Add a job by URL · Tests · Settings · Quit
 | **Employer sites** | Careers sites found for your alert jobs | Show, preview, look up, scan again, confirm a website for one job (section 14) |
 | **Redo unsent** | Process every unsent job again | Section 11 |
 | **Add a job by URL** | One job you found yourself | Paste the link. If the page cannot be read, it offers to let you paste the ad text |
-| **Tests** | Safe experiments | Quick test (the default), test run, fresh test run, test email, check logins, dry run |
+| **Tests** | Safe experiments | Quick test (the default), test run, full test run (fresh), test email, check logins, dry run |
 | **Settings** | Change setup | Edit a section, default run mode for scheduled runs, redo or reset, delete all job data (keeps the setup) |
 | **Quit** | Leave | |
 
@@ -386,7 +386,8 @@ why, without opening the folder:
 | `_NOFORM` | No application form found, or only part of the way |
 | `_BROWSER` | The site refuses plain requests; it needs a real browser |
 | `_LOGIN` / `_CAPTCHA` | A login or a robot check is in the way |
-| `_RESTRICTED` | The form is on LinkedIn, Indeed or StepStone |
+| `_RESTRICTED` | The form is on LinkedIn, Indeed or StepStone (or an Arbeitsagentur ad not yet searched at the employer) |
+| `_NOEMPLOYER` | An Arbeitsagentur job whose employer's own ad was not found; the letter is ready, apply once the ad turns up |
 | `_UNREACHABLE` | The page could not be loaded (often: the ad is gone) |
 
 When a later look changes the result, the folder is renamed and the paths inside its files are updated. A folder you
@@ -431,6 +432,9 @@ Jobs the program can fill come first. The bracket says what the job needs from y
 | `click through yourself` | No apply button the program may safely click (many Arbeitsagentur ads build their button with scripts) | Click "apply" yourself, then press `f` when the form shows |
 | `apply yourself` | The job is on LinkedIn, Indeed or StepStone, and neither the employer's own site nor (if switched on) the page read with your login gave a company apply address | Open it in your normal browser. If it has "Apply on company website", click it, copy that address and choose **paste its address**: the app opens and fills the employer's form. Otherwise apply there with `apply.html` |
 | `apply on the site` | Read with your login: the job only takes applications on LinkedIn/Indeed/StepStone itself (for example Easy Apply) | Apply there yourself with the answers in `apply.html`, then mark it submitted |
+| `employer ad not found` | An Arbeitsagentur job: the search by company and title and the employer's careers pages both ran and found no ad (folder ending `_NOEMPLOYER`) | The letter is ready. The app looks again on later searches; or open the job in your browser, follow it to the employer and **paste its address** |
+| `employer ad not searched` | An Arbeitsagentur job whose employer search has not run (no `PARALLEL_API_KEY`, a used-up limit or no company name) | Set the key (or wait for the limit), then search again; or paste the employer's address |
+| `apply on the Arbeitsagentur` | The ad is posted only on the Arbeitsagentur (no employer ad exists) | Apply on the Arbeitsagentur page with the answers in `apply.html` |
 | `ad gone` / `page not loading` | The job page no longer loads | Check the link in your own browser; if the ad is gone, mark it skipped |
 
 ### What happens when you pick a job
@@ -554,7 +558,21 @@ uv run autoapp forms --dry-run            # list what would be looked up (no req
 uv run autoapp forms                      # look for forms that have no result yet
 uv run autoapp forms --job <id> --again   # look again from the original link
 uv run autoapp assist <id>                # open one job directly in the browser
+uv run autoapp forms --audit [--json]     # read-only report of the saved form links (no requests, no changes)
 ```
+
+`forms --audit` counts the prepared web-form applications by form status (found, partial, none, need your browser,
+restricted, ...), how many links point at a job board (and which), the split by source and the most common reasons
+a link was not found:
+
+```
+existing form links (42 prepared):
+  found 18 (43%) · partial 9 · none 5 · needs browser 4 · restricted 3 · unchecked 3 · on job board: 6 (arbeitsagentur.de 5, linkedin.com 1)
+  by source: arbeitsagentur 20 (found 6) · linkedin-alert 12 (found 8) · stepstone-alert 10 (found 4)
+  causes: partial: no usable application continuation 5 · none: no usable application continuation 3
+```
+
+The quick test prints the same report for your real workspace after its checklist.
 
 ---
 
@@ -564,32 +582,41 @@ Five ways to try the program without sending anything to employers. They differ 
 
 | Option | Command | Emails | Your real job history | Costs AI money? |
 |---|---|---|---|---|
-| **Quick test** | `uv run autoapp test` (menu: Tests > Quick test) | At most one, to **you**, subject `TEST_RUN: ...` | **Not touched.** A small sample of every step in `workspace/test-runs/<time>/`, then a checklist | a little |
+| **Quick test** | `uv run autoapp test --quick` (menu: Tests > Quick test) | At most one, to **you**, subject `TEST_RUN: ...` | **Not touched.** A small sample of every step in `workspace/test-runs/<time>/`, then a checklist | a little |
 | **Dry run** | `uv run autoapp run --dry-run` (menu: Tests > Dry run) | none sent, none drafted; shows `WOULD ...` | Evaluations and folders are still made; mails are not marked processed | yes |
 | **Test run** | `uv run autoapp run --mode test` | Each goes to **you**, subject `TEST_RUN: ...` | Normal run; skips jobs already in the history | yes |
-| **Fresh test run** | `uv run autoapp run --mode test --fresh` | Each goes to **you** | **Not touched.** Runs in `workspace/test-runs/<time>/` with an empty history, so every job counts as new | yes |
+| **Full test run (fresh)** | `uv run autoapp test --full` (or `run --mode test --fresh`; menu: Tests > Full test run (fresh)) | Each goes to **you** | **Not touched.** Runs in `workspace/test-runs/<time>/` with an empty history, so every job counts as new | yes |
 | **Redo unsent** | `uv run autoapp run --redo` | Whatever mode you pick | **Reset on purpose** for unsent jobs (a backup is made first) | yes |
 
 ### Quick test
 
-`uv run autoapp test` (menu: **Tests > Quick test**, the pre-selected entry) checks the whole chain in a few minutes
+`uv run autoapp test --quick` (menu: **Tests > Quick test**, the pre-selected entry) checks the whole chain in a few minutes
 instead of simulating a whole run. In a throwaway workspace under `workspace/test-runs/<time>/` it:
 
-- reads the 1-2 newest alert emails (they are **not** marked as processed, so your next real run still reads them);
+- reads the newest alert email of **each known sender** (LinkedIn, StepStone, Indeed, Workwise), one each, taken from the
+  headers of the 60 most recent messages of the alert folder (only the headers are fetched first, nothing is
+  marked read or changed in your mailbox). Account or marketing mail from those senders (no job link) is skipped, so it
+  neither hides the alerts behind it nor shows up as a failed parser. The emails are **not** marked as processed in
+  your real workspace, so your next real run still reads them;
 - asks each enabled source (Arbeitsagentur, Adzuna, Workwise, Arbeitnow) for a couple of jobs, keeping at most 2 from each (Arbeitnow, which is
   read page by page, only 3 pages);
 - looks up at most 2 alert employers online: the own-ad search, then the employer's website and careers page;
-- evaluates at most 4 jobs and prepares at most 2: one email and one online-form application, **even if they score
-  below your threshold**, so that letter writing and the read-only form search are exercised (nothing is filled in,
-  uploaded or submitted);
+- chooses the jobs to prepare (below) **before** the own-ad search and the careers lookup of the Arbeitsagentur jobs, so a
+  job below your threshold gets the same employer search as in a real run (these jobs go first within the 2 lookups);
+- evaluates at most 6 jobs and prepares at most 4: one email application and up to three online-form applications,
+  taken from different sources (one Arbeitsagentur job, one alert job, one other; a source with no candidate gives
+  its slot to the next best score), **even if they score below your threshold**, so that letter writing and the
+  read-only form search are exercised (nothing is filled in, uploaded or submitted);
 - sends at most one `TEST_RUN:` email, to your own address only. The fit score does not stop it, every other
   send rule does.
 
-It ends with a checklist, one line per part, each `OK`, `FAILED` or `SKIPPED` with the reason:
+It ends with a checklist, one line per part, each `OK`, `WARN`, `FAILED` or `SKIPPED` with the reason. A "form links" section adds one line per
+prepared form job: job id, source, the final link, the form status with its note, and in brackets how the link was
+found (`direct search`, `careers page`, `externeURL` or `job page`):
 
 ```
 quick test checklist:
-  OK       alert mailbox: 2 newest emails read, 18 job cards
+  OK       alert mailbox: 2 alert emails read (the newest of each sender), 18 job cards
   OK       alert parser linkedin: 6 cards
   OK       source arbeitsagentur: 3 jobs found, 3 new
   FAILED   source adzuna: error: Adzuna rejected the app ID or key (HTTP 401)
@@ -602,17 +629,26 @@ quick test checklist:
   OK       letter writing: 2 applications prepared
   OK       form finding: 1 found, 1 partial
   SKIPPED  test email: no email application was prepared
-quick test: 10 OK, 1 FAILED, 2 SKIPPED
+form links:
+  OK       a1b2c3  arbeitsagentur → https://careers.ejot.com/job/123#apply  found (employer page, 2 hops) [careers page]
+  FAILED   d4e5f6  linkedin-alert → https://www.linkedin.com/jobs/view/1  restricted (own ad not found) [job page]
+  WARN     0789ab  arbeitsagentur → no link  no_employer_link (employer ad not found yet) [job page]
+quick test: 11 OK, 1 WARN, 2 FAILED, 2 SKIPPED
 ```
 
 (An example; yours depends on your sources and on what the newest alert emails contain.)
 
-`SKIPPED` means that part could not be tried this time (for example no alert email in the folder, a disabled source,
+`SKIPPED` means that part could not be tried this time (for example no job alert email among the newest in the folder, a disabled source,
 or no email application among the jobs it prepared, so no test email); run the quick test again later or use a
 **test run** for those parts;
+After the checklist it prints the read-only form-link audit of your real workspace (`autoapp forms --audit`), as a
+baseline for the form finding.
+`WARN` marks a form link that was not found (for example `no_employer_link`, `partial` or `needs_browser`) and does not
+change the exit code; a form link that ends on a job board (LinkedIn, Arbeitsagentur, ...) is `FAILED`.
 `FAILED` makes the command exit with code 1. Your real jobs, statuses, folders and CSV are not touched. The searches
 and AI calls are real, a handful in total, and are added to your real counters and limits. `--profile NAME` uses one
-search profile only. It cannot be set as `run.default_mode`.
+search profile only. It cannot be set as `run.default_mode`. `uv run autoapp test` without `--quick` or `--full`
+starts nothing: it prints the two choices and exits with code 2.
 
 ### Dry run
 
@@ -629,7 +665,7 @@ every job found is already in it.
 
 ### Fresh test run
 
-`uv run autoapp run --mode test --fresh` (menu: **Tests > Fresh test run**) solves exactly that. It copies your
+`uv run autoapp run --mode test --fresh` (or `uv run autoapp test --full`; menu: **Tests > Full test run (fresh)**) solves exactly that. It copies your
 settings, documents and saved employer sites into `workspace/test-runs/<time>/`, starts with an empty job history,
 and treats every ad found, including all alert emails of the last 30 days, as new. Your real jobs, folders and CSV are
 not touched. The AI calls it makes are real, so they are added to your real statistics. Delete the `test-runs/`
@@ -695,6 +731,7 @@ in your folder again. It does not run while another run is active.
 | `write` | Once per prepared application | Few calls, so a good writer is worth it |
 | `form_find` | Only on pages with several possible apply links | At most four calls per attempt |
 | `form_fill` | When you press `f` in assist | A few per form |
+| `alert_extract` | Only when an alert parser cannot name a card's employer or title, or finds no card | At most `sources.alerts.max_llm_extractions_per_run` (20) calls per run |
 
 Each task has its own model (`llm.tasks` in `config.yaml`). Costs are **estimates** from your token counts and the
 model's price. The provider's bill is what counts. OpenRouter prices are fetched automatically (once a day, no key);
@@ -915,8 +952,12 @@ own. There are two ways to still reach the employer's form:
      job where nothing matched is searched again after `failure_ttl_hours` at the earliest. The log line
      `AD SEARCH` gives the reason for every result that was not taken.
 
-   Either way the job then points at the employer's ad. If its folder was already prepared (`_RESTRICTED`), the
-   form is checked again at once and the folder renamed. An application form that is drawn by JavaScript (some job
+   Either way the job then points at the employer's ad. If its folder was already prepared (`_RESTRICTED` or
+   `_NOEMPLOYER`), the form is checked again at once and the folder renamed. An Arbeitsagentur job whose search
+   **and** careers lookup both ran without finding the employer's ad is marked `_NOEMPLOYER` ("employer ad not
+   found"): its letter is still prepared, the Arbeitsagentur page is shown only as **Job ad**, and the lookups are
+   repeated after `failure_ttl_hours`. A lookup that did not run at all (no key, a limit) is not a miss; the job
+   stays `_RESTRICTED` with the reason. An application form that is drawn by JavaScript (some job
    portals) is marked `need your browser`; **Finish forms** opens it in the app's browser.
 2. **Read the company apply link with your login (off by default).** In **Settings > sources** choose "Also read
    them from the job page with my login" and the sites. Then log in once in the app's browser:

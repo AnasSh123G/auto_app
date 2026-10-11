@@ -300,7 +300,23 @@ CREATE TABLE posting_searches (
 );
 """
 
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7]
+# One trace per form-finding run (formfinder/finder.py): strategy, the pages visited (hops with the reason each
+# was visited), the final status and how long it took. ``applications.form_note`` stays the one-line summary.
+_V8 = """
+CREATE TABLE form_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    strategy TEXT NOT NULL CHECK (strategy IN ('http', 'browser', 'ats')),
+    hops TEXT NOT NULL,
+    status TEXT NOT NULL,
+    note TEXT,
+    duration_ms INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX idx_form_attempts_job ON form_attempts(job_id, id);
+"""
+
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8]
 
 
 def current_version(conn: sqlite3.Connection) -> int:

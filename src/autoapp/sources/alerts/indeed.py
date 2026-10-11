@@ -29,7 +29,7 @@ import re
 from email.message import EmailMessage
 from urllib.parse import parse_qs, urlsplit
 
-from autoapp.sources.alerts._mail import plain_text
+from autoapp.sources.alerts._mail import link_text, plain_text
 from autoapp.sources.alerts.models import AlertCard
 
 _ANCHOR = re.compile(r"^(Job anzeigen|View job|Stelle ansehen)\s*:\s*(\S+)", re.IGNORECASE)
@@ -40,6 +40,8 @@ _JK = re.compile(r"^[0-9a-f]{16}$")
 _POSTCODE = re.compile(r"^\d{5}\s+")
 _CONTRACT_WORDS = ("fest", "befrist", "unbefrist", "freelance", "freiberuf", "praktikum", "ausbildung",
                    "werkstudent", "permanent", "temporary", "contract", "internship", "minijob")
+_DIRECT_JOB = re.compile(r"indeed\.[a-z.]+/(?:viewjob|rc/clk|pagead/clk)", re.IGNORECASE)
+_URLS = re.compile(r"https?://[^\s<>\"')\]]+")
 _MONEY = re.compile(r"(\d{1,3}(?:\.\d{3})+|\d+)\s*€")
 
 
@@ -102,6 +104,13 @@ class IndeedParser:
     def handles(self, from_addr: str) -> bool:
         domain = from_addr.rsplit("@", 1)[-1].lower()
         return domain == "indeed.com" or domain.endswith(".indeed.com")
+
+    def is_job_alert(self, msg: EmailMessage) -> bool:
+        text = link_text(msg)
+        if not text.strip() or _DIRECT_JOB.search(text):
+            return True
+        # Tracking links carry the job key in their payload; one without a key (verify, unsubscribe) is no job.
+        return any(job_key(url) for url in _URLS.findall(text))
 
     def parse(self, msg: EmailMessage) -> list[AlertCard]:
         from autoapp.sources.alerts._mail import from_address

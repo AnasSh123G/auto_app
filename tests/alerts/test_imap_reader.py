@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from autoapp.config.models import MailAccount
-from autoapp.sources.alerts import FakeMailbox, ImapAlertMailbox, ingest_alerts
+from autoapp.sources.alerts import FakeMailbox, ImapAlertMailbox, UnparsedEmail, ingest_alerts
 from tests.alerts.conftest import FIXTURES, load_eml
 
 FORBIDDEN = {"SELECT", "STORE", "EXPUNGE", "COPY", "MOVE", "UID", "APPEND", "DELETE", "CREATE", "RENAME"}
@@ -167,12 +167,12 @@ def test_unknown_sender_not_marked_processed() -> None:
     assert again.unrecognised == 1  # still waiting for a parser
 
 
-def test_zero_card_email_warns_and_is_marked() -> None:
+def test_zero_card_email_warns_and_is_not_marked() -> None:
     mailbox = FakeMailbox([("<z@x>", load_eml("stepstone_zero.eml"))])
     store = Store()
     result = ingest_alerts(mailbox, "Jobalerts", store.is_processed, store.mark)
     assert any("parser may be outdated" in w for w in result.warnings)
-    assert store.rows["<z@x>"][1] == 0
+    assert "<z@x>" not in store.rows  # kept for the extraction fallback; see test_excerpts.py
 
 
 def test_folder_is_passed_through_and_duplicates_collapse() -> None:
@@ -181,3 +181,113 @@ def test_folder_is_passed_through_and_duplicates_collapse() -> None:
     store = Store()
     result = ingest_alerts(mailbox, "Jobalerts", store.is_processed, store.mark)
     assert len(result.cards) == 6
+
+
+# --- account mail and per-sender sampling (quick test) -------------------------------------------------------------
+
+_ACCOUNT_SENDERS = {
+    "linkedin": "LinkedIn <jobalerts-noreply@linkedin.com>",
+    "stepstone": "StepStone <noreply@jobagent.stepstone.de>",
+    "indeed": "Indeed <alert@indeed.com>",
+    "workwise": "Workwise <noreply@workwise.io>",
+}
+
+
+@pytest.mark.parametrize("name", sorted(_ACCOUNT_SENDERS))
+def test_mail_without_a_job_link_is_not_a_job_alert_for_every_parser(name: str) -> None:
+    from autoapp.sources.alerts.registry import parser_for
+    from tests.alerts.conftest import account_mail
+
+    msg = account_mail(_ACCOUNT_SENDERS[name], "Confirm your email: https://www.example.com/confirm?x=1\n")
+    parser = parser_for(msg)
+    assert parser is not None and parser.name == name and not parser.is_job_alert(msg)
+    empty = EmailMessage()
+    empty["From"] = _ACCOUNT_SENDERS[name]
+    empty.set_content("")
+    assert parser.is_job_alert(empty)  # conservative: no readable body, so it is treated as an alert
+
+
+@pytest.mark.parametrize("fixture", ["linkedin_alert.eml", "stepstone_alert.eml", "stepstone_zero.eml", "indeed_match.eml"])
+def test_the_alert_fixtures_are_job_alerts(fixture: str) -> None:
+    from autoapp.sources.alerts.registry import parser_for
+
+    msg = load_eml(fixture)
+    parser = parser_for(msg)
+    assert parser is not None and parser.is_job_alert(msg)
+
+
+def test_workwise_and_indeed_job_links_make_an_alert_also_when_wrapped_in_a_tracking_address() -> None:
+    from autoapp.sources.alerts.registry import parser_for
+    from tests.alerts.conftest import account_mail
+
+    for sender, link in ((_ACCOUNT_SENDERS["workwise"], "https://t.example.com/c?u=https%3A%2F%2Fwww.workwise.io%2Fjob%2F123-dev"),
+                          (_ACCOUNT_SENDERS["indeed"], "https://de.indeed.com/viewjob?jk=0123456789abcdef")):
+        msg = account_mail(sender, f"New job: {link}\n")
+        parser = parser_for(msg)
+        assert parser is not None and parser.is_job_alert(msg)
+
+
+def test_account_mail_is_marked_processed_without_a_fallback_or_a_warning() -> None:
+    from tests.alerts.conftest import account_mail
+
+    calls: list[UnparsedEmail] = []
+    store = Store()
+    mailbox = FakeMailbox([("<acc@x>", account_mail(_ACCOUNT_SENDERS["workwise"], "Confirm: https://www.workwise.io/x\n"))])
+    result = ingest_alerts(mailbox, "f", store.is_processed, store.mark, fallback=lambda e: calls.append(e) or [])
+    assert store.rows["<acc@x>"] == ("noreply@workwise.io", 0) and result.not_alerts == ["<acc@x>"]
+    assert calls == [] and result.warnings == [] and result.unprocessed == [] and result.parsers == {}
+
+
+def test_an_alert_looking_email_without_a_card_is_still_read_by_the_fallback_and_counts_as_a_parser_miss() -> None:
+    from tests.alerts.conftest import unreadable_linkedin
+
+    calls: list[UnparsedEmail] = []
+    store = Store()
+    result = ingest_alerts(FakeMailbox([("<u@x>", unreadable_linkedin())]), "f", store.is_processed, store.mark,
+                           fallback=lambda e: calls.append(e) or [], per_sender=1)
+    assert len(calls) == 1 and result.parsers == {"linkedin": 0} and result.not_alerts == []
+
+
+def test_per_sender_sampling_reads_the_newest_alert_of_each_known_sender() -> None:
+    from tests.alerts.conftest import account_mail
+
+    mailbox = FakeMailbox([
+        ("<s1>", load_eml("stepstone_alert.eml")), ("<l-old>", load_eml("linkedin_alert.eml")),
+        ("<l-new>", load_eml("linkedin_alert.eml")), ("<x>", _unknown()),
+        ("<w1>", account_mail(_ACCOUNT_SENDERS["workwise"], "Confirm your email\n", "<w1>")),
+        ("<w2>", account_mail(_ACCOUNT_SENDERS["workwise"], "Set a password\n", "<w2>"))])
+    store = Store()
+    result = ingest_alerts(mailbox, "f", store.is_processed, store.mark, per_sender=1)
+    assert set(store.rows) == {"<s1>", "<l-new>"} and set(result.parsers) == {"linkedin", "stepstone"}
+    store.rows.clear()
+    assert set(ingest_alerts(mailbox, "f", store.is_processed, store.mark, per_sender=1, scan=1).parsers) == set()
+
+
+def test_imap_per_sender_scan_reads_headers_first_and_never_sets_a_flag(fake_imap: type[RecordingIMAP]) -> None:
+    from tests.alerts.conftest import account_mail
+
+    fake_imap.raw = {
+        b"1": (FIXTURES / "linkedin_alert.eml").read_bytes(),
+        b"2": (FIXTURES / "stepstone_alert.eml").read_bytes(),
+        b"3": account_mail(_ACCOUNT_SENDERS["workwise"], "Confirm your email\n", "<w1@x>").as_bytes(),
+        b"4": account_mail(_ACCOUNT_SENDERS["workwise"], "Set a password\n", "<w2@x>").as_bytes(),
+    }
+    box = ImapAlertMailbox(_gmail(), "secret")
+    picked = box.list_per_sender("Job alerts", lambda mid: False, 1, 60)
+    assert {m[0] for m in picked} == {"<dummy-linkedin-alert@example.com>", "<dummy-stepstone-alert@example.com>"}
+    commands = fake_imap.instances[0].commands
+    names = [c[0] for c in commands]
+    assert not FORBIDDEN & set(names) and names[:3] == ["LOGIN", "EXAMINE", "SEARCH"]
+    fetches = [c[1][1] for c in commands if c[0] == "FETCH"]
+    assert all(f.startswith("(BODY.PEEK[") for f in fetches)  # PEEK only: no \Seen
+    assert fetches[:4] == ["(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID)])"] * 4  # all headers before any body
+    assert fetches.count("(BODY.PEEK[])") == 4  # linkedin, stepstone and the two Workwise account mails
+
+
+def test_imap_per_sender_scan_skips_processed_mail_and_is_bounded(fake_imap: type[RecordingIMAP]) -> None:
+    box = ImapAlertMailbox(_gmail(), "secret")
+    done = {"<dummy-linkedin-alert@example.com>"}
+    assert [m[0] for m in box.list_per_sender("f", done.__contains__, 1, 60)] == ["<dummy-stepstone-alert@example.com>"]
+    box.list_per_sender("f", lambda mid: False, 1, 1)  # only the newest message's header is looked at
+    fetches = [c[1][0] for c in fake_imap.instances[-1].commands if c[0] == "FETCH"]
+    assert fetches[0] == "2" and len(fetches) == 2  # message 2 (newest): its header and its body

@@ -38,7 +38,7 @@ from autoapp.config.models import (
 )
 from autoapp.documents import propose_roles
 from autoapp.llm.cost import PriceTable
-from autoapp.llm.settings import API_KEY_ENV, DEFAULT_MODEL, DEFAULT_PROVIDER, LLMSettings, Price
+from autoapp.llm.settings import API_KEY_ENV, DEFAULT_MODEL, DEFAULT_PROVIDER, TASK_NAMES, LLMSettings, Price
 from autoapp.mail.connection import normalize_fingerprint
 from autoapp.setup.checks import CheckResult
 from autoapp.setup.wizard import (
@@ -694,7 +694,12 @@ def run_sources(ctx: SetupContext) -> bool:
             ("search_first", "Search first: find the employer's own ad by search (recommended; needs a Parallel Search key)"),
             ("platform", "Platform: read the job board's page (often blocked)"),
         ], default=_s(cur_alerts.get("mode")) or "search_first")
-        sources["alerts"] = {**cur_alerts, "enabled": True, "folder": folder, "mode": alert_mode}
+        p.say("Some alert emails cannot be read by the built-in parsers (a new layout, a card without the employer's")
+        p.say("name). The AI can read just that card's text, with your name, address and tracking links removed first.")
+        llm_fallback = p.confirm("Let the AI read alert emails and cards the parsers cannot read?",
+                                 default=bool(cur_alerts.get("llm_fallback", True)))
+        sources["alerts"] = {**cur_alerts, "enabled": True, "folder": folder, "mode": alert_mode,
+                             "llm_fallback": llm_fallback}
         mail["alerts"] = acct
     else:
         alert_mode = _s(cur_alerts.get("mode")) or "search_first"
@@ -855,7 +860,7 @@ def show_cost_table(ctx: SetupContext, llm: dict[str, Any]) -> None:
 
 def _llm_providers(settings: LLMSettings) -> list[str]:
     out: list[str] = []
-    for task in ("evaluate", "write", "form_fill", "form_find"):
+    for task in TASK_NAMES:
         prov = settings.resolve(task)[0]
         if prov not in out:
             out.append(prov)
@@ -900,6 +905,8 @@ def run_llm(ctx: SetupContext) -> bool:
         last_provider, last_model = provider, model
     for key in ("provider", "model", "effort"):
         llm.pop(key, None)  # the old single default is replaced by the four tasks
+    if saved.get("alert_extract"):  # not asked here: it follows the evaluate model unless set in config.yaml
+        tasks["alert_extract"] = saved["alert_extract"]
     llm["tasks"] = tasks
     write_key(ws.config_path, "llm", llm)
     settings = LLMSettings.model_validate(llm)

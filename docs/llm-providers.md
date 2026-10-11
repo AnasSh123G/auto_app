@@ -93,6 +93,10 @@ under `llm.prices`. Set the value to `0` to allow no AI calls. A fresh test run 
 
 ### Form-link selection
 
+`alert_extract` is a fifth, optional task: it reads job-alert cards and emails the built-in parsers cannot (see
+[job-sources](job-sources.md)). Without an entry it uses the `evaluate` model with low effort; add
+`llm.tasks.alert_extract` to pick another one. It only ever sees the redacted card text.
+
 `form_find` is one of the four tasks above and has its own model, with low effort unless you set one.
 
 Clear apply links need no model call. Ambiguous pages may make at most one selection call

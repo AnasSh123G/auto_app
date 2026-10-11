@@ -156,6 +156,9 @@ def ingest(repo: Repo, raw: RawJob, *, home_city: str | None = None, now: dateti
         if employer_posting and city and norm_text(city) != norm_text(existing["location"]):
             # The same employer requisition listed in another place: one vacancy, one more location.
             repo.add_location(existing["id"], city, raw.source_job_id, raw.url)
+        # A detail call re-ingests the posting it just enriched: its contact fields and detail belong in the row.
+        later = {k: v for k, v in _source_raw(raw).items() if k in ("contact_fields", "detail")}
+        repo.merge_source_raw(raw.source, raw.source_job_id, later)
         _fill_gaps(repo, existing["id"], raw)
         return IngestOutcome(existing["id"], False, "source")
 
@@ -231,7 +234,10 @@ def card_to_raw(card: AlertCard, resolved: ResolvedLink | None = None, search_pr
         working_time=card.working_time,
         contract_type=card.contract_type,
         raw={"title_truncated": card.title_truncated, "badges": list(card.badges), "section": card.section,
-             **({"company_unknown": True} if card.company_unknown else {})},
+             **({"company_unknown": True} if card.company_unknown else {}),
+             **({"email_excerpt": card.email_excerpt} if card.email_excerpt else {}),
+             **({"message_id": card.message_id} if card.message_id else {}),
+             **({"llm_extracted": True} if card.llm_extracted else {})},
         search_profile=search_profile,
         section=card.section,
     )

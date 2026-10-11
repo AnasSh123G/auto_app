@@ -46,6 +46,9 @@ sources:
     folder: Jobalerts  # Gmail label or IMAP folder name
     mode: search_first  # search_first: find each alert job's own ad on the employer's site by web search (needs
     #                     PARALLEL_API_KEY; job-board pages are never opened). platform: read the job-board page.
+    llm_fallback: true  # the alert_extract model reads cards/emails the parsers cannot (redacted text only)
+    max_llm_extractions_per_run: 20  # at most this many alert_extract calls per run
+    llm_unknown_senders: false  # also read alert-like emails from senders without a parser (off: they are only counted)
   arbeitnow:
     enabled: false  # Free public feed, no key; enable in setup or here.
     max_pages_per_run: 40
@@ -139,6 +142,10 @@ llm:
       model: claude-sonnet-5-5
       # instructions: |
       #   Prefer the company's own career site over job boards.
+    # alert_extract:  # reads alert cards/emails the parsers cannot (optional; follows the evaluate model when absent)
+    #   provider: anthropic
+    #   model: claude-sonnet-5-5
+    #   effort: low
 
   # Alternative LLM providers (add these to .env first):
   # anthropic: Set ANTHROPIC_API_KEY
@@ -208,7 +215,7 @@ tracking:
 # Assisted form filling (on employer web sites).
 assist:
   # Domains that never get auto-fill (require manual submission).
-  # restricted_domains: [linkedin.com, indeed.com, indeed.de, stepstone.de]
+  # restricted_domains: [linkedin.com, indeed.com, indeed.de, stepstone.de, arbeitsagentur.de]
   llm_answers: true  # Use LLM to fill unrecognized form fields
   # model: the form_fill model reads the form's fields and fills them from your CV, profile and saved answers
   #        (form_answers.md); fixed answers (how found, referral, prior employment) and uploads stay rule-based.

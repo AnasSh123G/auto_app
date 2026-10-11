@@ -49,7 +49,8 @@ DEFAULT_FREE_MAIL_DOMAINS: list[str] = [
     "posteo.de",
 ]
 
-DEFAULT_RESTRICTED_DOMAINS: list[str] = ["linkedin.com", "indeed.com", "indeed.de", "stepstone.de"]
+# The Arbeitsagentur page is a job board too: the application goes to the employer's own ad, never to this page.
+DEFAULT_RESTRICTED_DOMAINS: list[str] = ["linkedin.com", "indeed.com", "indeed.de", "stepstone.de", "arbeitsagentur.de"]
 
 
 class _Model(BaseModel):
@@ -116,11 +117,18 @@ AlertMode = Literal["search_first", "platform"]
 
 class AlertsSource(_Model):
     """``mode`` decides how an alert job gets its ad: ``search_first`` (default) searches for the employer's own
-    ad and careers page and never opens the job board's page; ``platform`` reads the job board's page as before."""
+    ad and careers page and never opens the job board's page; ``platform`` reads the job board's page as before.
+
+    ``llm_fallback``: when the parser cannot name a card's company or title (or finds no card in an email from a known
+    sender), the ``alert_extract`` model reads the redacted card text, at most ``max_llm_extractions_per_run`` times per
+    run. ``llm_unknown_senders`` also lets it read alert-like emails from senders without a parser (off by default)."""
 
     enabled: bool = True
     folder: str = "Jobalerts"
     mode: AlertMode = "search_first"
+    llm_fallback: bool = True
+    max_llm_extractions_per_run: int = Field(default=20, ge=0)
+    llm_unknown_senders: bool = False
 
 
 class ArbeitnowConfig(_Model):
@@ -573,13 +581,21 @@ def load_config(ws: Workspace) -> Config:
             + (" (run.default_mode is set and wins)" if has_new else "")
             + ". Run `autoapp setup --section email` or edit config.yaml to remove the old key."
         )
+    if "arbeitsagentur.de" not in (d.strip().lower() for d in config.assist.restricted_domains):
+        # An explicit list written before the Arbeitsagentur counted as a job board: add it (in memory).
+        config.assist.restricted_domains.append("arbeitsagentur.de")
+        config._notices.append(
+            "assist.restricted_domains now includes arbeitsagentur.de (its pages are no application page); "
+            "add it to the list in config.yaml to silence this notice."
+        )
     llm = raw.get("llm") if isinstance(raw, dict) else None
     if isinstance(llm, dict):
         from autoapp.llm.settings import TASK_NAMES
 
         given = llm.get("tasks") if isinstance(llm.get("tasks"), dict) else {}
         old_keys = [k for k in ("provider", "model", "effort") if k in llm]
-        unset = [t for t in TASK_NAMES if not (given.get(t) or {}).get("model")]
+        # alert_extract follows the evaluate model unless set (it is not asked in the setup wizard)
+        unset = [t for t in TASK_NAMES if t != "alert_extract" and not (given.get(t) or {}).get("model")]
         if old_keys or unset:
             used = "; ".join(f"{t}: {config.llm.resolve(t)[0]} {config.llm.resolve(t)[1]}" for t in TASK_NAMES)
             config._notices.append(

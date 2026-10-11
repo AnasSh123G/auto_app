@@ -60,6 +60,18 @@ sources:
     enabled: true
 ```
 
+An Arbeitsagentur job is applied to at the **employer**, never on arbeitsagentur.de: `arbeitsagentur.de` is
+in `assist.restricted_domains`, so its page is not followed or saved as the application link. Jobs whose
+ad is only a link to a partner board such as jobvector.de count as board jobs too: the employer's own ad is
+searched by company and title (like alert jobs). What that search misses goes on to the employer's careers
+pages, after evaluation. When both found nothing, the job is still prepared but marked `no_employer_link`
+(folder ending `_NOEMPLOYER`): the Arbeitsagentur page appears only as **Job ad**, never as the application
+page, and both lookups repeat after `failure_ttl_hours`. A lookup that did not run (no `PARALLEL_API_KEY`, a
+used-up limit) leaves the job `restricted` with that reason instead. An ad posted only on the Arbeitsagentur
+(no `externeURL`, the Arbeitsagentur as partner) keeps its Arbeitsagentur link, labelled "only on the
+Arbeitsagentur". A contact email in the Arbeitsagentur detail is read at evaluation, so the job can
+be an email application.
+
 ## Adzuna job search API
 
 1. Sign up for a free developer account at [developer.adzuna.com](https://developer.adzuna.com/)
@@ -124,10 +136,14 @@ fetch step.
 Applications on Workwise are made on Workwise with a Workwise account. Log in once in the app's browser with
 `uv run autoapp login workwise`; the form finder and the assisted filling then work on the Workwise job page.
 
-**Workwise alert emails** (any `@workwise.io` sender) are parsed provisionally until a real alert email is available
-as a template: every link to a Workwise job page is taken, also inside a tracking link that carries it URL-encoded.
-The title comes from the link text when it reads like a title (otherwise from the address, marked as shortened);
-the company is filled in from the job page. Workwise alert jobs are not sent to employer discovery: they are applied
+**Workwise alert emails** (any `@workwise.io` sender) are HTML only. Each job card is one link to
+`workwise.io/jobsuche?eTT=...&id=<jobId>&lT=...` whose text gives the title, the company, the city and tags
+("Homeoffice möglich" is read as hybrid, "40 Stunden" / "20 bis 40 Stunden" as the working time). The `eTT` (email
+tracking) and `lT` (login) tokens are never stored or followed: the card's address is the token-free
+`https://www.workwise.io/job/<id>`. The salary tag is not stored (the card fields only hold platform estimates).
+"Alle passenden Jobs anschauen" links carry no job id and are not cards; a Workwise mail without a job id link is
+account mail. Links of the older form `workwise.io/job/<id>-<slug>` (also inside a tracking link that carries it
+URL-encoded) are still taken. Workwise alert jobs are not sent to employer discovery: they are applied
 to on Workwise, which the app can open.
 
 ## Email alerts from LinkedIn, StepStone, Indeed and Workwise
@@ -183,6 +199,9 @@ sources:
     enabled: true
     folder: Jobalerts
     mode: search_first   # search_first (default) or platform
+    llm_fallback: true                 # the AI reads cards and emails the parsers cannot (default)
+    max_llm_extractions_per_run: 20    # at most this many AI reads per run
+    llm_unknown_senders: false         # also read alert-like emails from unknown senders (default off)
 ```
 
 - **`search_first` (default).** The app reads only the alert email. For each new job it searches
@@ -201,6 +220,39 @@ sources:
 - **`platform`.** The earlier behavior: the job-board page is read slowly with your browser profile (see
   [Detail fetching](#detail-fetching-page-parsing)), and employer lookup only happens when
   `sources.employer_careers.enabled` is true. Set it to `platform` if you prefer that.
+
+### When the parser cannot read a card or an email (AI fallback)
+
+The parsers can miss: a layout changes, a card does not name its employer (Workwise), a title is cut to a word or
+two, or a whole email gives no card. With `sources.alerts.llm_fallback: true` (default) the app then asks the
+`alert_extract` model (one of the entries under `llm.tasks`; without an entry it uses your `evaluate` model, and its
+calls count in the run's AI cost and call limit):
+
+1. **Extraction.** The model reads only the card's text, or the text of the whole email that gave no card, and names
+   `{title, company, city, link}`. Anything it names that is not written in that text is thrown away, so it cannot
+   invent a job. The text it sees is the *redacted* excerpt stored with the card: your name, address, email and phone
+   number, every email address, unsubscribe and tracking links and all link parameters are removed before anything is
+   stored or sent. At most `max_llm_extractions_per_run` calls are made per run.
+2. **Search by the card's text.** If the employer is still not named, the same redacted text (at most 4,000
+   characters) is put into the web search's objective, together with the job title and city. A page is accepted
+   only when it is this job's ad, the employer it names is also named in the card's text, and it is not a job board.
+   Such a job is marked **needs review**, is evaluated and prepared as usual, and is **never sent automatically**:
+   check the employer and the ad before you apply. In `review` mode it is not drafted unless you ask for that job.
+
+Account and marketing mail is not sent to the model: an email from a known sender (LinkedIn, StepStone, Indeed,
+Workwise) that holds no job link for that platform (for example "confirm your email") is marked as processed as "not
+a job alert", without an AI call and without a warning. When in doubt, for example an email without a readable text,
+it is treated as an alert. Each parser decides this next to its link patterns (`is_job_alert`).
+
+An email from a known sender that looks like an alert (it has a job link) but gives no card is marked as processed
+only after the model has read it. If the model
+found nothing either, the run warns (sender and subject) and the email is not read, or paid for, again. If the model
+could not run (the extraction cap was reached, no key, a failed call) or `llm_fallback` is `false`, the run shows
+the same warning and the email stays unprocessed and is read again in the next run. Emails from senders without a
+parser are only counted as unrecognised, unless `llm_unknown_senders: true`: then those that read like a job alert
+(subject or start of the text) go through the same fallback and their jobs are listed under the source `llm-alert`.
+
+The `alerts:` line of the run summary ends with `N needed LLM extraction`.
 
 Every run summary starts with `alert mode: ...` and, in `search_first`, counts how many alert jobs were found by
 searching, found on a careers page, not found or deferred. Search usage is reported separately from AI cost.

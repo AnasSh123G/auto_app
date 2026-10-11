@@ -1,0 +1,38 @@
+From: Mia Muster von Workwise <jobs@workwise.io>
+To: Max Mustermann <max.mustermann@example.com>
+Subject: Neues zu deiner Suche: 2 Jobs gefunden
+Date: Sun, 11 Oct 2026 08:14:31 +0000
+Message-ID: <dummy-workwise-alert@example.com>
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+<!DOCTYPE html>
+<html><body>
+<h1>Neues zu deiner Suche: 2 Jobs gefunden</h1>
+<p>1 Job passt zu deinem Profil:</p>
+<a class=3D"enquiry-card" href=3D"https://www.workwise.io/jobsuche?eTT=3DDUMM=
+Y&amp;id=3D117974&amp;lT=3DDUMMY">
+<h3>IT-System Engineer f=C3=BCr IT-Infrastruktur (m/w/d)</h3>
+<div class=3D"company-info"><span>Beispiel Software GmbH</span></div>
+<div class=3D"enquiry-chips"><div class=3D"tag"><span>Essen</span></div><div =
+class=3D"tag"><span>Homeoffice m=C3=B6glich</span></div><div class=3D"tag"><s=
+pan>40 Stunden</span></div><div class=3D"tag"><span>65.000 =E2=82=AC pro Jahr=
+</span></div></div>
+</a>
+<a href=3D"https://www.workwise.io/jobsuche?eTT=3DDUMMY&amp;lT=3DDUMMY&amp;se=
+arch_id=3DDUMMY">Alle passenden Jobs anschauen</a>
+<p>1 Job passt zu deiner letzten Jobsuche:</p>
+<a class=3D"enquiry-card" href=3D"https://www.workwise.io/jobsuche?eTT=3DDUMM=
+Y&amp;id=3D124834&amp;lT=3DDUMMY">
+<h3>Softwareentwickler (m/w/d)</h3>
+<div class=3D"company-info"><span>Beispiel Entwicklung GmbH</span></div>
+<div class=3D"enquiry-chips"><div class=3D"tag"><span>Rednitzhembach</span></=
+div><div class=3D"tag"><span>Homeoffice m=C3=B6glich</span></div><div class=
+=3D"tag"><span>20 bis 40 Stunden</span></div></div>
+</a>
+<a href=3D"https://www.workwise.io/jobsuche?eTT=3DDUMMY&amp;lT=3DDUMMY&amp;se=
+arch_id=3DDUMMY">Alle passenden Jobs anschauen</a>
+<p><a href=3D"https://www.workwise.io/einstellungen?eTT=3DDUMMY&amp;lT=3DDUMM=
+Y">Von Jobvorschl=C3=A4gen abmelden</a></p>
+</body></html>

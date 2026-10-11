@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 AlertSource = Literal[
     "linkedin-alert", "stepstone-alert", "stepstone-alert-recommended", "indeed-alert", "indeed-match",
-    "workwise-alert",
+    "workwise-alert", "llm-alert",
 ]
 
 
@@ -34,3 +34,8 @@ class AlertCard(BaseModel):
     salary_estimate_max: int | None = None
     badges: list[str] = Field(default_factory=list)
     section: Literal["match", "recommended"] = "match"
+    # Redacted text of the card's block in the email (about 1,500 chars) and the email's Message-ID; set at ingestion.
+    email_excerpt: str | None = None
+    message_id: str | None = None
+    # The card (or part of it) was named by the ``alert_extract`` model reading the redacted email text.
+    llm_extracted: bool = False

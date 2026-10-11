@@ -32,6 +32,31 @@ The terminal says in plain words what happened and what to do next.
 
 Preparation uses plain GETs, never a browser. `autoapp forms` backfills old packages;
 `autoapp forms --again --job <id>` restarts at the original entry for any saved status.
+Every form-finding run also saves a trace in the database table `form_attempts`: the strategy (`http`;
+`browser` and `ats` are reserved for later), the pages visited with the reason for each (`entry`, `redirect`,
+`link`, `model choice`), the final status, a short note and the duration. `form_note` stays the one-line summary.
+
+### Audit of the saved links
+
+`autoapp forms --audit` reads, and never writes, the prepared web-form applications (the database is opened
+read-only; no requests are made, no setup is needed). It reports the distribution by form status, the links on job
+boards (the built-in directory hosts plus `assist.restricted_domains`) by host, the split by source (a job found by
+several sources counts for each) and the failures grouped by cause (from the newest `form_attempts` trace, else
+`form_note`). `--json` prints the same as JSON with a stable shape:
+
+```json
+{
+  "prepared": 42,
+  "by_status": {"found": 18, "partial": 9, "unchecked": 3},
+  "on_job_board": {"total": 6, "by_host": {"arbeitsagentur.de": 5, "linkedin.com": 1}},
+  "by_source": {"arbeitsagentur": {"total": 20, "found": 6}},
+  "failures": [{"status": "partial", "cause": "no usable application continuation", "count": 5}]
+}
+```
+
+`unchecked` means no form status yet. The quick test (`autoapp test`) prints this audit for your real workspace
+after its checklist.
+
 Finding a page does not guarantee that its session will remain valid: filling happens when you
 sit down to finish it.
 
@@ -107,7 +132,7 @@ Once logged in on a site, future `assist` runs will have access to your account 
 - **Submit buttons:** you must click Submit manually
 - **Consent/privacy checkboxes:** these are never touched, even if unchecked
 - **CAPTCHAs:** autoapp cannot solve these; you fill them manually
-- **Restricted domains:** LinkedIn, Indeed, StepStone and Indeed.de forms are blocked (require manual form or Easy-Apply)
+- **Restricted domains:** LinkedIn, Indeed, StepStone, Arbeitsagentur and Indeed.de forms are blocked (require manual form or Easy-Apply)
 
 ## Restricted domains
 
@@ -117,6 +142,9 @@ These sites are not supported for automatic form filling:
 - `indeed.com` (Indeed Apply form)
 - `indeed.de` (Indeed Germany)
 - `stepstone.de` (StepStone direct apply)
+- `arbeitsagentur.de` (the Arbeitsagentur job page: the application goes to the employer's own ad). An Arbeitsagentur
+  job without it is `no_employer_link` ("employer ad not found", folder ending `_NOEMPLOYER`): assist has no page to
+  open and shows only `apply.html`; paste the employer's address in **Finish forms** to continue
 
 For these sites, use the `apply.html` page to copy your answers and fill the form manually.
 Assist opens **only this local helper**, not the restricted website. Restricted subdomains,

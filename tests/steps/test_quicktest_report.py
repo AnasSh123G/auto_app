@@ -9,7 +9,7 @@ from autoapp.steps.evaluate import EvaluateSummary
 from autoapp.steps.fetch import FetchSummary
 from autoapp.steps.pipeline import RunSummary
 from autoapp.steps.prepare import PrepareSummary
-from autoapp.steps.quicktest import FAILED, OK, SKIPPED, build_report
+from autoapp.steps.quicktest import FAILED, OK, SKIPPED, WARN, FormLink, build_report
 from autoapp.steps.search import SearchSummary, SourceReport
 from tests.helpers import make_workspace
 
@@ -67,7 +67,7 @@ def test_no_alert_email_skips_the_alert_lines_and_the_rest_still_reports(tmp_pat
     summary.search.alert_emails, summary.search.alert_parsers = 0, {}
     report = build_report(config(tmp_path), summary, ENV)
     checks = by_name(report)
-    assert checks["alert mailbox"].status == SKIPPED and checks["alert mailbox"].reason == "no alert email in the folder"
+    assert checks["alert mailbox"].status == SKIPPED and checks["alert mailbox"].reason == "no job alert email among the newest in the folder"
     assert not report.failed and checks["source adzuna"].status == OK
 
 
@@ -109,3 +109,51 @@ def test_a_partial_source_that_found_jobs_is_ok_and_one_that_found_none_at_its_l
     checks = by_name(build_report(config(tmp_path), summary, ENV))
     assert checks["source workwise"].status == OK and "partial" in checks["source workwise"].reason
     assert checks["source adzuna"].status == SKIPPED
+
+
+def _links(*specs):
+    return [FormLink(f"job{i}abc", source, url, status, note, path) for i, (source, url, status, note, path)
+            in enumerate(specs)]
+
+
+def test_each_prepared_form_job_gets_a_line_and_only_job_boards_fail(tmp_path):
+    links = _links(
+        ("arbeitsagentur", "https://careers.ejot.com/job/123#apply", "found", "employer page", "careers page"),
+        ("linkedin-alert", "https://www.linkedin.com/jobs/view/1", "found", "", "job page"),
+        ("arbeitsagentur", "https://jobs.partner-example.de/job/9", "partial", "partner board", "externeURL"),
+        ("arbeitsagentur", None, "no_employer_link", "employer ad not found yet", "job page"),
+    )
+    report = build_report(config(tmp_path), healthy(), ENV, links)
+    statuses = [c.status for c in report.form_links]
+    assert statuses == [OK, FAILED, WARN, WARN] and report.failed
+    text = "\n".join(report.lines())
+    assert "form links:" in text and "WARN     job2ab  arbeitsagentur" in text and "[careers page]" in text
+    assert "no link  no_employer_link" in text
+    assert "2 WARN, 2 FAILED" not in text and "2 WARN, 1 FAILED" in text
+
+
+def test_warn_links_do_not_set_the_failure_flag(tmp_path):
+    links = _links(("arbeitsagentur", None, "no_employer_link", "not found", "job page"))
+    report = build_report(config(tmp_path), healthy(), ENV, links)
+    assert not report.failed and [c.status for c in report.form_links] == [WARN]
+
+
+def test_an_ad_only_on_the_arbeitsagentur_warns_instead_of_failing(tmp_path):
+    links = _links(("arbeitsagentur", "https://www.arbeitsagentur.de/jobsuche/jobdetail/10000-1", "restricted",
+                    "only on the Arbeitsagentur: posted directly on the Arbeitsagentur", "job page"))
+    report = build_report(config(tmp_path), healthy(), ENV, links)
+    assert not report.failed and [c.status for c in report.form_links] == [WARN]
+
+
+def test_no_form_jobs_means_no_form_links_section(tmp_path):
+    assert "form links:" not in "\n".join(build_report(config(tmp_path), healthy(), ENV).lines())
+
+
+def test_a_parser_line_is_failed_only_for_an_alert_that_gave_no_card_and_account_mail_adds_no_line(tmp_path):
+    summary = healthy()
+    summary.search.alert_parsers = {"linkedin": 6, "workwise": 0}  # an alert-looking Workwise email, nothing read from it
+    checks = by_name(build_report(config(tmp_path), summary, ENV))
+    assert checks["alert parser workwise"].status == FAILED and checks["alert parser linkedin"].status == OK
+    summary.search.alert_parsers = {"linkedin": 6}  # the Workwise mail was account mail: it never reaches the parser list
+    checks = by_name(build_report(config(tmp_path), summary, ENV))
+    assert "alert parser workwise" not in checks and not build_report(config(tmp_path), summary, ENV).failed

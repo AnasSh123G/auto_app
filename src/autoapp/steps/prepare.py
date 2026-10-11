@@ -15,10 +15,13 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import get_args
 
 from autoapp.db.repo import now_iso
 from autoapp.db.status import Status
+from autoapp.employers.posting import email_text_reasons
 from autoapp.evaluation.schema import FinalEvaluation
+from autoapp.formfinder.employer_link import NO_EMPLOYER_LINK
 from autoapp.llm.base import LLMAuthError, LLMCallLimitReached, LLMError
 from autoapp.package import render as R
 from autoapp.package.documents_select import select_documents
@@ -27,6 +30,7 @@ from autoapp.package.pdf import PdfRenderer, bundle
 from autoapp.package.salary_expectation import compute_expectation, needs_salary_note
 from autoapp.package.slug import folder_name
 from autoapp.salary import resolve_salary_target
+from autoapp.sources.alerts.models import AlertSource
 from autoapp.steps.context import RunContext, profile_prompt_text
 from autoapp.writing.letter_format import date_line
 from autoapp.writing.prompt import JobContext, WritingContext
@@ -83,11 +87,32 @@ def _folder_for(ctx: RunContext, job) -> Path:
     return ctx.ws.applications_dir / folder_name(job["company"], job["title"], job["id"])
 
 
+def _source_group(sources: set[str]) -> str:
+    """``arbeitsagentur``, ``alert`` or ``other``: the three kinds of source a quick test samples form jobs from."""
+    if "arbeitsagentur" in sources:
+        return "arbeitsagentur"
+    if sources & set(get_args(AlertSource)):
+        return "alert"
+    return "other"
+
+
 def _sample_jobs(ctx: RunContext) -> list:
-    """The quick test: the best evaluated jobs whatever their score, one email and one form application first.
+    """The quick test's jobs to prepare: the sample chosen before the employer search (chosen now when none was)."""
+    if ctx.sample_job_ids is None:
+        return select_sample_jobs(ctx)
+    jobs = [ctx.repo.get_job(job_id) for job_id in ctx.sample_job_ids]
+    return [j for j in jobs if j is not None and j["status"] == Status.APPROVED.value]
+
+
+def select_sample_jobs(ctx: RunContext) -> list:
+    """The quick test: the best evaluated jobs whatever their score, one email application and form applications
+    from different sources (one Arbeitsagentur, one alert, one other) first; a source without a candidate gives its
+    slot to the next best score.
 
     A job below the apply threshold (review, skipped) is approved here, in the test workspace only, so that letter
-    writing and form finding are exercised.
+    writing and form finding are exercised. The pipeline calls this right after evaluation, before the own-ad
+    search and the careers seeding, so that these jobs go through the same employer passes as in a real run;
+    ``ctx.sample_job_ids`` remembers the choice for ``prepare_jobs`` and the employer search.
     """
     repo = ctx.repo
     sample = ctx.sample
@@ -101,19 +126,27 @@ def _sample_jobs(ctx: RunContext) -> list:
             channel = json.loads(ev["payload"] or "{}").get("channel")
         except (json.JSONDecodeError, TypeError):
             channel = None
-        pool.append((job, ev["fit_score"] or 0, channel))
+        group = _source_group({s["source"] for s in repo.sources(job["id"])})
+        pool.append((job, ev["fit_score"] or 0, channel, group))
     pool.sort(key=lambda item: -item[1])
     picked: list = []
-    for wanted in (("email",), ("employer_form", "platform")):  # one of each kind first
-        match = next((p for p in pool if p[2] in wanted and p not in picked), None)
-        if match:
-            picked.append(match)
+    emails = [p for p in pool if p[2] == "email"][:sample.email_applications]
+    picked += emails
+    forms = [p for p in pool if p[2] in ("employer_form", "platform")]
+    chosen: list = []
+    for group in ("arbeitsagentur", "alert", "other"):
+        match = next((p for p in forms if p[3] == group and p not in chosen), None)
+        if match and len(chosen) < sample.form_applications:
+            chosen.append(match)
+    chosen += [p for p in forms if p not in chosen][:max(0, sample.form_applications - len(chosen))]
+    picked += chosen
     picked += [p for p in pool if p not in picked]
     jobs = []
-    for job, score, _ in picked[:sample.preparations]:
+    for job, score, _, _ in picked[:sample.preparations]:
         if job["status"] != Status.APPROVED.value:
             repo.transition(job["id"], Status.APPROVED, note=f"quick test: prepared below the threshold (fit score {score})")
         jobs.append(repo.get_job(job["id"]))
+    ctx.sample_job_ids = [j["id"] for j in jobs]
     return jobs
 
 
@@ -279,12 +312,16 @@ def _prepare_one(ctx: RunContext, job, folder: Path, writer: LetterWriter, rende
     upload += [R.FileItem("Other", p.resolve()) for p in extra_copies]
     from autoapp.sources.arbeitnow import source_link
 
+    now_app = repo.get_application(job["id"])
+    no_employer = now_app is not None and now_app["form_status"] == NO_EMPLOYER_LINK
+    application_url = None if no_employer else job["application_url"] or r.application_url
+
     sources = repo.sources(job["id"])
     arbeitnow_link = source_link(sources)
     (folder / "apply.html").write_text(
         R.render_apply_html(R.ApplyData(job["title"], job["company"], answers.items(), upload,
-                                        job["job_url"], job["application_url"] or r.application_url,
-                                        arbeitnow_url=arbeitnow_link)),
+                                        job["job_url"], application_url, arbeitnow_url=arbeitnow_link,
+                                        no_employer=no_employer)),
         encoding="utf-8",
     )
     files += ["form_answers.md", "apply.html"]
@@ -304,25 +341,25 @@ def _prepare_one(ctx: RunContext, job, folder: Path, writer: LetterWriter, rende
     locations += [loc["city"] for loc in repo.locations(job["id"])]
     (folder / "job.md").write_text(R.render_job_md(R.JobInfo(
         title=job["title"], company=job["company"], description=job["description"] or "",
-        locations=locations, job_url=job["job_url"], application_url=job["application_url"] or r.application_url,
+        locations=locations, job_url=job["job_url"], application_url=application_url,
         sources=sorted({s["source"] for s in sources}), ad_salary_min=job["ad_salary_min"],
         ad_salary_max=job["ad_salary_max"], salary_estimate_min=job["salary_estimate_min"],
         salary_estimate_max=job["salary_estimate_max"],
-        arbeitnow_url=arbeitnow_link,
+        arbeitnow_url=arbeitnow_link, no_employer=no_employer,
     )), encoding="utf-8")
     (folder / "evaluation.md").write_text(
         R.render_evaluation_md(final, R.EvaluationExtra(job["title"], job["company"])), encoding="utf-8")
     files += ["job.md", "evaluation.md"]
 
-    review = list(outcome.needs_review) + page_problems
+    review = list(outcome.needs_review) + page_problems + email_text_reasons(repo, job["id"])  # found from email text
     (folder / "README.md").write_text(R.render_readme_md(R.ReadmeData(
         title=job["title"], company=job["company"], channel=channel, job_id=job["id"], files=files,
-        apply_email=r.apply_email, application_url=job["application_url"] or r.application_url,
+        apply_email=r.apply_email, application_url=application_url,
         job_url=job["job_url"], reference=r.reference, missing_documents=selection.missing,
         needs_review_reasons=review, assumed_skills=letter.assumed_skills,
         salary_note=needs_salary_note(expectation, asks), bundle_size_mb=round(b.size_bytes / 1024 / 1024, 2),
         bundle_max_mb=ctx.config.email.max_bundle_mb, bundle_too_large=b.too_large, warnings=list(b.skipped),
-        arbeitnow_url=arbeitnow_link,
+        arbeitnow_url=arbeitnow_link, no_employer=no_employer,
     )), encoding="utf-8")
 
     repo.upsert_application(

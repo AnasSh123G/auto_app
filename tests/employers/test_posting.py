@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from autoapp.discovery.ingest import card_to_raw, ingest
 from autoapp.employers.hints import build_search
 from autoapp.employers.posting import judge
-from autoapp.employers.service import find_own_ads, run_discovery
+from autoapp.employers.service import find_own_ads, run_discovery, seed_arbeitsagentur_misses
 from autoapp.employers.verify import Candidate, candidate_origins
 from autoapp.sources.alerts.models import AlertCard
 from autoapp.steps.context import RunContext
@@ -192,4 +194,91 @@ def test_a_workwise_page_is_never_taken_as_the_ad(tmp_path):
     api, _ = _search([workwise])
     s = find_own_ads(ctx, fetch=web, api=api)
     assert s.found == [] and workwise not in web.calls
+    ctx.close()
+
+
+GDV = "Gesamtverband der Deutschen Versicherungswirtschaft e. V."
+GDV_AD = "https://www.gdv.de/karriere/stellen/data-scientist-m-w-d-4711"
+JOBVECTOR = "https://www.jobvector.de/job/data-scientist-652cf97c682519e5/"
+
+
+def _arbeitsagentur_job(ctx, *, detail: dict | None = None):
+    """The recorded Arbeitsagentur job whose externeURL leads to jobvector.de, as search and detail store it."""
+    import json
+
+    from autoapp.sources.arbeitsagentur import ArbeitsagenturSource
+
+    item = next(i for i in json.loads((FIXTURES / "search_data_scientist_berlin.json").read_text(encoding="utf-8"))["ergebnisliste"]
+                if i["referenznummer"].startswith("14225"))
+    raw = ArbeitsagenturSource._to_raw(item, item["referenznummer"], None)
+    job_id = ingest(ctx.repo, raw).job_id
+    detail_raw = json.loads((FIXTURES / "detail_external.json").read_text(encoding="utf-8"))
+    ctx.repo.update_job(job_id, description=detail_raw["stellenangebotsBeschreibung"])
+    ingest(ctx.repo, raw.model_copy(update={"description": detail_raw["stellenangebotsBeschreibung"],
+                                           "raw": {**raw.raw, "detail": detail or {"allianzpartnerName": "jobvector.de"}}}))
+    ctx.repo.transition(job_id, "approved", note="fit")
+    return job_id, detail_raw["stellenangebotsBeschreibung"]
+
+
+FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "arbeitsagentur"
+
+
+def test_an_arbeitsagentur_job_on_a_partner_board_is_searched_and_gets_the_employers_page(tmp_path):
+    ctx = RunContext.open(make_workspace(tmp_path, config=EMP_CONFIG.replace("enabled: true", "enabled: false")))
+    job_id, text = _arbeitsagentur_job(ctx)
+    assert ctx.repo.get_job(job_id)["application_url"].startswith(JOBVECTOR)
+    page = ad(text, "Data Scientist (m/w/d)").replace("CHEFS CULINAR West GmbH &amp; Co. KG", GDV).replace(" | CHEFS CULINAR", "")
+    web = FakeWeb({GDV_AD: page})
+    api, calls = search_client({"Find the job ad": [JOBVECTOR, GDV_AD]})
+    s = find_own_ads(ctx, fetch=web, api=api)
+    assert s.found == [job_id] and s.missed == [], s.lines()
+    assert ctx.repo.get_job(job_id)["application_url"] == GDV_AD and JOBVECTOR not in web.calls
+    assert calls[0]["search_queries"][0].startswith('"Gesamtverband der Deutschen Versicherungswirtschaft"')
+    ctx.close()
+
+
+def test_a_partner_board_is_told_from_the_employer_by_its_name():
+    from autoapp.employers.scope import is_partner_board
+
+    assert is_partner_board("jobvector.de", GDV) and is_partner_board("karriere-portal.example", "Acme GmbH")
+    assert not is_partner_board("arbeitsagentur.de", GDV) and not is_partner_board(None, GDV)
+    assert not is_partner_board("acme.example", "ACME Logistik GmbH")  # the employer's own site
+
+
+def test_an_unlisted_partner_board_is_searched_too(tmp_path):
+    ctx = RunContext.open(make_workspace(tmp_path, config=EMP_CONFIG.replace("enabled: true", "enabled: false")))
+    job_id, text = _arbeitsagentur_job(ctx, detail={"allianzpartnerName": "stellenmarkt-neu.example"})
+    ctx.repo.update_job(job_id, application_url="https://www.stellenmarkt-neu.example/j/1")
+    page = ad(text, "Data Scientist (m/w/d)").replace("CHEFS CULINAR West GmbH &amp; Co. KG", GDV).replace(" | CHEFS CULINAR", "")
+    api, _ = search_client({"Find the job ad": [GDV_AD]})
+    assert find_own_ads(ctx, fetch=FakeWeb({GDV_AD: page}), api=api).found == [job_id]
+    ctx.close()
+
+
+def test_the_employers_own_address_as_externe_url_is_not_searched_again(tmp_path):
+    ctx = RunContext.open(make_workspace(tmp_path, config=EMP_CONFIG.replace("enabled: true", "enabled: false")))
+    job_id, _ = _arbeitsagentur_job(ctx, detail={"allianzpartnerName": "gdv.de"})
+    ctx.repo.update_job(job_id, company="GDV Service GmbH", application_url="https://www.gdv.de/karriere/stellen/4711")
+    api, calls = search_client({"Find the job ad": []})
+    assert find_own_ads(ctx, fetch=FakeWeb({}), api=api).searched == 0 and calls == []
+    ctx.close()
+
+
+def test_an_arbeitsagentur_miss_is_seeded_into_the_careers_pages_after_the_own_ad_search(tmp_path):
+    ctx = RunContext.open(make_workspace(tmp_path, config=EMP_CONFIG.replace("enabled: true", "enabled: false")))
+    job_id, text = _arbeitsagentur_job(ctx)
+    site = "https://www.gdv.de/"
+    pages = {site: "<html><body><h1>GDV</h1><a href='/karriere'>Karriere</a><a href='/impressum'>Impressum</a></body></html>",
+             "https://www.gdv.de/impressum": f"<html><body><h1>Impressum</h1><p>{GDV}, Wilhelmstraße 43/43G, 10117 Berlin</p></body></html>",
+             "https://www.gdv.de/karriere": ("<html><body><h1>Karriere</h1><ul><li><a href='/karriere/stellen/data-scientist-m-w-d-4711'>"
+                                             "Data Scientist (m/w/d)</a></li></ul></body></html>"),
+             GDV_AD: ad(text, "Data Scientist (m/w/d)").replace("CHEFS CULINAR West GmbH &amp; Co. KG", GDV).replace(" | CHEFS CULINAR", "")}
+    web = FakeWeb(pages)
+    api, calls = search_client({"Find the job ad": [JOBVECTOR], "official employer website": [site, "https://www.gdv.de/karriere"]})
+    own = find_own_ads(ctx, fetch=web, api=api)
+    assert own.found == [] and own.missed == [job_id]
+    assert ctx.conn.execute("SELECT COUNT(*) FROM employer_seeds WHERE job_id = ?", (job_id,)).fetchone()[0] == 0
+    late = seed_arbeitsagentur_misses(ctx, own, fetch=web, api=api)
+    assert late is not None and late.enabled and late.employers[0].seeds == [job_id]
+    assert any("official employer website" in c["objective"] for c in calls)
     ctx.close()

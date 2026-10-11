@@ -131,7 +131,8 @@ class AssistSession:
             raise NotPrepared(f"job {job_id} has no application folder; run `autoapp prepare --job {job_id}` first")
         self.job, self.app = job, app
         self.folder = Path(app["folder"])
-        self.url = job["application_url"] or job["job_url"]
+        # An Arbeitsagentur job without its employer's ad has no application page: its job page is only the ad.
+        self.url = job["application_url"] or (None if app["form_status"] == "no_employer_link" else job["job_url"])
         self.use_llm = ctx.config.assist.llm_answers if use_llm is None else use_llm
         self.scope = None
         self.skipped_answers = []

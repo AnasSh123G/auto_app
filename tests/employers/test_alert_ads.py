@@ -7,7 +7,7 @@ from autoapp.employers.service import AlertResolutionSummary, find_alert_ads
 from autoapp.sources.alerts.models import AlertCard
 from autoapp.steps.context import RunContext
 from tests.employers.identity_world import search_client
-from tests.employers.test_posting import OWN, PAGES, TEXT, ad
+from tests.employers.test_posting import ANGULAR, OWN, PAGES, TEXT, ad
 from tests.employers.test_service import EMP_CONFIG
 from tests.employers.webfake import FakeWeb
 from tests.helpers import make_workspace
@@ -109,3 +109,51 @@ def test_summary_lines_for_the_spec_scenario():
     assert "1 not found" in text and "1 deferred" in text and "14 search requests" in text
     assert "alert job j waits: search cap reached" in text
     assert AlertResolutionSummary(mode="platform", searched=3).lines() == []
+
+
+def test_a_linkedin_card_makes_one_posting_search_with_the_short_company_and_the_full_title(tmp_path):
+    ctx = _ctx(tmp_path)
+    job = _alert(ctx, company="CHEFS CULINAR GmbH & Co. KG")
+    web = FakeWeb({**PAGES, OWN: ad(TEXT, "Software Engineer (m/w/d)")})
+    api, calls = _search([OWN])
+    summary = find_alert_ads(ctx, fetch=web, api=api)
+    assert summary.direct == [job] and summary.searched == 1
+    own = [c for c in calls if c["objective"].startswith("Find the job ad")]
+    assert len(own) == 1 and own[0]["search_queries"][0] == '"CHEFS CULINAR" "Software Engineer (m/w/d)"'
+    ctx.close()
+
+
+def test_the_posting_search_is_keyed_by_the_job(tmp_path, monkeypatch):
+    from autoapp.employers.gateway import SearchGateway
+
+    keys: list[str] = []
+    original = SearchGateway.search
+    monkeypatch.setattr(SearchGateway, "search",
+                        lambda self, key, objective, queries: keys.append(key) or original(self, key, objective, queries))
+    ctx = _ctx(tmp_path)
+    job = _alert(ctx)
+    api, _ = _search([OWN])
+    find_alert_ads(ctx, fetch=FakeWeb({**PAGES, OWN: ad(TEXT)}), api=api)
+    assert keys == [f"posting:{job}"]
+    ctx.close()
+
+
+def test_a_stepstone_card_with_a_truncated_title_matches_the_ads_heading_by_prefix(tmp_path):
+    ctx = _ctx(tmp_path)
+    job = _alert(ctx, source="stepstone-alert", sid="s1", title="Software Engineer - Angular/.NET")
+    ctx.conn.execute("UPDATE job_sources SET raw = json_set(raw, '$.title_truncated', json('true')) WHERE job_id = ?", (job,))
+    web = FakeWeb({**PAGES})
+    api, _ = _search([ANGULAR])
+    summary = find_alert_ads(ctx, fetch=web, api=api)
+    assert summary.direct == [job] and ctx.repo.get_job(job)["application_url"] == ANGULAR
+    ctx.close()
+
+
+def test_the_coverage_line_counts_cards_and_names_the_reasons():
+    s = AlertResolutionSummary(mode="search_first", cards=12, searched=10, direct=list("abcdef"), via_careers=["g", "h"],
+                               not_found={"i": "employer ad not found: x"}, deferred={"j": "search cap reached"},
+                               no_company=["k"])
+    line = s.coverage_line()
+    assert line.startswith("alerts: 12 cards → 10 searched, 6 found directly, 2 via careers page, 3 waiting (")
+    assert "search cap reached" in line and line.endswith("0 needed LLM extraction")
+    assert s.lines()[0] == line and s.lines(cards=15)[0].startswith("alerts: 15 cards")

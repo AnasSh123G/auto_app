@@ -123,7 +123,7 @@ def sources_answers(*, test: bool = True) -> list[Any]:
         ("Email address", "me@gmail.com"),
         ("app password", "abcd efgh ijkl mnop"),
         ("Folder or label", ENTER),
-        ("alert jobs get their full ad", ENTER),
+        ("alert jobs get their full ad", ENTER), ("AI read", ENTER),
         ("LinkedIn job pages", ENTER),
         ("Indeed job pages", ENTER),
         ("StepStone job pages", ENTER),

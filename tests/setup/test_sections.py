@@ -260,7 +260,7 @@ def test_proton_fingerprint_is_stored_only_after_confirmation(ws):
     checks = FakeChecks(fingerprint="AB:CD" + ":EF" * 30)
     answers = [("Use Adzuna", False), ("job-alert emails", True), ("Mail provider", "proton_bridge"),
                ("Email address", "me@proton.me"), ("Bridge username", ENTER), ("Bridge password", "bridge-pw"),
-               ("Pin this certificate", False), ("Folder or label", "INBOX"), ("alert jobs get their full ad", ENTER), ("LinkedIn", ENTER), ("Indeed", ENTER),
+               ("Pin this certificate", False), ("Folder or label", "INBOX"), ("alert jobs get their full ad", ENTER), ("AI read", ENTER), ("LinkedIn", ENTER), ("Indeed", ENTER),
                ("StepStone", ENTER), ("careers pages", ENTER), ("Parallel Search API key", ENTER),
                ("company apply links", ENTER), ("Use Arbeitnow", ENTER), ("Use Workwise", ENTER), ("Test the connections", False)]
     p = run(ws, "sources", answers, checks)
@@ -277,7 +277,7 @@ def test_proton_bridge_not_running_can_be_skipped(ws):
     checks = FakeChecks(fingerprint=OSError("connection refused"))
     answers = [("Use Adzuna", False), ("job-alert emails", True), ("Mail provider", "proton_bridge"),
                ("Email address", "me@proton.me"), ("Bridge username", ENTER), ("Bridge password", "pw"),
-               ("Try again", False), ("Folder or label", ENTER), ("alert jobs get their full ad", ENTER), ("LinkedIn", ENTER), ("Indeed", ENTER),
+               ("Try again", False), ("Folder or label", ENTER), ("alert jobs get their full ad", ENTER), ("AI read", ENTER), ("LinkedIn", ENTER), ("Indeed", ENTER),
                ("StepStone", ENTER), ("careers pages", ENTER), ("Parallel Search API key", ENTER),
                ("company apply links", ENTER), ("Use Arbeitnow", ENTER), ("Use Workwise", ENTER), ("Test the connections", False)]
     p = run(ws, "sources", answers, checks)
@@ -289,7 +289,7 @@ def test_custom_preset_asks_for_hosts(ws):
     answers = [("Use Adzuna", False), ("job-alert emails", True), ("Mail provider", "custom"),
                ("Email address", "me@example.org"), ("IMAP host", "imap.example.org"), ("IMAP encryption", "starttls"),
                ("IMAP port", ENTER), ("Login name", "me"), ("Mail password", "pw"), ("Folder or label", ENTER),
-               ("alert jobs get their full ad", ENTER), ("LinkedIn", ENTER), ("Indeed", ENTER), ("StepStone", ENTER), ("careers pages", ENTER), ("Parallel Search API key", ENTER),
+               ("alert jobs get their full ad", ENTER), ("AI read", ENTER), ("LinkedIn", ENTER), ("Indeed", ENTER), ("StepStone", ENTER), ("careers pages", ENTER), ("Parallel Search API key", ENTER),
                ("company apply links", ENTER), ("Use Arbeitnow", ENTER), ("Use Workwise", ENTER), ("Test the connections", False)]
     run(ws, "sources", answers)
     acct = load_config(ws).mail.alerts

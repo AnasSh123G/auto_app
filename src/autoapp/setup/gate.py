@@ -46,7 +46,7 @@ def require_setup(ws: Workspace, interactive: bool) -> None:
 def _read_only(name: str, options: dict[str, Any]) -> bool:
     """Invocations that never write or bootstrap a workspace, so they need no completed setup."""
     if name == "forms":
-        return bool(options.get("dry_run"))
+        return bool(options.get("dry_run") or options.get("audit"))
     if name == "employers":
         acting = bool(options.get("discover") or options.get("website"))
         return bool(options.get("dry_run")) or not acting

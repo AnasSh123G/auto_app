@@ -16,6 +16,7 @@ from autoapp.package.slug import PREFIX, folder_name
 MARKERS = {
     "none": "NOFORM", "partial": "NOFORM", "needs_browser": "BROWSER", "login_required": "LOGIN",
     "captcha": "CAPTCHA", "restricted": "RESTRICTED", "unreachable": "UNREACHABLE",
+    "no_employer_link": "NOEMPLOYER",
 }
 _TEXT_SUFFIXES = {".md", ".html"}
 

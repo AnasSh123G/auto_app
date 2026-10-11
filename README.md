@@ -31,13 +31,13 @@ Run each command from the project folder as `uv run autoapp <command>`, for exam
 | `draft <id> [--again]`, `drafts [--check]` | Save one email application as a draft in your mailbox; list drafts, or mark the ones you sent by hand as `sent` |
 | `reset-data [--answers] [--logins] [--yes]` | Delete all job data (history, folders, CSV, logs, test runs) and keep the setup; shows what goes and asks first |
 | `login <linkedin\|stepstone\|indeed\|workwise>` | Log in once in the app's browser (kept for later): Workwise applications, and company apply links with your login (`sources.apply_links_with_login`, off by default) |
-| `test [--profile NAME] [--no-dashboard]` | Quick test: a small sample of every step (a few alert emails, jobs, employer lookups, one email and one form application) in a throwaway test workspace, then an OK/FAILED/SKIPPED checklist. Sends at most one `TEST_RUN:` email, to you; your real history is not touched; exit code 1 on a failure |
+| `test --quick` / `test --full` `[--profile NAME] [--no-dashboard]` | `--quick`: a small sample of every step (a few alert emails, jobs, employer lookups, one email and one form application) in a throwaway test workspace, then an OK/FAILED/SKIPPED checklist. Sends at most one `TEST_RUN:` email, to you; your real history is not touched; exit code 1 on a failure. `--full`: a whole test run in a fresh test workspace (same as `run --mode test --fresh`). Without either flag nothing starts and the exit code is 2 |
 | `send <id> [--test]` | Send one prepared email now; with `--test`, send the email to yourself instead |
 | `search`, `evaluate`, `prepare` | Individual steps |
 | `add <url>`, `describe <id>` | Add a job by link; paste an ad whose page could not be read |
 | `render <id>` | Rebuild PDFs and the email after editing `cover_letter.md` |
 | `assist <id>` | Open the application form and fill it on request; you submit |
-| `forms [--job <id>] [--again] [--dry-run]` | Find and refresh prepared application links; dry run only lists candidates |
+| `forms [--job <id>] [--again] [--dry-run] [--audit [--json]]` | Find and refresh prepared application links; dry run only lists candidates; `--audit` is a read-only report of the saved links (status, job boards, sources, causes) |
 | `employers [--discover] [--job <id>] [--profile NAME] [--again] [--refresh-site] [--website URL] [--dry-run]` | Show saved employer careers sites; with `--discover`, look up and scan the employers of your alert jobs (opt-in). `--dry-run` makes no request and writes nothing |
 | `status`, `list --status S`, `mark <id> STATUS [--note]` | Track applications (`mark <id> apply` promotes a review job) |
 | `export` | Write `applications.csv` (also done after every command) |
@@ -56,7 +56,7 @@ Run each command from the project folder as `uv run autoapp <command>`, for exam
 | Employer sites | Show saved employer careers sites, preview or run a lookup, scan saved sites again, confirm the right website for one job |
 | Redo unsent | Process every job that is not sent again, as if it were new (asks first, backs the database up) |
 | Add a job by URL | Add one ad by its link; paste the text if the page cannot be read |
-| Tests | Quick test (the default), test run, test email for one application, check logins (mailboxes, Drafts folder, AI model, Adzuna), dry run |
+| Tests | Quick test (the default), test run, full test run (fresh), test email for one application, check logins (mailboxes, Drafts folder, AI model, Adzuna), dry run |
 | Settings | Edit one setup section, set the default run mode for scheduled runs, redo the whole setup (a backup is made first), reset one section |
 | Quit | Leave the menu |
 

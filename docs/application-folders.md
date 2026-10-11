@@ -13,8 +13,15 @@ ends with what is missing, so you can see it without opening the folder:
 | `_NOFORM` | no application form found, or only part of the way |
 | `_BROWSER` | the page needs your browser (the site refuses plain requests) |
 | `_LOGIN` / `_CAPTCHA` | a login or CAPTCHA stands in the way |
-| `_RESTRICTED` | the form is on LinkedIn, Indeed or StepStone |
+| `_RESTRICTED` | the form is on LinkedIn, Indeed or StepStone (or an Arbeitsagentur ad whose employer lookup has not run yet) |
+| `_NOEMPLOYER` | an Arbeitsagentur job whose employer's own ad was not found: the letter is ready, but there is no application page yet |
 | `_UNREACHABLE` | the page could not be loaded |
+
+A `_NOEMPLOYER` folder shows the Arbeitsagentur page only as **Job ad**, never as the application page, plus
+`employer ad not found yet: <reason>`. The employer's ad is searched again on later searches (after
+`employer_careers.failure_ttl_hours` at the earliest); when it turns up, the status, the ending and the links are
+refreshed. An ad posted only on the Arbeitsagentur (no external address, the Arbeitsagentur itself as partner) keeps
+the Arbeitsagentur link, labelled "only on the Arbeitsagentur" (ending `_RESTRICTED`).
 
 `autoapp forms --job <id> --again` (or `assist`) looks again; if the result changes, the folder is renamed
 (the ending is added, changed or removed) and the paths inside `README.md`, `job.md` and `apply.html` are updated.
@@ -65,6 +72,7 @@ the original entry and the last reached address, so a stale link can be retried.
 autoapp forms --dry-run             # Inspect unresolved prepared forms; no changes or requests
 autoapp forms                       # Backfill only prepared non-email jobs without a result
 autoapp forms --job <id> --again     # Retry from the original entry, even if previously found
+autoapp forms --audit [--json]       # Read-only report of the saved links; changes nothing
 ```
 
 Refreshing links changes only generated application-link/status blocks, not your letters,

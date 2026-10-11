@@ -2,7 +2,8 @@
 
 Run from the repository root: ``uv run python scripts/anonymize_alert_samples.py``.
 
-What is kept: From, Subject, Date and the text/plain card structure. Everything else is rebuilt:
+What is kept: From, Subject, Date and the text/plain card structure. The Workwise alert is HTML only: its card
+structure (title, company, city, attribute tags) is kept in a compact HTML body without styles, images or tokens. Everything else is rebuilt:
 the recipient becomes ``Max Mustermann <max.mustermann@example.com>``, the Message-ID is a dummy,
 all tracking headers (Received, DKIM, ARC, X-*, ...) and the HTML part are dropped, and every
 tracking URL is replaced by a deterministic dummy. The samples contain personal data and must
@@ -110,6 +111,51 @@ def _scrub_indeed(text: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+_WORKWISE_COMPANIES = ("Beispiel Software GmbH", "Beispiel Entwicklung GmbH")
+_WORKWISE_CARD_ID = re.compile(r"[?&]id=(\d+)(?:&|$)")
+
+
+def build_workwise(sample: EmailMessage, message_id: str) -> EmailMessage:
+    """An anonymised, HTML-only Workwise alert: cards keep title, city, tags and job id; every link is a dummy
+    (the eTT / lT tokens are dropped), images and styles are dropped, the sender and the companies are replaced."""
+    from html import escape
+
+    from bs4 import BeautifulSoup
+
+    body = sample.get_body(("html",))
+    if body is None:
+        raise ValueError("sample has no text/html part")
+    soup = BeautifulSoup(body.get_content(), "html.parser")
+    out = ["<!DOCTYPE html>", "<html><body>", "<h1>Neues zu deiner Suche: 2 Jobs gefunden</h1>"]
+    heading = ["1 Job passt zu deinem Profil:", "1 Job passt zu deiner letzten Jobsuche:"]
+    cards = 0
+    for anchor in soup.select("a[href]"):
+        match = _WORKWISE_CARD_ID.search(str(anchor["href"]))
+        if not match or "enquiry-card" not in (anchor.get("class") or []):
+            continue
+        title = anchor.select_one("h3").get_text(" ", strip=True)
+        spans = [sp.get_text(" ", strip=True) for sp in anchor.select("span")]
+        company, tags = _WORKWISE_COMPANIES[cards % 2], spans[1:]
+        out.append(f"<p>{heading[min(cards, 1)]}</p>")
+        out.append(f'<a class="enquiry-card" href="https://www.workwise.io/jobsuche?eTT=DUMMY&amp;id={match.group(1)}&amp;lT=DUMMY">')
+        out.append(f"<h3>{escape(title)}</h3>")
+        out.append(f'<div class="company-info"><span>{escape(company)}</span></div>')
+        out.append('<div class="enquiry-chips">' + "".join(f'<div class="tag"><span>{escape(t)}</span></div>' for t in tags) + "</div>")
+        out.append("</a>")
+        out.append('<a href="https://www.workwise.io/jobsuche?eTT=DUMMY&amp;lT=DUMMY&amp;search_id=DUMMY">Alle passenden Jobs anschauen</a>')
+        cards += 1
+    out += ['<p><a href="https://www.workwise.io/einstellungen?eTT=DUMMY&amp;lT=DUMMY">Von Jobvorschl\u00e4gen abmelden</a></p>',
+            "</body></html>"]
+    msg = EmailMessage(policy=policy.default)
+    msg["From"] = "Mia Muster von Workwise <jobs@workwise.io>"
+    msg["To"] = f"{DUMMY_NAME} <{DUMMY_ADDR}>"
+    msg["Subject"] = str(sample["Subject"])
+    msg["Date"] = str(sample["Date"])
+    msg["Message-ID"] = message_id
+    msg.set_content("\n".join(out), subtype="html", charset="utf-8", cte="quoted-printable")
+    return msg
+
+
 def build(sample: EmailMessage, kind: str, message_id: str) -> EmailMessage:
     """Build an anonymised message (text/plain only) from a real sample."""
     display, parts = _name_parts(sample)
@@ -189,7 +235,7 @@ Abbestellen: https://de.indeed.com/DUMMY
 
 
 def _find(kind: str) -> EmailMessage:
-    needle = {"linkedin": "linkedin.com", "stepstone": "stepstone.de", "indeed": "indeed.com"}[kind]
+    needle = {"linkedin": "linkedin.com", "stepstone": "stepstone.de", "indeed": "indeed.com", "workwise": "workwise.io"}[kind]
     for path in sorted(SAMPLES.glob("*.eml")):
         msg = BytesParser(policy=policy.default).parsebytes(path.read_bytes())
         if needle in str(msg["From"]).lower():
@@ -222,6 +268,9 @@ def main() -> int:
             "Keine neuen Treffer",
         ),
     }
+    workwise = build_workwise(_find("workwise"), "<dummy-workwise-alert@example.com>")
+    (FIXTURES / "workwise_alert.eml").write_bytes(workwise.as_bytes())
+    print("wrote workwise_alert.eml")
     for kind, (name, zero_name, zero_text, zero_from, zero_subject) in jobs.items():
         msg = build(_find(kind), kind, f"<dummy-{kind}-alert@example.com>")
         (FIXTURES / name).write_bytes(msg.as_bytes())

@@ -1,0 +1,53 @@
+{
+  "stellenangebotsart": "ARBEIT",
+  "stellenangebotsTitel": "Data Scientist (f/m/d)",
+  "quereinstiegGeeignet": true,
+  "stellenangebotsBeschreibung": "# About Us\n\nWhat if your work could drive change in a globally established industry, shaping processes that touch every corner of the world? At Forto, we are at the forefront of change, harnessing the power of AI to revolutionise logistics. We want to reinvent digital supply chains to be transparent, frictionless and sustainable. From day one, our mission has been to simplify global trade – creating a seamless and efficient logistics process.\n\n# **Your role & Mission**\n\nAs a Data Scientist at Forto, you will take ownership of production ML systems that extract structured intelligence from unstructured logistics data. You will working closely with the Engineering Manager across three core workstreams — document data extraction (FlashDoc), vocabulary mapping, and classical ML. Your immediate priority is ensuring continuity of existing production systems and setting up evaluation pipelines, but equally important is driving step-change improvements in accuracy through disruptive methods and new technologies when the opportunity arises. Beyond document automation, the team’s roadmap extends into traditional data science territory — demand forecasting, churn prediction, route optimization, and predictive analytics for logistics operations. You will bring both the ML engineering depth to maintain and innovate on current systems and the classical data science foundation to tackle these broader challenges as the team grows.\n\n# **What you will do**\n\n- Design, build, and maintain end-to\n\nBewerbungen bitte per E-Mail an bewerbung@forto.example.",
+  "arbeitszeitSchichtNachtWochenende": false,
+  "arbeitszeitTeilzeitAbend": false,
+  "arbeitszeitTeilzeitNachmittag": false,
+  "arbeitszeitTeilzeitVormittag": false,
+  "arbeitszeitTeilzeitFlexibel": false,
+  "arbeitszeitVollzeit": true,
+  "eintrittszeitraum": {
+    "von": "2026-10-06"
+  },
+  "verguetungsangabe": "KEINE_ANGABEN",
+  "vertragsdauer": "UNBEFRISTET",
+  "istGeringfuegigeBeschaeftigung": false,
+  "istBehinderungGefordert": false,
+  "stellenlokationen": [
+    {
+      "adresse": {
+        "strasse": "Schönhauser Allee",
+        "hausnummer": "9",
+        "plz": "10119",
+        "ort": "Berlin",
+        "region": "BERLIN",
+        "land": "DEUTSCHLAND"
+      },
+      "breite": 52.530075,
+      "laenge": 13.4108775
+    }
+  ],
+  "homeofficemoeglich": true,
+  "homeofficetyp": "NACH_VEREINBARUNG",
+  "istPrivateArbeitsvermittlung": false,
+  "istArbeitnehmerUeberlassung": false,
+  "veroeffentlichungszeitraum": {
+    "von": "2026-09-15"
+  },
+  "datumErsteVeroeffentlichung": "2026-06-19",
+  "aenderungsdatum": "2026-10-06T08:20:39.372",
+  "istBetreut": true,
+  "hauptberuf": "Data Scientist",
+  "firma": "Forto Logistics SE & Co. KG",
+  "arbeitgeberKundennummerHash": "NqX-X-znFZc29vuGDx4ILEfIA_rKooiO0S-BbFfAYro=",
+  "allianzpartnerUrl": "http://www.arbeitsagentur.de",
+  "allianzpartnerName": "arbeitsagentur.de",
+  "referenznummer": "10001-1003259403-S",
+  "kontakt": {
+    "email": "bewerbung@forto.example",
+    "ansprechpartner": "Frau Weber"
+  }
+}

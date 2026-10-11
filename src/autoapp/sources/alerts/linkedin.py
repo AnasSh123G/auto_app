@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from email.message import EmailMessage
 
-from autoapp.sources.alerts._mail import plain_text
+from autoapp.sources.alerts._mail import link_text, plain_text
 from autoapp.sources.alerts.models import AlertCard
 
 _SEPARATOR = re.compile(r"^\s*-{5,}\s*$", re.MULTILINE)
@@ -26,6 +26,10 @@ class LinkedInParser:
 
     def handles(self, from_addr: str) -> bool:
         return from_addr.lower() == "jobalerts-noreply@linkedin.com"
+
+    def is_job_alert(self, msg: EmailMessage) -> bool:
+        text = link_text(msg)
+        return not text.strip() or _JOB_ID.search(text) is not None  # a job alert links to /jobs/view/<id>
 
     def parse(self, msg: EmailMessage) -> list[AlertCard]:
         cards: list[AlertCard] = []
