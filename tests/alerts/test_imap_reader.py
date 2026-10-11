@@ -167,12 +167,12 @@ def test_unknown_sender_not_marked_processed() -> None:
     assert again.unrecognised == 1  # still waiting for a parser
 
 
-def test_zero_card_email_warns_and_is_marked() -> None:
+def test_zero_card_email_warns_and_is_not_marked() -> None:
     mailbox = FakeMailbox([("<z@x>", load_eml("stepstone_zero.eml"))])
     store = Store()
     result = ingest_alerts(mailbox, "Jobalerts", store.is_processed, store.mark)
     assert any("parser may be outdated" in w for w in result.warnings)
-    assert store.rows["<z@x>"][1] == 0
+    assert "<z@x>" not in store.rows  # kept for the extraction fallback; see test_excerpts.py
 
 
 def test_folder_is_passed_through_and_duplicates_collapse() -> None:

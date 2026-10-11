@@ -34,3 +34,6 @@ class AlertCard(BaseModel):
     salary_estimate_max: int | None = None
     badges: list[str] = Field(default_factory=list)
     section: Literal["match", "recommended"] = "match"
+    # Redacted text of the card's block in the email (about 1,500 chars) and the email's Message-ID; set at ingestion.
+    email_excerpt: str | None = None
+    message_id: str | None = None

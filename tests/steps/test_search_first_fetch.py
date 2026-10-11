@@ -102,3 +102,27 @@ def test_other_jobs_are_fetched_as_before_and_platform_mode_reads_the_board(tmp_
     else:
         assert browser.urls == [] and ctx.repo.get_job(linkedin)["status"] == "description_unavailable"
     ctx.close()
+
+
+def test_no_request_goes_to_a_job_board_from_the_search_to_the_detail_step(tmp_path):
+    """Search, careers pages and detail step together: every host asked for is the employer's, never a board's."""
+    from urllib.parse import urlsplit
+
+    from autoapp.employers.service import find_alert_ads
+    from tests.employers.identity_world import search_client
+    from tests.employers.test_service import EMP_CONFIG
+    from tests.employers.webfake import FakeWeb
+
+    ctx = RunContext.open(make_workspace(tmp_path, config=EMP_CONFIG, alert_mode="search_first"))
+    ids = [alert(ctx, source, n) for n, source in enumerate(URLS, start=1)]
+    boards = [v.format(n=1) for v in URLS.values()]
+    api, calls = search_client({"Find the job ad": boards})  # the search only ever returns job-board pages
+    web = FakeWeb({})
+    find_alert_ads(ctx, fetch=web, api=api)
+    browser, seen = Browser(), []
+    fetch_details(ctx, http=http_seen(seen), browser=browser)
+    requested = {urlsplit(u).hostname for u in (*web.calls, *seen, *browser.urls)}
+    board_hosts = {"www.linkedin.com", "www.stepstone.de", "de.indeed.com", "www.workwise.io"}
+    assert calls and not requested & board_hosts and browser.urls == [] and seen == []
+    assert all(ctx.repo.get_job(j)["status"] == "description_unavailable" for j in ids)
+    ctx.close()

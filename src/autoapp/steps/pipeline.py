@@ -80,7 +80,7 @@ class RunSummary:
             if self.search.unrecognised_emails:
                 out.append(f"alert emails from unknown senders: {self.search.unrecognised_emails}")
         if self.alerts:
-            out += self.alerts.lines()
+            out += self.alerts.lines(cards=self.search.alert_cards if self.search else None)
         if self.employers:
             out += self.employers.lines()
         if self.own_ads:

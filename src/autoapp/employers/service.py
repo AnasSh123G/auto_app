@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -367,16 +368,29 @@ class AlertResolutionSummary:
     deferred: dict[str, str] = field(default_factory=dict)
     no_company: list[str] = field(default_factory=list)
     search_requests: int = 0
+    cards: int = 0  # cards the alert emails gave in this run (set from the search step)
+    llm_extracted: int = 0  # cards only the LLM fallback could name (stays 0 until that fallback exists)
 
     @property
     def active(self) -> bool:
         return self.mode == "search_first"
 
-    def lines(self) -> list[str]:
-        if not self.active or not (self.searched or self.no_company or self.deferred or self.not_found):
+    def coverage_line(self, cards: int | None = None) -> str:
+        """``alerts: N cards -> X searched, Y found directly, Z via careers page, W waiting (reasons), V needed LLM extraction``."""
+        waiting = {**self.not_found, **self.deferred, **{j: NO_EMPLOYER_NAME for j in self.no_company}}
+        reasons = Counter(re.sub(r"\s+", " ", why).strip()[:60] for why in waiting.values())
+        why = f" ({'; '.join(f'{n}x {r}' if n > 1 else r for r, n in reasons.most_common(3))})" if reasons else ""
+        total = self.cards if cards is None else cards
+        return (f"alerts: {total} cards \u2192 {self.searched} searched, {len(self.direct)} found directly, "
+                f"{len(self.via_careers)} via careers page, {len(waiting)} waiting{why}, "
+                f"{self.llm_extracted} needed LLM extraction")
+
+    def lines(self, cards: int | None = None) -> list[str]:
+        total = self.cards if cards is None else cards
+        if not self.active or not (total or self.searched or self.no_company or self.deferred or self.not_found):
             return []
         waiting = len(self.not_found) + len(self.deferred) + len(self.no_company)
-        out = [f"alert jobs (search first): {len(self.direct)} found by searching company and title, "
+        out = [self.coverage_line(cards), f"alert jobs (search first): {len(self.direct)} found by searching company and title, "
                f"{len(self.via_careers)} on the employer's careers page, {len(self.not_found)} not found, "
                f"{len(self.deferred)} deferred" + (f", {len(self.no_company)} without an employer name" if self.no_company else "")
                + (f" ({self.search_requests} search requests)" if self.search_requests else "")]
