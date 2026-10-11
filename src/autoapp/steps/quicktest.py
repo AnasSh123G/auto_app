@@ -84,10 +84,10 @@ def _alerts(report: QuickTestReport, config: Config, search: Any) -> None:
     elif note.startswith("error"):
         report.add("alert mailbox", FAILED, note)
     elif not search.alert_emails:
-        report.add("alert mailbox", SKIPPED, "no alert email in the folder")
-        report.add("alert parsers", SKIPPED, "no alert email in the folder")
+        report.add("alert mailbox", SKIPPED, "no job alert email among the newest in the folder")
+        report.add("alert parsers", SKIPPED, "no job alert email among the newest in the folder")
     else:
-        report.add("alert mailbox", OK, f"{search.alert_emails} newest emails read, {src.found} job cards")
+        report.add("alert mailbox", OK, f"{search.alert_emails} alert emails read (the newest of each sender), {src.found} job cards")
         for name, cards in sorted(search.alert_parsers.items()):
             if cards:
                 report.add(f"alert parser {name}", OK, f"{cards} cards")

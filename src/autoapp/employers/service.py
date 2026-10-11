@@ -563,6 +563,8 @@ def find_own_ads(ctx: RunContext, *, job_ids: list[str] | None = None, again: bo
     rows = eligible_seed_rows(ctx.conn, job_ids=job_ids, profiles=list(ctx.config.search_profiles), again=again,
                               sources=sources, statuses=OWN_AD_STATUSES)
     if ctx.sample is not None:
+        chosen = ctx.sample_job_ids or []  # the quick test's preparation sample goes first
+        rows = sorted(rows, key=lambda r: chosen.index(r["id"]) if r["id"] in chosen else len(chosen))
         rows = rows[:ctx.sample.employer_lookups]
     if not rows:
         return summary

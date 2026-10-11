@@ -27,7 +27,8 @@ class SampleLimits:
     ``RunContext.sample`` is None in every normal run, so steps only ever look at it where they already limit work.
     """
 
-    alert_emails: int = 2  # the newest alert emails read
+    alerts_per_sender: int = 1  # the newest alert-looking email read from each known alert sender
+    alert_scan: int = 60  # recent alert-folder messages whose headers are looked at to find them
     jobs_per_source: int = 2  # jobs kept from each search source
     employer_lookups: int = 2  # alert jobs / employers looked up online
     evaluations: int = 6  # enough for the form slots below to be filled from different sources
@@ -72,6 +73,8 @@ class RunContext:
     # Search-first alert handling: why an alert job still has no employer ad (job id -> reason), for the detail step.
     alert_notes: dict[str, str] = field(default_factory=dict)
     sample: SampleLimits | None = None  # set only by the quick test
+    # The quick test's preparation sample, chosen after evaluation and before the own-ad search (job ids, best first).
+    sample_job_ids: list[str] | None = None
 
     @classmethod
     def open(cls, ws: Workspace, *, dry_run: bool = False, interactive: bool = True,

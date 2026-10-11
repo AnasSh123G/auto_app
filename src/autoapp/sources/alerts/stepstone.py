@@ -19,10 +19,11 @@ from __future__ import annotations
 import re
 from email.message import EmailMessage
 
-from autoapp.sources.alerts._mail import plain_text
+from autoapp.sources.alerts._mail import link_text, plain_text
 from autoapp.sources.alerts.models import AlertCard
 
 _URL = re.compile(r"^https?://(?:click|www)\.stepstone\.de/\S+$")
+_JOB_LINK = re.compile(r"click\.stepstone\.de/|stepstone\.de/(?:stellenangebote|jobs?/)", re.IGNORECASE)
 _DASHES = re.compile(r"^-{5,}$")
 _SECTION = re.compile(r"^Andere Bewerber interessierten sich auch f\S+r diese Jobs$", re.IGNORECASE)
 _FOOTER = (
@@ -94,6 +95,10 @@ class StepStoneParser:
 
     def handles(self, from_addr: str) -> bool:
         return from_addr.lower().endswith("@jobagent.stepstone.de")
+
+    def is_job_alert(self, msg: EmailMessage) -> bool:
+        text = link_text(msg)
+        return not text.strip() or _JOB_LINK.search(text) is not None  # a job card links through click.stepstone.de
 
     def parse(self, msg: EmailMessage) -> list[AlertCard]:
         lines = [n for n in (_norm(ln) for ln in plain_text(msg).splitlines()) if n]

@@ -39,6 +39,7 @@ class SearchSummary:
     unrecognised_emails: int = 0
     warnings: list[str] = field(default_factory=list)
     alert_emails: int = 0  # alert emails read and parsed in this run
+    alert_not_alerts: int = 0  # emails from a known sender without a job link (account mail), marked processed
     alert_cards: int = 0  # cards those emails gave
     alert_unprocessed: int = 0  # known-sender emails with no card, left unprocessed (warned)
     alert_llm_extracted: int = 0  # cards the alert_extract model named (whole emails and single cards)
@@ -208,8 +209,7 @@ def _search_alerts(ctx: RunContext, summary: SearchSummary, profiles: list[Searc
             return
         from autoapp.mail.connection import ssl_context_for
 
-        mailbox = ImapAlertMailbox(account, password, ssl_context=ssl_context_for(account), since_days=30,
-                                   max_messages=ctx.sample.alert_emails if ctx.sample else None)
+        mailbox = ImapAlertMailbox(account, password, ssl_context=ssl_context_for(account), since_days=30)
 
     repo = ctx.repo
 
@@ -232,14 +232,17 @@ def _search_alerts(ctx: RunContext, summary: SearchSummary, profiles: list[Searc
     fallback = (email_fallback or (extractor.extract_email if extractor else None)) if alerts.llm_fallback else None
     try:
         result = ingest_alerts(mailbox, alerts.folder, is_processed, mark,
-                               newest=ctx.sample.alert_emails if ctx.sample else None, redactor=redactor,
-                               fallback=fallback, fallback_unknown_senders=alerts.llm_unknown_senders)
+                               redactor=redactor, fallback=fallback,
+                               fallback_unknown_senders=alerts.llm_unknown_senders,
+                               per_sender=ctx.sample.alerts_per_sender if ctx.sample else None,
+                               scan=ctx.sample.alert_scan if ctx.sample else 60)
     except Exception as err:  # noqa: BLE001
         report.note = f"error: {err}"
         return
     summary.unrecognised_emails += result.unrecognised
     summary.alert_emails += len(result.processed_ids) + len(result.unprocessed)
     summary.alert_parsers.update(result.parsers)
+    summary.alert_not_alerts += len(result.not_alerts)
     summary.alert_cards += len(result.cards)
     summary.alert_unprocessed += len(result.unprocessed)
     summary.alert_llm_extracted += result.llm_extracted

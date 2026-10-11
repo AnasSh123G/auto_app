@@ -16,7 +16,7 @@ from autoapp.sources.alerts import (
 from autoapp.sources.alerts.excerpt import EXCERPT_CHARS
 from autoapp.steps.context import RunContext
 from autoapp.steps.search import run_search
-from tests.alerts.conftest import load_eml
+from tests.alerts.conftest import load_eml, unreadable_linkedin
 from tests.helpers import make_workspace
 
 EMAIL, PHONE, NAME = "max.mustermann@example.com", "+49 30 1234567", "Max Mustermann"
@@ -127,7 +127,7 @@ def test_a_fallback_that_names_cards_makes_the_email_processed() -> None:
         return [AlertCard(source="linkedin-alert", title="Backend Developer", company="Acme", source_job_id="5")]
 
     store = Store()
-    result = ingest_alerts(FakeMailbox([("<z@x>", load_eml("linkedin_zero.eml"))]), "f", store.is_processed, store.mark,
+    result = ingest_alerts(FakeMailbox([("<z@x>", unreadable_linkedin())]), "f", store.is_processed, store.mark,
                            fallback=fallback)
     assert store.rows["<z@x>"][1] == 1 and result.llm_extracted == 1 and result.unprocessed == []
     [(mid, card)] = result.cards
@@ -143,7 +143,7 @@ def test_a_fallback_that_ran_and_found_nothing_marks_the_email_processed_with_a_
         return []
 
     store = Store()
-    mailbox = FakeMailbox([("<z@x>", load_eml("linkedin_zero.eml"))])
+    mailbox = FakeMailbox([("<z@x>", unreadable_linkedin())])
     result = ingest_alerts(mailbox, "f", store.is_processed, store.mark, fallback=fallback)
     assert store.rows["<z@x>"] == ("jobalerts-noreply@linkedin.com", 0) and result.processed_ids == ["<z@x>"]
     assert result.unprocessed == [] and result.cards == []
@@ -159,7 +159,7 @@ def test_a_fallback_that_fails_or_is_skipped_leaves_the_email_unprocessed_with_a
 
     for fallback in (lambda email: 1 / 0, skipped, None):
         store = Store()
-        result = ingest_alerts(FakeMailbox([("<z@x>", load_eml("linkedin_zero.eml"))]), "f", store.is_processed,
+        result = ingest_alerts(FakeMailbox([("<z@x>", unreadable_linkedin())]), "f", store.is_processed,
                                store.mark, fallback=fallback)
         assert store.rows == {} and result.unprocessed and any("stays unprocessed" in w for w in result.warnings)
 
@@ -185,7 +185,7 @@ def test_run_search_warns_about_a_zero_card_email_and_keeps_it_unprocessed(tmp_p
     ctx = RunContext.open(make_workspace(tmp_path))
     events: list = []
     ctx.events.subscribe(events.append)
-    summary = run_search(ctx, api_sources=[], mailbox=FakeMailbox([("<z@x>", load_eml("linkedin_zero.eml"))]))
+    summary = run_search(ctx, api_sources=[], mailbox=FakeMailbox([("<z@x>", unreadable_linkedin())]))
     assert any("jobalerts-noreply@linkedin.com" in w and "subject:" in w for w in summary.warnings)
     assert any(e.kind == "warning" and "left unprocessed" in e.detail for e in events)
     assert ctx.conn.execute("SELECT COUNT(*) FROM processed_emails").fetchone()[0] == 0

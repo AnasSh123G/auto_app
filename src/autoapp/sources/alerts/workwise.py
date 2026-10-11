@@ -16,7 +16,7 @@ from urllib.parse import unquote
 
 from bs4 import BeautifulSoup
 
-from autoapp.sources.alerts._mail import html_text, plain_text
+from autoapp.sources.alerts._mail import html_text, link_text, plain_text
 from autoapp.sources.alerts.models import AlertCard
 
 _JOB = re.compile(r"workwise\.io/job/(\d+)(?:-([a-z0-9-]+))?", re.I)
@@ -61,6 +61,10 @@ class WorkwiseParser:
     def handles(self, from_addr: str) -> bool:
         domain = from_addr.lower().rsplit("@", 1)[-1]
         return any(domain == d or domain.endswith("." + d) for d in SENDER_DOMAINS)
+
+    def is_job_alert(self, msg: EmailMessage) -> bool:
+        text = link_text(msg)
+        return not text.strip() or _JOB.search(text) is not None  # a job alert links to workwise.io/job/<id>
 
     def parse(self, msg: EmailMessage) -> list[AlertCard]:
         found: dict[str, tuple[str, str | None]] = {}  # job id -> (link text, slug)

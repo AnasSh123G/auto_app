@@ -235,7 +235,13 @@ calls count in the run's AI cost and call limit):
    Such a job is marked **needs review**, is evaluated and prepared as usual, and is **never sent automatically**:
    check the employer and the ad before you apply. In `review` mode it is not drafted unless you ask for that job.
 
-An email from a known sender that gives no card is marked as processed only after the model has read it. If the model
+Account and marketing mail is not sent to the model: an email from a known sender (LinkedIn, StepStone, Indeed,
+Workwise) that holds no job link for that platform (for example "confirm your email") is marked as processed as "not
+a job alert", without an AI call and without a warning. When in doubt, for example an email without a readable text,
+it is treated as an alert. Each parser decides this next to its link patterns (`is_job_alert`).
+
+An email from a known sender that looks like an alert (it has a job link) but gives no card is marked as processed
+only after the model has read it. If the model
 found nothing either, the run warns (sender and subject) and the email is not read, or paid for, again. If the model
 could not run (the extraction cap was reached, no key, a failed call) or `llm_fallback` is `false`, the run shows
 the same warning and the email stays unprocessed and is read again in the next run. Emails from senders without a

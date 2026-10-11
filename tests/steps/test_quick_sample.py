@@ -10,9 +10,10 @@ from autoapp.mail.connection import FakeMailer
 from autoapp.sources.alerts.imap_reader import FakeMailbox
 from autoapp.sources.models import RawJob
 from autoapp.steps.context import RunContext, SampleLimits
-from autoapp.steps.prepare import prepare_jobs
+from autoapp.steps.prepare import _sample_jobs, prepare_jobs, select_sample_jobs
 from autoapp.steps.search import run_search
 from autoapp.steps.send import send_test_applications
+from tests.alerts.conftest import account_mail
 from tests.helpers import make_workspace
 from tests.steps.test_other_steps import FakeResolver, FakeSource, _eml
 from tests.steps.test_prepare_step import AD, LETTER, FakeRenderer, evaluation_payload, factory
@@ -44,14 +45,49 @@ def test_the_sample_reads_only_a_few_arbeitnow_pages(ctx):
     assert ctx.config.sources.arbeitnow.max_pages_per_run == 3 == ctx.config.sources.arbeitnow.max_requests_per_run
 
 
-def test_only_the_newest_alert_emails_are_read_and_parsers_are_named(ctx):
-    ctx.sample = SampleLimits(alert_emails=2)
+def _account_mails(count=2):
+    return [(f"<acc{i}>", account_mail("Workwise <noreply@workwise.io>",
+                                       "Confirm your email: https://www.workwise.io/confirm?token=x\n", f"<acc{i}>"))
+            for i in range(count)]
+
+
+def test_the_newest_alert_of_each_sender_is_read_and_newer_account_mail_is_ignored(ctx):
+    ctx.sample = SampleLimits()
+    ctx.clients["alert_extract"] = llm = FakeLLM()
     mbox = FakeMailbox([("<old>", _eml("indeed_match.eml")), ("<l1>", _eml("linkedin_alert.eml")),
+                        ("<s1>", _eml("stepstone_alert.eml")), *_account_mails()])
+    s = run_search(ctx, api_sources=[], mailbox=mbox, resolver=FakeResolver())
+    assert s.alert_emails == 3 and set(s.alert_parsers) == {"indeed", "linkedin", "stepstone"}  # no workwise entry
+    assert all(cards for cards in s.alert_parsers.values()) and s.alert_cards > 0
+    assert llm.calls_for("alert_extract") == [] and s.warnings == []
+    ids = {r[0] for r in ctx.conn.execute("SELECT message_id FROM processed_emails")}
+    assert ids == {"<old>", "<l1>", "<s1>"}
+
+
+def test_one_email_per_sender_even_when_a_sender_has_several_alerts(ctx):
+    ctx.sample = SampleLimits()
+    mbox = FakeMailbox([("<l0>", _eml("linkedin_alert.eml")), ("<l1>", _eml("linkedin_alert.eml")),
                         ("<s1>", _eml("stepstone_alert.eml"))])
     s = run_search(ctx, api_sources=[], mailbox=mbox, resolver=FakeResolver())
-    assert s.alert_emails == 2 and set(s.alert_parsers) == {"linkedin", "stepstone"}
-    ids = {r[0] for r in ctx.conn.execute("SELECT message_id FROM processed_emails")}
-    assert ids == {"<l1>", "<s1>"}  # the oldest mail was never looked at
+    assert s.alert_emails == 2
+    assert {r[0] for r in ctx.conn.execute("SELECT message_id FROM processed_emails")} == {"<l1>", "<s1>"}
+
+
+def test_the_sample_only_looks_at_the_scanned_window_of_recent_messages(ctx):
+    ctx.sample = SampleLimits(alert_scan=2)
+    mbox = FakeMailbox([("<l1>", _eml("linkedin_alert.eml")), *_account_mails()])
+    s = run_search(ctx, api_sources=[], mailbox=mbox, resolver=FakeResolver())
+    assert s.alert_emails == 0 and s.alert_parsers == {}  # the only alert is older than the window
+
+
+def test_a_normal_run_marks_account_mail_processed_without_a_fallback_call_or_warning(ctx):
+    ctx.clients["alert_extract"] = llm = FakeLLM()
+    mbox = FakeMailbox([("<l1>", _eml("linkedin_alert.eml")), *_account_mails()])
+    s = run_search(ctx, api_sources=[], mailbox=mbox, resolver=FakeResolver())
+    assert s.alert_emails == 1 and s.alert_not_alerts == 2 and s.warnings == [] and s.alert_unprocessed == 0
+    assert llm.calls_for("alert_extract") == [] and "workwise" not in s.alert_parsers
+    rows = {r[0]: r[1] for r in ctx.conn.execute("SELECT message_id, cards FROM processed_emails")}
+    assert rows["<acc0>"] == 0 and rows["<acc1>"] == 0 and rows["<l1>"] > 0
 
 
 def test_without_a_sample_all_alert_emails_are_read(ctx):
@@ -146,3 +182,65 @@ def test_a_source_without_a_candidate_gives_its_slot_to_the_next_best_score(ctx)
     ctx.clients["write"] = FakeLLM(script={"write": [LETTER] * 4})
     s = prepare_jobs(ctx, renderer_factory=factory(FakeRenderer([1] * 4)))
     assert set(s.prepared_ids) == set(forms)  # no email, Arbeitsagentur or alert job: every free slot goes to the next best score
+
+
+def _below_threshold_arbeitsagentur(ctx, company="QIAGEN N.V."):
+    jid = _evaluated(ctx, company, 30, "employer_form", "skipped", "arbeitsagentur")
+    ctx.repo.update_job(jid, job_url="https://www.arbeitsagentur.de/jobsuche/jobdetail/1")
+    return jid
+
+
+def test_a_below_threshold_sample_job_gets_the_own_ad_search_once_it_is_selected(ctx):
+    from autoapp.employers.service import find_own_ads
+    from tests.employers.identity_world import search_client
+
+    ctx.sample = SampleLimits()
+    jid = _below_threshold_arbeitsagentur(ctx)
+    api, calls = search_client({"Find the job ad": []})
+    assert find_own_ads(ctx, fetch=lambda url: None, api=api).searched == 0  # skipped jobs are not searched
+    jobs = select_sample_jobs(ctx)
+    assert [j["id"] for j in jobs] == [jid] and ctx.sample_job_ids == [jid]
+    assert ctx.repo.get_job(jid)["status"] == "approved"
+    api, calls = search_client({"Find the job ad": []})
+    assert find_own_ads(ctx, fetch=lambda url: None, api=api).searched == 1
+    assert any(c["objective"].startswith("Find the job ad") for c in calls)
+    assert [j["id"] for j in _sample_jobs(ctx)] == [jid]  # prepare takes exactly the selected sample
+
+
+def test_the_selected_jobs_come_first_within_the_employer_lookups(ctx):
+    from autoapp.employers.service import find_own_ads
+    from tests.employers.identity_world import search_client
+
+    ctx.sample = SampleLimits(employer_lookups=1)
+    _evaluated(ctx, "Firma Older", 99, "employer_form", "approved", "arbeitsagentur")
+    chosen = _below_threshold_arbeitsagentur(ctx)
+    ctx.repo.transition(chosen, "approved")
+    ctx.sample_job_ids = [chosen]
+    api, calls = search_client({"Find the job ad": []})
+    assert find_own_ads(ctx, fetch=lambda url: None, api=api).searched == 1
+    assert "QIAGEN" in str(calls) and "Firma Older" not in str(calls)  # the older job lost the single lookup
+
+
+def test_the_pipeline_selects_the_quick_test_sample_before_the_own_ad_search(ctx, monkeypatch):
+    from autoapp.employers.service import OwnAdsSummary
+    from autoapp.steps import pipeline
+
+    ctx.sample = SampleLimits()
+    ctx.mode = "test"
+    jid = _below_threshold_arbeitsagentur(ctx)
+    seen = {}
+
+    def own_ads(c, **kw):
+        seen["own_ads"] = (list(c.sample_job_ids or []), c.repo.get_job(jid)["status"])
+        return OwnAdsSummary()
+
+    def prepare(c, **kw):
+        seen["prepare"] = [j["id"] for j in _sample_jobs(c)]
+        from autoapp.steps.prepare import PrepareSummary
+        return PrepareSummary()
+
+    monkeypatch.setattr(pipeline, "find_own_ads", own_ads)
+    monkeypatch.setattr(pipeline, "own_ads_wanted", lambda config: True)
+    monkeypatch.setattr(pipeline, "prepare_jobs", prepare)
+    pipeline.run_pipeline(ctx, api_sources=[], mailbox=FakeMailbox([]))
+    assert seen["own_ads"] == ([jid], "approved") and seen["prepare"] == [jid]

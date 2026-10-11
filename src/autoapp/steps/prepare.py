@@ -97,12 +97,22 @@ def _source_group(sources: set[str]) -> str:
 
 
 def _sample_jobs(ctx: RunContext) -> list:
+    """The quick test's jobs to prepare: the sample chosen before the employer search (chosen now when none was)."""
+    if ctx.sample_job_ids is None:
+        return select_sample_jobs(ctx)
+    jobs = [ctx.repo.get_job(job_id) for job_id in ctx.sample_job_ids]
+    return [j for j in jobs if j is not None and j["status"] == Status.APPROVED.value]
+
+
+def select_sample_jobs(ctx: RunContext) -> list:
     """The quick test: the best evaluated jobs whatever their score, one email application and form applications
     from different sources (one Arbeitsagentur, one alert, one other) first; a source without a candidate gives its
     slot to the next best score.
 
     A job below the apply threshold (review, skipped) is approved here, in the test workspace only, so that letter
-    writing and form finding are exercised.
+    writing and form finding are exercised. The pipeline calls this right after evaluation, before the own-ad
+    search and the careers seeding, so that these jobs go through the same employer passes as in a real run;
+    ``ctx.sample_job_ids`` remembers the choice for ``prepare_jobs`` and the employer search.
     """
     repo = ctx.repo
     sample = ctx.sample
@@ -136,6 +146,7 @@ def _sample_jobs(ctx: RunContext) -> list:
         if job["status"] != Status.APPROVED.value:
             repo.transition(job["id"], Status.APPROVED, note=f"quick test: prepared below the threshold (fit score {score})")
         jobs.append(repo.get_job(job["id"]))
+    ctx.sample_job_ids = [j["id"] for j in jobs]
     return jobs
 
 

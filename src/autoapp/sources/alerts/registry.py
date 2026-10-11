@@ -20,6 +20,13 @@ class Parser(Protocol):
         """True if this parser handles mail from the (lower-cased) bare address."""
         ...
 
+    def is_job_alert(self, msg: EmailMessage) -> bool:
+        """False only when the email is plainly account or marketing mail: it holds no job link for this platform.
+
+        Conservative: when in doubt (for example an email without a readable body) it is an alert.
+        """
+        ...
+
     def parse(self, msg: EmailMessage) -> list[AlertCard]:
         """Extract all job cards from the message."""
         ...

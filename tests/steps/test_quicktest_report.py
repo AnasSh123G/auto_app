@@ -67,7 +67,7 @@ def test_no_alert_email_skips_the_alert_lines_and_the_rest_still_reports(tmp_pat
     summary.search.alert_emails, summary.search.alert_parsers = 0, {}
     report = build_report(config(tmp_path), summary, ENV)
     checks = by_name(report)
-    assert checks["alert mailbox"].status == SKIPPED and checks["alert mailbox"].reason == "no alert email in the folder"
+    assert checks["alert mailbox"].status == SKIPPED and checks["alert mailbox"].reason == "no job alert email among the newest in the folder"
     assert not report.failed and checks["source adzuna"].status == OK
 
 
@@ -147,3 +147,13 @@ def test_an_ad_only_on_the_arbeitsagentur_warns_instead_of_failing(tmp_path):
 
 def test_no_form_jobs_means_no_form_links_section(tmp_path):
     assert "form links:" not in "\n".join(build_report(config(tmp_path), healthy(), ENV).lines())
+
+
+def test_a_parser_line_is_failed_only_for_an_alert_that_gave_no_card_and_account_mail_adds_no_line(tmp_path):
+    summary = healthy()
+    summary.search.alert_parsers = {"linkedin": 6, "workwise": 0}  # an alert-looking Workwise email, nothing read from it
+    checks = by_name(build_report(config(tmp_path), summary, ENV))
+    assert checks["alert parser workwise"].status == FAILED and checks["alert parser linkedin"].status == OK
+    summary.search.alert_parsers = {"linkedin": 6}  # the Workwise mail was account mail: it never reaches the parser list
+    checks = by_name(build_report(config(tmp_path), summary, ENV))
+    assert "alert parser workwise" not in checks and not build_report(config(tmp_path), summary, ENV).failed

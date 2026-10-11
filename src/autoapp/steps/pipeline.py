@@ -29,7 +29,7 @@ from autoapp.steps.context import RunContext
 from autoapp.steps.drafts import CheckSummary, DraftSummary, check_drafts, draft_applications
 from autoapp.steps.evaluate import EvaluateSummary, evaluate_jobs
 from autoapp.steps.fetch import FetchSummary, fetch_details
-from autoapp.steps.prepare import PrepareSummary, prepare_jobs
+from autoapp.steps.prepare import PrepareSummary, prepare_jobs, select_sample_jobs
 from autoapp.steps.search import SearchSummary, run_search
 from autoapp.steps.send import SendSummary, TestRunSummary, send_applications, send_test_applications
 from autoapp.tracking.csv_export import export_csv, sync_csv
@@ -188,6 +188,11 @@ def run_pipeline(ctx: RunContext, profile_name: str | None = None, **overrides: 
         s.errors.append(f"evaluate: {s.evaluate.stopped}")
     elif s.evaluate and s.evaluate.stopped:
         s.warnings.append(s.evaluate.stopped)
+
+    if ctx.sample is not None and ctx.sample.ignore_threshold:
+        # The quick test chooses its preparation sample (below-threshold jobs included) now, so that these jobs get the
+        # own-ad search and the careers seeding below like in a real run; prepare takes exactly this sample.
+        _guard(s, "sample", select_sample_jobs, ctx)
 
     if own_ads_wanted(ctx.config):
         # The jobs worth applying to are known now, with their ads' texts: search "<company> <job title>" for those

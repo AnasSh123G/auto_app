@@ -15,7 +15,7 @@ from datetime import date, timedelta
 from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
-from typing import Protocol
+from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
 
@@ -40,6 +40,27 @@ class AlertMailbox(Protocol):
     def list_messages(self, folder: str) -> Iterable[tuple[str, EmailMessage]]: ...
 
 
+def pick_per_sender(newest_first: Iterable[tuple[str, EmailMessage]], is_processed: Callable[[str], bool],
+                    per_sender: int, *, scan: int) -> list[tuple[str, EmailMessage]]:
+    """The newest ``per_sender`` unprocessed, alert-looking emails of each known sender, from the ``scan`` newest messages.
+
+    Account and marketing mail (no job link for the platform) and mail from unknown senders are passed over.
+    """
+    taken: dict[str, int] = {}
+    picked: list[tuple[str, EmailMessage]] = []
+    for index, (message_id, msg) in enumerate(newest_first):
+        if index >= scan:
+            break
+        parser = parser_for(msg)
+        if parser is None or taken.get(parser.name, 0) >= per_sender or is_processed(message_id):
+            continue
+        if not parser.is_job_alert(msg):
+            continue
+        taken[parser.name] = taken.get(parser.name, 0) + 1
+        picked.append((message_id, msg))
+    return picked
+
+
 class FakeMailbox:
     """In-memory mailbox for tests. Pass a list (served for any folder) or ``{folder: list}``."""
 
@@ -52,6 +73,11 @@ class FakeMailbox:
         if isinstance(self._messages, dict):
             return list(self._messages.get(folder, []))
         return list(self._messages)
+
+    def list_per_sender(self, folder: str, is_processed: Callable[[str], bool], per_sender: int,
+                        scan: int) -> list[tuple[str, EmailMessage]]:
+        """The quick test's sample: see ``pick_per_sender`` (the in-memory list is oldest first)."""
+        return pick_per_sender(reversed(list(self.list_messages(folder))), is_processed, per_sender, scan=scan)
 
 
 def _imap_date(day: date) -> str:
@@ -81,14 +107,12 @@ class ImapAlertMailbox:
         ssl_context: ssl.SSLContext | None = None,
         since_days: int | None = None,
         timeout: float = 30.0,
-        max_messages: int | None = None,
     ) -> None:
         self.account = account
         self._password = password
         self.ssl_context = ssl_context
         self.since_days = since_days
         self.timeout = timeout
-        self.max_messages = max_messages  # only the newest N messages are fetched (the quick test)
 
     def endpoint(self) -> tuple[str, int, str]:
         """Resolved ``(host, port, tls)`` with ``tls`` one of ``ssl``, ``starttls``, ``none``."""
@@ -130,23 +154,87 @@ class ImapAlertMailbox:
             if status != "OK":
                 raise RuntimeError("IMAP SEARCH failed")
             ids = data[0].split() if data and data[0] else []
-            if self.max_messages is not None:
-                ids = ids[-self.max_messages:] if self.max_messages > 0 else []  # SEARCH lists the oldest first
             for num in ids:
-                status, parts = conn.fetch(num.decode() if isinstance(num, bytes) else num, "(BODY.PEEK[])")
-                if status != "OK" or not parts:
-                    continue
-                raw = next((p[1] for p in parts if isinstance(p, tuple) and len(p) > 1), None)
-                if not raw:
-                    continue
-                msg = BytesParser(policy=policy.default).parsebytes(raw)
-                assert isinstance(msg, EmailMessage)
-                yield _message_id(msg, raw), msg
+                fetched = _fetch_message(conn, num, "(BODY.PEEK[])")
+                if fetched is not None:
+                    yield _message_id(fetched[0], fetched[1]), fetched[0]
         finally:
             try:
                 conn.logout()
             except (imaplib.IMAP4.error, OSError):
                 pass
+
+    def list_per_sender(self, folder: str, is_processed: Callable[[str], bool], per_sender: int,
+                        scan: int) -> list[tuple[str, EmailMessage]]:
+        """The quick test's sample: the newest alert-looking email of each known sender, read-only.
+
+        Only the From, Subject and Message-ID headers of the ``scan`` newest messages are fetched (``BODY.PEEK``, so no
+        flag is set). A body is fetched only for the newest message of a known sender, and a few more of that sender
+        when it turns out to be account or marketing mail (``parser.is_job_alert``).
+        """
+        conn = self._connect()
+        try:
+            status, _ = conn.select(_quote(folder), readonly=True)
+            if status != "OK":
+                raise RuntimeError(f"cannot open IMAP folder {folder!r}")
+            criteria: tuple[str, ...] = ("ALL",)
+            if self.since_days is not None:
+                criteria = ("SINCE", _imap_date(date.today() - timedelta(days=self.since_days)))
+            status, data = conn.search(None, *criteria)
+            if status != "OK":
+                raise RuntimeError("IMAP SEARCH failed")
+            ids = data[0].split() if data and data[0] else []
+            candidates: dict[str, list[Any]] = {}  # parser name -> message numbers, newest first
+            parsers: dict[str, Any] = {}
+            for num in reversed(ids[-scan:] if scan > 0 else []):
+                fetched = _fetch_message(conn, num, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID)])")
+                if fetched is None:
+                    continue
+                head, _raw = fetched
+                parser = parser_for(head)
+                if parser is None:
+                    continue
+                if head["Message-ID"] and is_processed(str(head["Message-ID"]).strip()):
+                    continue
+                candidates.setdefault(parser.name, []).append(num)
+                parsers[parser.name] = parser
+            picked: list[tuple[str, EmailMessage]] = []
+            for name, nums in candidates.items():
+                taken = 0
+                for num in nums[:per_sender + _EXTRA_BODIES]:
+                    fetched = _fetch_message(conn, num, "(BODY.PEEK[])")
+                    if fetched is None:
+                        continue
+                    msg, raw = fetched
+                    message_id = _message_id(msg, raw)
+                    if is_processed(message_id) or not parsers[name].is_job_alert(msg):
+                        continue
+                    picked.append((message_id, msg))
+                    taken += 1
+                    if taken >= per_sender:
+                        break
+            return picked
+        finally:
+            try:
+                conn.logout()
+            except (imaplib.IMAP4.error, OSError):
+                pass
+
+
+# Bodies fetched for one sender beyond the wanted count while looking for an alert among its account mail.
+_EXTRA_BODIES = 4
+
+
+def _fetch_message(conn: imaplib.IMAP4, num: Any, what: str) -> tuple[EmailMessage, bytes] | None:
+    status, parts = conn.fetch(num.decode() if isinstance(num, bytes) else num, what)
+    if status != "OK" or not parts:
+        return None
+    raw = next((p[1] for p in parts if isinstance(p, tuple) and len(p) > 1), None)
+    if not raw:
+        return None
+    msg = BytesParser(policy=policy.default).parsebytes(raw)
+    assert isinstance(msg, EmailMessage)
+    return msg, raw
 
 
 def _message_id(msg: EmailMessage, raw: bytes) -> str:
@@ -189,6 +277,7 @@ class IngestResult(BaseModel):
     parsers: dict[str, int] = Field(default_factory=dict)  # parser name -> cards found, for the quick test
     unprocessed: list[UnparsedEmail] = Field(default_factory=list)  # known sender, no card: left for the next run
     llm_extracted: int = 0  # cards that only the fallback found
+    not_alerts: list[str] = Field(default_factory=list)  # known sender, no job link: account mail, marked processed
 
 
 def ingest_alerts(
@@ -201,6 +290,8 @@ def ingest_alerts(
     redactor: Redactor | None = None,
     fallback: EmailFallback | None = None,
     fallback_unknown_senders: bool = False,
+    per_sender: int | None = None,
+    scan: int = 60,
 ) -> IngestResult:
     """Parse every unprocessed email in ``folder``.
 
@@ -212,7 +303,13 @@ def ingest_alerts(
     processed: it is read again on the next run.
     Emails from unknown senders are counted as unrecognised and left unprocessed so that they are ingested once a
     parser exists; with ``fallback_unknown_senders`` those that read like a job alert go to ``fallback`` too.
-    ``newest`` keeps only the last N messages the mailbox lists (oldest first).
+    ``newest`` keeps only the last N messages the mailbox lists (oldest first). ``per_sender`` (the quick test) reads
+    instead the newest ``per_sender`` alert-looking emails of each known sender, looking at the ``scan`` newest
+    messages only.
+
+    An email from a known sender with no job link for its platform (``parser.is_job_alert``) is account or marketing
+    mail, not a job alert: it is marked processed (0 cards) and listed in ``not_alerts``, without a fallback call
+    or a warning.
 
     Every card carries ``message_id`` and a redacted ``email_excerpt`` of its block (``redactor`` removes the
     profile's name, address, e-mail and phone, e-mail addresses, tracking links and query strings).
@@ -220,8 +317,14 @@ def ingest_alerts(
     redactor = redactor or Redactor()
     result = IngestResult()
     seen: set[str] = set()
-    messages = mailbox.list_messages(folder)  # a generator for the real mailbox: read one message at a time
-    if newest is not None:
+    sampler = getattr(mailbox, "list_per_sender", None) if per_sender is not None else None
+    if per_sender is not None and sampler is not None:
+        messages: Iterable[tuple[str, EmailMessage]] = sampler(folder, is_processed, per_sender, scan)
+    elif per_sender is not None:
+        messages = pick_per_sender(reversed(list(mailbox.list_messages(folder))), is_processed, per_sender, scan=scan)
+    else:
+        messages = mailbox.list_messages(folder)  # a generator for the real mailbox: read one message at a time
+    if newest is not None and per_sender is None:
         messages = list(messages)[-newest:] if newest > 0 else []
     for message_id, msg in messages:
         if message_id in seen or is_processed(message_id):
@@ -238,6 +341,10 @@ def ingest_alerts(
                 result.unrecognised += 1
                 continue
             parser_name, reason = "unknown sender", "no parser for this sender"
+        elif not parser.is_job_alert(msg):
+            mark_processed(message_id, sender, 0)  # account or marketing mail: nothing to extract, not read again
+            result.not_alerts.append(message_id)
+            continue
         else:
             parser_name = parser.name
             try:

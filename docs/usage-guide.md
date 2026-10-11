@@ -593,10 +593,16 @@ Five ways to try the program without sending anything to employers. They differ 
 `uv run autoapp test --quick` (menu: **Tests > Quick test**, the pre-selected entry) checks the whole chain in a few minutes
 instead of simulating a whole run. In a throwaway workspace under `workspace/test-runs/<time>/` it:
 
-- reads the 1-2 newest alert emails (they are **not** marked as processed, so your next real run still reads them);
+- reads the newest alert email of **each known sender** (LinkedIn, StepStone, Indeed, Workwise), one each, taken from the
+  headers of the 60 most recent messages of the alert folder (only the headers are fetched first, nothing is
+  marked read or changed in your mailbox). Account or marketing mail from those senders (no job link) is skipped, so it
+  neither hides the alerts behind it nor shows up as a failed parser. The emails are **not** marked as processed in
+  your real workspace, so your next real run still reads them;
 - asks each enabled source (Arbeitsagentur, Adzuna, Workwise, Arbeitnow) for a couple of jobs, keeping at most 2 from each (Arbeitnow, which is
   read page by page, only 3 pages);
 - looks up at most 2 alert employers online: the own-ad search, then the employer's website and careers page;
+- chooses the jobs to prepare (below) **before** the own-ad search and the careers lookup of the Arbeitsagentur jobs, so a
+  job below your threshold gets the same employer search as in a real run (these jobs go first within the 2 lookups);
 - evaluates at most 6 jobs and prepares at most 4: one email application and up to three online-form applications,
   taken from different sources (one Arbeitsagentur job, one alert job, one other; a source with no candidate gives
   its slot to the next best score), **even if they score below your threshold**, so that letter writing and the
@@ -610,7 +616,7 @@ found (`direct search`, `careers page`, `externeURL` or `job page`):
 
 ```
 quick test checklist:
-  OK       alert mailbox: 2 newest emails read, 18 job cards
+  OK       alert mailbox: 2 alert emails read (the newest of each sender), 18 job cards
   OK       alert parser linkedin: 6 cards
   OK       source arbeitsagentur: 3 jobs found, 3 new
   FAILED   source adzuna: error: Adzuna rejected the app ID or key (HTTP 401)
@@ -632,7 +638,7 @@ quick test: 11 OK, 1 WARN, 2 FAILED, 2 SKIPPED
 
 (An example; yours depends on your sources and on what the newest alert emails contain.)
 
-`SKIPPED` means that part could not be tried this time (for example no alert email in the folder, a disabled source,
+`SKIPPED` means that part could not be tried this time (for example no job alert email among the newest in the folder, a disabled source,
 or no email application among the jobs it prepared, so no test email); run the quick test again later or use a
 **test run** for those parts;
 After the checklist it prints the read-only form-link audit of your real workspace (`autoapp forms --audit`), as a
