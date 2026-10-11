@@ -84,7 +84,7 @@ It SHALL then list the form links (see "Quick test reports each form link"). It 
 ## ADDED Requirements
 
 ### Requirement: Quick test reports each form link
-For each online-form application the quick test prepared, it SHALL print one line in a "form links" section: the job's short id, its source, the final address, the form status, the note and how the address was found (direct search, careers page, `externeURL` or the job page). A line SHALL be FAILED when the final address is on a job board (a built-in directory host or an `assist.restricted_domains` entry), OK when the form status is `found`, and WARN for every other status, including `no_employer_link`.
+For each online-form application the quick test prepared, it SHALL print one line in a "form links" section: the job's short id, its source, the final address, the form status, the note and how the address was found (direct search, careers page, `externeURL` or the job page). A line SHALL be FAILED when the final address is on a job board (a built-in directory host or an `assist.restricted_domains` entry), except an ad that exists only on the Arbeitsagentur (note "only on the Arbeitsagentur"), which SHALL be WARN; OK when the form status is `found`; and WARN for every other status, including `no_employer_link`.
 
 #### Scenario: Link on a job board
 - **WHEN** a prepared Arbeitsagentur application's final address is on `arbeitsagentur.de` or a prepared alert application's is on `linkedin.com`
@@ -97,6 +97,10 @@ For each online-form application the quick test prepared, it SHALL print one lin
 #### Scenario: Partial result
 - **WHEN** a prepared application ends `partial` on a page that is not a job board
 - **THEN** its line is WARN with the note, and the exit code is not affected by it
+
+#### Scenario: Ad only on the Arbeitsagentur
+- **WHEN** a prepared Arbeitsagentur job was posted directly there and its link is the Arbeitsagentur page with the note "only on the Arbeitsagentur"
+- **THEN** its line is WARN, not FAILED, and the exit code is not affected by it
 
 ### Requirement: Quick test shows the real workspace's saved form links
 After its checklist the quick test SHALL print the form-link audit of the real workspace (see `application-form-finding`) as the baseline of today's links. It SHALL read the real workspace without writing to it. When the audit cannot be read, the quick test SHALL say so and continue.

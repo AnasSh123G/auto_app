@@ -18,12 +18,12 @@
 
 ## 3. Quick test form-link sampling and per-link report (T6)
 
-- [ ] 3.1 Add `form_applications: int = 3` to `SampleLimits` in `src/autoapp/steps/context.py`, make preparations 1 email plus the form applications, and raise evaluations to 6
-- [ ] 3.2 In `steps/prepare._sample_jobs`, pick form-channel jobs across sources (Arbeitsagentur, alert, other), falling back to the next best score when a source has no candidate; keep search sampling large enough to fill the slots (`jobs_per_source` stays 2)
-- [ ] 3.3 In `steps/quicktest.py`, add the "form links" section with one line per prepared form job: source, final address, status, note and resolution path (direct search, careers page, `externeURL`, job page); FAILED when the host is a job board, OK when `found`, WARN otherwise
-- [ ] 3.4 Add the fourth checklist state WARN that does not change the exit code; `no_employer_link` is WARN
-- [ ] 3.5 Update `tests/steps/test_quicktest_report.py` and `tests/steps/test_quick_sample.py` (fake sources, up to 3 form jobs from different sources, one line per link, a link on `arbeitsagentur.de` or `linkedin.com` is FAILED, exit code reflects FAILED only)
-- [ ] 3.6 Update the quick test section and example output in `docs/usage-guide.md`
+- [x] 3.1 Add `form_applications: int = 3` to `SampleLimits` in `src/autoapp/steps/context.py`, make preparations 1 email plus the form applications, and raise evaluations to 6
+- [x] 3.2 In `steps/prepare._sample_jobs`, pick form-channel jobs across sources (Arbeitsagentur, alert, other), falling back to the next best score when a source has no candidate; keep search sampling large enough to fill the slots (`jobs_per_source` stays 2)
+- [x] 3.3 In `steps/quicktest.py`, add the "form links" section with one line per prepared form job: source, final address, status, note and resolution path (direct search, careers page, `externeURL`, job page); FAILED when the host is a job board, OK when `found`, WARN otherwise
+- [x] 3.4 Add the fourth checklist state WARN that does not change the exit code; `no_employer_link` is WARN
+- [x] 3.5 Update `tests/steps/test_quicktest_report.py` and `tests/steps/test_quick_sample.py` (fake sources, up to 3 form jobs from different sources, one line per link, a link on `arbeitsagentur.de` or `linkedin.com` is FAILED, exit code reflects FAILED only)
+- [x] 3.6 Update the quick test section and example output in `docs/usage-guide.md`
 
 ## 4. Verification
 
