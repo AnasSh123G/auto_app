@@ -164,3 +164,24 @@ def card_excerpts(msg: EmailMessage, cards: Iterable[AlertCard], redactor: Redac
         end = next((i for i in range(start + 1, end) if _FOOTER.search(lines[i])), end)
         out.append("\n".join(lines[start:end])[:limit])
     return out
+
+
+def block_around(body: str, title: str, *, limit: int = EXCERPT_CHARS) -> str:
+    """The part of a redacted email body that starts at ``title`` (a few lines earlier when there are some), at most
+    ``limit`` characters; the start of the body when the title is not in it."""
+    at = body.casefold().find(title.strip().casefold()) if title.strip() else -1
+    if at < 0:
+        return body[:limit]
+    line = body.rfind("\n", 0, at) + 1  # start of the title's line
+    start = body.rfind("\n", 0, line - 1) + 1 if line > 1 else 0  # one line more: a company often sits above
+    return body[start:].strip()[:limit]
+
+
+_ALERT_LIKE = re.compile(r"job[\s-]?alert|jobagent|job-?benachrichtigung|neue (?:jobs|stellen(?:angebote)?)|"
+                         r"new jobs?|jobs? (?:f[uü]r|for) (?:dich|sie|you)|passende (?:jobs|stellen)|"
+                         r"jobs matching|stellenangebote? f[uü]r", re.IGNORECASE)
+
+
+def looks_like_alert(subject: str, body: str) -> bool:
+    """Whether an email from an unknown sender reads like a job alert (subject, or the start of the body)."""
+    return bool(_ALERT_LIKE.search(subject) or _ALERT_LIKE.search(body[:600]))

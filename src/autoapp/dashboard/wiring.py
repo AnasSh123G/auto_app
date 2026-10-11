@@ -9,7 +9,8 @@ from autoapp.llm.base import TASKS
 from autoapp.llm.settings import LLMSettings
 from autoapp.steps.context import RunContext
 
-TASK_LABELS = {"evaluate": "evaluate", "write": "write", "form_fill": "assist form-fill", "form_find": "find form"}
+TASK_LABELS = {"evaluate": "evaluate", "write": "write", "form_fill": "assist form-fill", "form_find": "find form",
+               "alert_extract": "read alert emails"}
 
 
 def usage_text(calls: int, tokens: int, cost: float | None) -> str:

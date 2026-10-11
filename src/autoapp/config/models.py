@@ -117,11 +117,18 @@ AlertMode = Literal["search_first", "platform"]
 
 class AlertsSource(_Model):
     """``mode`` decides how an alert job gets its ad: ``search_first`` (default) searches for the employer's own
-    ad and careers page and never opens the job board's page; ``platform`` reads the job board's page as before."""
+    ad and careers page and never opens the job board's page; ``platform`` reads the job board's page as before.
+
+    ``llm_fallback``: when the parser cannot name a card's company or title (or finds no card in an email from a known
+    sender), the ``alert_extract`` model reads the redacted card text, at most ``max_llm_extractions_per_run`` times per
+    run. ``llm_unknown_senders`` also lets it read alert-like emails from senders without a parser (off by default)."""
 
     enabled: bool = True
     folder: str = "Jobalerts"
     mode: AlertMode = "search_first"
+    llm_fallback: bool = True
+    max_llm_extractions_per_run: int = Field(default=20, ge=0)
+    llm_unknown_senders: bool = False
 
 
 class ArbeitnowConfig(_Model):
@@ -587,7 +594,8 @@ def load_config(ws: Workspace) -> Config:
 
         given = llm.get("tasks") if isinstance(llm.get("tasks"), dict) else {}
         old_keys = [k for k in ("provider", "model", "effort") if k in llm]
-        unset = [t for t in TASK_NAMES if not (given.get(t) or {}).get("model")]
+        # alert_extract follows the evaluate model unless set (it is not asked in the setup wizard)
+        unset = [t for t in TASK_NAMES if t != "alert_extract" and not (given.get(t) or {}).get("model")]
         if old_keys or unset:
             used = "; ".join(f"{t}: {config.llm.resolve(t)[0]} {config.llm.resolve(t)[1]}" for t in TASK_NAMES)
             config._notices.append(

@@ -10,7 +10,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Provider = Literal["anthropic", "google", "openrouter"]
-Task = Literal["evaluate", "write", "form_fill", "form_find"]
+Task = Literal["evaluate", "write", "form_fill", "form_find", "alert_extract"]
 Effort = Literal["low", "medium", "high"]
 
 # Environment variable holding each provider's API key.
@@ -26,12 +26,13 @@ DEFAULT_TASK_EFFORT: dict[str, Effort] = {
     "write": "medium",
     "form_fill": "low",
     "form_find": "low",
+    "alert_extract": "low",
 }
 
 
 DEFAULT_PROVIDER: Provider = "anthropic"
 DEFAULT_MODEL = "claude-sonnet-5-5"
-TASK_NAMES: tuple[str, ...] = ("evaluate", "write", "form_fill", "form_find")
+TASK_NAMES: tuple[str, ...] = ("evaluate", "write", "form_fill", "form_find", "alert_extract")
 
 
 class TaskModel(BaseModel):
@@ -57,10 +58,11 @@ class Price(BaseModel):
 
 
 class LLMSettings(BaseModel):
-    """One model per task: ``llm.tasks.evaluate``, ``write``, ``form_fill`` and ``form_find``.
+    """One model per task: ``llm.tasks.evaluate``, ``write``, ``form_fill``, ``form_find`` and ``alert_extract``.
 
     An older config with one default ``provider``/``model`` (and optional per-task overrides) is
-    converted on load: every task without an entry takes the default, ``form_find`` the evaluate model.
+    converted on load: every task without an entry takes the default, ``form_find`` and ``alert_extract`` the
+    evaluate model.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -91,8 +93,8 @@ class LLMSettings(BaseModel):
                 tasks[task] = entry
                 continue
             entry = dict(entry)
-            # form_find used to follow the evaluate model; the other tasks the default model.
-            base = tasks["evaluate"] if task == "form_find" and "evaluate" in tasks else {
+            # form_find and alert_extract follow the evaluate model; the other tasks the default model.
+            base = tasks["evaluate"] if task in ("form_find", "alert_extract") and "evaluate" in tasks else {
                 "provider": default_provider, "model": default_model}
             if not entry.get("provider"):
                 entry["provider"] = base["provider"]
@@ -100,7 +102,7 @@ class LLMSettings(BaseModel):
                 if entry["provider"] != base["provider"]:
                     raise ValueError(f"llm.tasks.{task}: provider '{entry['provider']}' needs a model")
                 entry["model"] = base["model"]
-            if not entry.get("effort") and default_effort and task != "form_find":
+            if not entry.get("effort") and default_effort and task not in ("form_find", "alert_extract"):
                 entry["effort"] = default_effort
             tasks[task] = entry
         data["tasks"] = {**given, **tasks}

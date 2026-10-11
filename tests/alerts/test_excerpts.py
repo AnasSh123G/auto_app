@@ -5,7 +5,14 @@ from __future__ import annotations
 import json
 from email.message import EmailMessage
 
-from autoapp.sources.alerts import AlertCard, FakeMailbox, Redactor, UnparsedEmail, ingest_alerts
+from autoapp.sources.alerts import (
+    AlertCard,
+    FakeMailbox,
+    FallbackSkipped,
+    Redactor,
+    UnparsedEmail,
+    ingest_alerts,
+)
 from autoapp.sources.alerts.excerpt import EXCERPT_CHARS
 from autoapp.steps.context import RunContext
 from autoapp.steps.search import run_search
@@ -128,8 +135,29 @@ def test_a_fallback_that_names_cards_makes_the_email_processed() -> None:
     assert seen[0].sender == "jobalerts-noreply@linkedin.com" and seen[0].reason == "no job cards found"
 
 
-def test_a_fallback_that_finds_nothing_or_fails_still_warns_and_leaves_it_unprocessed() -> None:
-    for fallback in (lambda email: [], lambda email: 1 / 0):
+def test_a_fallback_that_ran_and_found_nothing_marks_the_email_processed_with_a_warning() -> None:
+    calls: list[str] = []
+
+    def fallback(email: UnparsedEmail) -> list[AlertCard]:
+        calls.append(email.message_id)
+        return []
+
+    store = Store()
+    mailbox = FakeMailbox([("<z@x>", load_eml("linkedin_zero.eml"))])
+    result = ingest_alerts(mailbox, "f", store.is_processed, store.mark, fallback=fallback)
+    assert store.rows["<z@x>"] == ("jobalerts-noreply@linkedin.com", 0) and result.processed_ids == ["<z@x>"]
+    assert result.unprocessed == [] and result.cards == []
+    [warning] = result.warnings
+    assert "linkedin.com" in warning and "subject:" in warning and "marked processed" in warning
+    again = ingest_alerts(mailbox, "f", store.is_processed, store.mark, fallback=fallback)
+    assert calls == ["<z@x>"] and again.skipped_processed == 1  # not read, and not paid for, a second time
+
+
+def test_a_fallback_that_fails_or_is_skipped_leaves_the_email_unprocessed_with_a_warning() -> None:
+    def skipped(email: UnparsedEmail) -> list[AlertCard]:
+        raise FallbackSkipped("cap reached")
+
+    for fallback in (lambda email: 1 / 0, skipped, None):
         store = Store()
         result = ingest_alerts(FakeMailbox([("<z@x>", load_eml("linkedin_zero.eml"))]), "f", store.is_processed,
                                store.mark, fallback=fallback)

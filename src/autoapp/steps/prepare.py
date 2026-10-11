@@ -18,6 +18,7 @@ from pathlib import Path
 
 from autoapp.db.repo import now_iso
 from autoapp.db.status import Status
+from autoapp.employers.posting import email_text_reasons
 from autoapp.evaluation.schema import FinalEvaluation
 from autoapp.llm.base import LLMAuthError, LLMCallLimitReached, LLMError
 from autoapp.package import render as R
@@ -314,7 +315,7 @@ def _prepare_one(ctx: RunContext, job, folder: Path, writer: LetterWriter, rende
         R.render_evaluation_md(final, R.EvaluationExtra(job["title"], job["company"])), encoding="utf-8")
     files += ["job.md", "evaluation.md"]
 
-    review = list(outcome.needs_review) + page_problems
+    review = list(outcome.needs_review) + page_problems + email_text_reasons(repo, job["id"])  # found from email text
     (folder / "README.md").write_text(R.render_readme_md(R.ReadmeData(
         title=job["title"], company=job["company"], channel=channel, job_id=job["id"], files=files,
         apply_email=r.apply_email, application_url=job["application_url"] or r.application_url,

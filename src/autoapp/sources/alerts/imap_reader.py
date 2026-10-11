@@ -21,7 +21,13 @@ from pydantic import BaseModel, Field
 
 from autoapp.config.models import MailAccount
 from autoapp.sources.alerts._mail import from_address
-from autoapp.sources.alerts.excerpt import EXCERPT_CHARS, Redactor, card_excerpts, redacted_body
+from autoapp.sources.alerts.excerpt import (
+    Redactor,
+    block_around,
+    card_excerpts,
+    looks_like_alert,
+    redacted_body,
+)
 from autoapp.sources.alerts.models import AlertCard
 from autoapp.sources.alerts.registry import parser_for
 
@@ -162,8 +168,13 @@ class UnparsedEmail(BaseModel):
     body: str = ""
 
 
-# The extraction hook (T4's fallback): reads one unparsed email and returns the cards it can name. Cards come back
-# without excerpt or message id (ingestion fills both in). An empty list, or an exception, means "found nothing".
+class FallbackSkipped(Exception):  # noqa: N818 - not an error: the fallback did not run (cap reached, no key)
+    """Raised by a fallback that could not run for this email (extraction cap reached, no model available)."""
+
+
+# The extraction hook: reads one unparsed email and returns the cards it can name. Cards come back without excerpt or
+# message id (ingestion fills both in). It ran when it returns (an empty list means "read it, found nothing"); it did
+# not run when it raises ``FallbackSkipped`` or any other exception.
 EmailFallback = Callable[[UnparsedEmail], list[AlertCard]]
 
 
@@ -189,15 +200,19 @@ def ingest_alerts(
     newest: int | None = None,
     redactor: Redactor | None = None,
     fallback: EmailFallback | None = None,
+    fallback_unknown_senders: bool = False,
 ) -> IngestResult:
     """Parse every unprocessed email in ``folder``.
 
-    ``mark_processed(message_id, sender, card_count)`` is called only for emails from a known sender that gave at
-    least one card. A known sender with zero cards, or a parser that raises, is **not** marked processed: it gets a
-    warning naming sender and subject and is read again on the next run. When ``fallback`` is given it is tried
-    first and the email is marked processed only if it names a card; with it, a miss stays a warning.
+    ``mark_processed(message_id, sender, card_count)`` is called for every email from a known sender that gave at
+    least one card. A known sender with zero cards, or a parser that raises, goes to ``fallback`` (when given) and is
+    marked processed only after the fallback has run: with the cards it named, or with none and a warning naming
+    sender and subject (so a miss is not paid for again in every run). When the fallback is not given, raises, or
+    skips the email (``FallbackSkipped``: cap reached), the email gets the same warning and is **not** marked
+    processed: it is read again on the next run.
     Emails from unknown senders are counted as unrecognised and left unprocessed so that they are ingested once a
-    parser exists. ``newest`` keeps only the last N messages the mailbox lists (oldest first).
+    parser exists; with ``fallback_unknown_senders`` those that read like a job alert go to ``fallback`` too.
+    ``newest`` keeps only the last N messages the mailbox lists (oldest first).
 
     Every card carries ``message_id`` and a redacted ``email_excerpt`` of its block (``redactor`` removes the
     profile's name, address, e-mail and phone, e-mail addresses, tracking links and query strings).
@@ -215,35 +230,53 @@ def ingest_alerts(
         seen.add(message_id)
         sender = from_address(msg)
         parser = parser_for(msg)
-        if parser is None:
-            result.unrecognised += 1
-            continue
         reason: str | None = None
         cards: list[AlertCard] = []
-        try:
-            cards = parser.parse(msg)
-        except Exception as exc:  # a broken parser must not stop the other emails
-            reason = f"parser failed ({type(exc).__name__}: {redactor.redact(str(exc))})"
+        if parser is None:
+            body = redacted_body(msg, redactor) if fallback is not None and fallback_unknown_senders else ""
+            if not (body and looks_like_alert(redactor.redact(str(msg["Subject"] or "")), body)):
+                result.unrecognised += 1
+                continue
+            parser_name, reason = "unknown sender", "no parser for this sender"
         else:
-            if not cards:
-                reason = "no job cards found"
+            parser_name = parser.name
+            try:
+                cards = parser.parse(msg)
+            except Exception as exc:  # a broken parser must not stop the other emails
+                reason = f"parser failed ({type(exc).__name__}: {redactor.redact(str(exc))})"
+            else:
+                if not cards:
+                    reason = "no job cards found"
         if reason is not None:
-            result.parsers[parser.name] = result.parsers.get(parser.name, 0)
+            if parser is not None:
+                result.parsers[parser_name] = result.parsers.get(parser_name, 0)
             unparsed = UnparsedEmail(
                 message_id=message_id, sender=sender, subject=redactor.redact(str(msg["Subject"] or "")),
-                parser=parser.name, reason=reason, body=redacted_body(msg, redactor))
-            cards = _run_fallback(fallback, unparsed, result)
+                parser=parser.name if parser else None, reason=reason,
+                body=body if parser is None else redacted_body(msg, redactor))
+            cards, ran = _run_fallback(fallback, unparsed, result)
+            if not cards and parser is None and not ran:
+                result.unrecognised += 1  # an alert-like email nobody could read: as before, left for a parser
+                continue
             if not cards:
-                result.unprocessed.append(unparsed)
-                result.warnings.append(
-                    f"{message_id}: {parser.name}: {reason} in email from {sender} (subject: {unparsed.subject!r})"
-                    "; parser may be outdated; the email stays unprocessed and is read again next run")
+                subject = f"in email from {sender} (subject: {unparsed.subject!r})"
+                if ran:  # read by the fallback, which found nothing: processed, so it is not read (and paid for) again
+                    result.warnings.append(
+                        f"{message_id}: {parser_name}: {reason} {subject}; the extraction fallback found no job "
+                        "either; the email is marked processed")
+                    mark_processed(message_id, sender, 0)
+                    result.processed_ids.append(message_id)
+                else:
+                    result.unprocessed.append(unparsed)
+                    result.warnings.append(
+                        f"{message_id}: {parser_name}: {reason} {subject}; parser may be outdated; "
+                        "the email stays unprocessed and is read again next run")
                 continue
             result.llm_extracted += len(cards)
-            excerpts = [unparsed.body[:EXCERPT_CHARS]] * len(cards)
+            excerpts = [c.email_excerpt or block_around(unparsed.body, c.title) for c in cards]
         else:
             excerpts = card_excerpts(msg, cards, redactor)
-        result.parsers[parser.name] = result.parsers.get(parser.name, 0) + len(cards)
+        result.parsers[parser_name] = result.parsers.get(parser_name, 0) + len(cards)
         cards = [c.model_copy(update={"message_id": message_id, "email_excerpt": c.email_excerpt or ex})
                  for c, ex in zip(cards, excerpts, strict=True)]
         result.cards.extend((message_id, card) for card in cards)
@@ -252,11 +285,15 @@ def ingest_alerts(
     return result
 
 
-def _run_fallback(fallback: EmailFallback | None, email: UnparsedEmail, result: IngestResult) -> list[AlertCard]:
+def _run_fallback(fallback: EmailFallback | None, email: UnparsedEmail,
+                  result: IngestResult) -> tuple[list[AlertCard], bool]:
+    """``(cards, ran)``: ``ran`` is False when there is no fallback, it skipped the email or it failed."""
     if fallback is None:
-        return []
+        return [], False
     try:
-        return list(fallback(email))
+        return list(fallback(email)), True
+    except FallbackSkipped as why:
+        result.warnings.append(f"{email.message_id}: extraction fallback skipped ({why})")
     except Exception as exc:  # noqa: BLE001 - a failing fallback leaves the email unprocessed, like no fallback
         result.warnings.append(f"{email.message_id}: extraction fallback failed ({type(exc).__name__}: {exc})")
-        return []
+    return [], False

@@ -16,7 +16,7 @@ from typing import Protocol, TypeVar, runtime_checkable
 
 from pydantic import BaseModel
 
-TASKS = ("evaluate", "write", "form_fill", "form_find")
+TASKS = ("evaluate", "write", "form_fill", "form_find", "alert_extract")
 
 T = TypeVar("T", bound=BaseModel)
 

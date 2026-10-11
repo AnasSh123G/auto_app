@@ -26,7 +26,15 @@ from autoapp.employers.gateway import SearchGateway
 from autoapp.employers.guard import check_target, guarded_client
 from autoapp.employers.match import match_seed, seed_facts_from_job
 from autoapp.employers.parallel import ParallelSearch
-from autoapp.employers.posting import MAX_PAGES, PostingHit, PostingMemo, PostingMiss, find_posting
+from autoapp.employers.posting import (
+    MAX_PAGES,
+    PostingHit,
+    PostingMemo,
+    PostingMiss,
+    find_posting,
+    find_posting_from_excerpt,
+    mark_from_email_text,
+)
 from autoapp.employers.reconcile import ENRICHABLE, Reconciler, wanted_priority
 from autoapp.employers.repo import EmployerRepo, Listing
 from autoapp.employers.resolver import Group, IdentityResolver, Seed, group_seeds
@@ -396,7 +404,7 @@ class AlertResolutionSummary:
     no_company: list[str] = field(default_factory=list)
     search_requests: int = 0
     cards: int = 0  # cards the alert emails gave in this run (set from the search step)
-    llm_extracted: int = 0  # cards only the LLM fallback could name (stays 0 until that fallback exists)
+    llm_extracted: int = 0  # cards the alert_extract model named in this run (set from the search step)
 
     @property
     def active(self) -> bool:
@@ -456,11 +464,15 @@ def find_alert_ads(ctx: RunContext, *, job_ids: list[str] | None = None, again: 
     rows = eligible_seed_rows(ctx.conn, job_ids=job_ids, profiles=list(ctx.config.search_profiles), again=again,
                               sources=alert_sources(ctx.config), statuses=(Status.NEW, Status.DESCRIPTION_UNAVAILABLE))
     rows = [r for r in rows if not (r["description"] or "").strip()]
-    named = []
+    named: list[Any] = []
+    by_excerpt: list[tuple[Any, str]] = []  # no employer named even after extraction: the card text goes to the search
     for row in rows:
         if _company_unknown(ctx, row):
             summary.no_company.append(row["id"])
             ctx.alert_notes[row["id"]] = NO_EMPLOYER_NAME
+            excerpt = _excerpt_of(ctx, row) if ctx.config.sources.alerts.llm_fallback else None
+            if excerpt and (row["title"] or "").strip():
+                by_excerpt.append((row, excerpt))
         else:
             named.append(row)
     if ctx.sample is not None and len(named) > ctx.sample.employer_lookups:
@@ -468,14 +480,18 @@ def find_alert_ads(ctx: RunContext, *, job_ids: list[str] | None = None, again: 
             summary.deferred[row["id"]] = "quick test: only a sample of the alert jobs is searched"
             ctx.alert_notes[row["id"]] = summary.deferred[row["id"]]
         named = named[:ctx.sample.employer_lookups]
-    if not named:
+    if ctx.sample is not None:
+        by_excerpt = by_excerpt[:ctx.sample.employer_lookups]
+    if not named and not by_excerpt:
         return summary
     if api is None and not os.environ.get("PARALLEL_API_KEY"):
         why = "PARALLEL_API_KEY is not set in workspace/.env"
-        for row in named:
+        for row in [*named, *(r for r, _ in by_excerpt)]:
+            if row["id"] in summary.no_company:
+                summary.no_company.remove(row["id"])
             summary.deferred[row["id"]] = why
             ctx.alert_notes[row["id"]] = f"search key missing: {why}"
-        ctx.emit("warning", None, f"{len(named)} alert jobs wait for the search key: {why} "
+        ctx.emit("warning", None, f"{len(named) + len(by_excerpt)} alert jobs wait for the search key: {why} "
                  "(sources.alerts.mode is search_first)")
         return summary
     close_fetch: Callable[[], None] = lambda: None  # noqa: E731
@@ -488,6 +504,8 @@ def find_alert_ads(ctx: RunContext, *, job_ids: list[str] | None = None, again: 
     own = OwnAdsSummary()
 
     def heard(job_id: str, kind: str, reason: str) -> None:
+        if job_id in summary.no_company:  # found by the card's text (or searched for it): no longer "unnamed"
+            summary.no_company.remove(job_id)
         if kind == "found":
             summary.direct.append(job_id)
             ctx.alert_notes.pop(job_id, None)
@@ -496,8 +514,11 @@ def find_alert_ads(ctx: RunContext, *, job_ids: list[str] | None = None, again: 
         ctx.alert_notes[job_id] = reason
 
     try:
-        _direct_postings(ctx, named, EmployerRepo(ctx.conn), gateway, fetch, run_budget, _emitter(ctx), own,
+        emp = EmployerRepo(ctx.conn)
+        _direct_postings(ctx, named, emp, gateway, fetch, run_budget, _emitter(ctx), own,
                          again=again, now=now, on_result=heard)
+        _excerpt_postings(ctx, by_excerpt, emp, gateway, fetch, run_budget, _emitter(ctx), own,
+                          again=again, now=now, on_result=heard)
     finally:
         close_fetch()
         if own_api:
@@ -638,6 +659,68 @@ def _on_partner_board(ctx, job) -> bool:  # noqa: ANN001
         if is_partner_board(detail.get("allianzpartnerName") or raw.get("allianzpartnerName"), job["company"]):
             return True
     return False
+
+
+def _excerpt_of(ctx: RunContext, row) -> str | None:  # noqa: ANN001
+    """The redacted email excerpt stored with an alert job's source (T3), if there is one."""
+    for source in ctx.repo.sources(row["id"]):
+        try:
+            excerpt = json.loads(source["raw"] or "{}").get("email_excerpt")
+        except (json.JSONDecodeError, AttributeError):
+            continue
+        if isinstance(excerpt, str) and excerpt.strip():
+            return excerpt
+    return None
+
+
+def _excerpt_postings(ctx, rows: list[tuple[Any, str]], emp: EmployerRepo, gateway: SearchGateway, fetch,  # noqa: ANN001
+                      run_budget: RunBudget, emit, summary: OwnAdsSummary, *, again: bool, now,  # noqa: ANN001
+                      on_result: Callable[[str, str, str], None]) -> list[str]:
+    """Alert jobs whose email never names the employer: search with the redacted card text as the objective.
+
+    A page counts only when the employer it names is also named in that text; every hit is flagged ``needs_review``
+    (``confidence: from_email_text``) so that automatic mode never sends it unseen. One search request per job,
+    within the same caps as the other posting searches."""
+    cfg = ctx.config.sources.employer_careers
+    restricted = ctx.config.assist.restricted_domains
+    memo = PostingMemo(ctx.conn, cfg.failure_ttl_hours, now)
+    found: list[str] = []
+    for row, excerpt in rows:
+        job = ctx.repo.get_job(row["id"])
+        if job is None:
+            continue
+        current = job["application_url"]
+        if current and not is_restricted(current, restricted) and not is_directory(current) and current != job["job_url"]:
+            continue  # an address that is not a job board is already there
+        miss = None if again else memo.recent_miss(job["id"])
+        if miss:
+            emit("posting_searched", f"ad not searched again by the alert's text before {cfg.failure_ttl_hours} hours "
+                 f"pass (last time: {miss})", job_id=job["id"], found=False)
+            on_result(job["id"], "miss", f"employer not named in the alert; ad not found by its text (last search: {miss})")
+            continue
+        meter = PageMeter(run_budget, MAX_PAGES)
+        if meter.left <= 0:
+            on_result(job["id"], "deferred", "page limit for this run reached")
+            continue
+        summary.searched += 1
+        result = find_posting_from_excerpt(gateway, meter.wrap(fetch), job_id=job["id"], title=job["title"],
+                                           city=job["location"], excerpt=excerpt, description=job["description"])
+        if isinstance(result, PostingMiss):
+            if not result.deferred:
+                memo.save(job["id"], found=False, url=None, reason=result.reason)
+            emit("posting_searched", f"ad not found by searching the alert's text: {result.reason}", job_id=job["id"],
+                 found=False)
+            on_result(job["id"], "deferred" if result.deferred else "miss",
+                      result.reason if result.deferred else f"employer not named in the alert; ad not found by its text: {result.reason}")
+            continue
+        memo.save(job["id"], found=True, url=result.url, reason=result.reason)
+        if result.company and (job["company"] or "").startswith("(company"):
+            ctx.repo.update_job(job["id"], company=result.company)  # the employer as the page names it
+        mark_from_email_text(ctx.repo, job["id"])
+        _attach_direct(ctx, emp, ctx.repo.get_job(job["id"]), ctx.repo.get_application(job["id"]), result, restricted, emit)
+        found.append(job["id"])
+        on_result(job["id"], "found", f"found by the alert's text, needs review ({result.reason})")
+    return found
 
 
 def _attach_direct(ctx, emp: EmployerRepo, job, app, hit: PostingHit, restricted, emit) -> None:  # noqa: ANN001

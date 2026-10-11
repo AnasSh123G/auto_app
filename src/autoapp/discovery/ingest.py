@@ -236,7 +236,8 @@ def card_to_raw(card: AlertCard, resolved: ResolvedLink | None = None, search_pr
         raw={"title_truncated": card.title_truncated, "badges": list(card.badges), "section": card.section,
              **({"company_unknown": True} if card.company_unknown else {}),
              **({"email_excerpt": card.email_excerpt} if card.email_excerpt else {}),
-             **({"message_id": card.message_id} if card.message_id else {})},
+             **({"message_id": card.message_id} if card.message_id else {}),
+             **({"llm_extracted": True} if card.llm_extracted else {})},
         search_profile=search_profile,
         section=card.section,
     )

@@ -150,6 +150,8 @@ def search(
         search_first = alerts_search_first(ctx.config)
         if search_first:
             s.alerts = find_alert_ads(ctx)
+            if s.search is not None:
+                s.alerts.llm_extracted = s.search.alert_llm_extracted
         if search_first or ctx.config.sources.employer_careers.enabled:
             s.employers = run_discovery(ctx, profile=profile)
             if s.alerts is not None:

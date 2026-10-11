@@ -17,6 +17,7 @@ from autoapp.db.status import Status
 from autoapp.discovery.ingest import card_to_raw, ingest
 from autoapp.discovery.prefilter import Candidate, check
 from autoapp.sources.alerts.imap_reader import AlertMailbox, EmailFallback, ImapAlertMailbox, ingest_alerts
+from autoapp.sources.alerts.llm_extract import AlertExtractor, card_needs_fallback
 from autoapp.sources.models import RawJob
 from autoapp.sources.stepstone_links import StepStoneLinkResolver
 from autoapp.steps.context import RunContext
@@ -40,6 +41,7 @@ class SearchSummary:
     alert_emails: int = 0  # alert emails read and parsed in this run
     alert_cards: int = 0  # cards those emails gave
     alert_unprocessed: int = 0  # known-sender emails with no card, left unprocessed (warned)
+    alert_llm_extracted: int = 0  # cards the alert_extract model named (whole emails and single cards)
     alert_parsers: dict[str, int] = field(default_factory=dict)  # parser name -> cards, for the quick test
 
     def report(self, name: str) -> SourceReport:
@@ -226,10 +228,12 @@ def _search_alerts(ctx: RunContext, summary: SearchSummary, profiles: list[Searc
     from autoapp.sources.alerts.excerpt import Redactor
 
     redactor = Redactor.from_personal(ctx.profile.personal, ctx.config.mail.alerts.address if ctx.config.mail.alerts else None)
+    extractor = AlertExtractor(ctx, max_calls=alerts.max_llm_extractions_per_run) if alerts.llm_fallback else None
+    fallback = (email_fallback or (extractor.extract_email if extractor else None)) if alerts.llm_fallback else None
     try:
         result = ingest_alerts(mailbox, alerts.folder, is_processed, mark,
                                newest=ctx.sample.alert_emails if ctx.sample else None, redactor=redactor,
-                               fallback=email_fallback)
+                               fallback=fallback, fallback_unknown_senders=alerts.llm_unknown_senders)
     except Exception as err:  # noqa: BLE001
         report.note = f"error: {err}"
         return
@@ -238,6 +242,7 @@ def _search_alerts(ctx: RunContext, summary: SearchSummary, profiles: list[Searc
     summary.alert_parsers.update(result.parsers)
     summary.alert_cards += len(result.cards)
     summary.alert_unprocessed += len(result.unprocessed)
+    summary.alert_llm_extracted += result.llm_extracted
     summary.warnings += result.warnings
     for email in result.unprocessed:  # visible in the run log as well as in the summary
         ctx.emit("warning", detail=f"alert email from {email.sender} ({email.subject!r}): {email.reason}; left unprocessed",
@@ -246,6 +251,9 @@ def _search_alerts(ctx: RunContext, summary: SearchSummary, profiles: list[Searc
     resolver = resolver or StepStoneLinkResolver()
     try:
         for _mid, card in result.cards:
+            if extractor is not None and not card.llm_extracted and card_needs_fallback(card):
+                card, completed = extractor.complete_card(card)  # the redacted excerpt, nothing else, goes to the model
+                summary.alert_llm_extracted += completed
             resolved = resolver.resolve(card.url) if card.source.startswith("stepstone") and card.url else None
             job_id = _store(ctx, card_to_raw(card, resolved), report, profiles, today)
             if job_id and resolved is not None and not resolved.ok:

@@ -123,7 +123,7 @@ def test_llm_calls_are_not_stored_as_feed_rows(tmp_path):
 def test_models_in_use_names_every_task(tmp_path):
     ctx = _ctx(tmp_path)
     models = models_in_use(ctx.config.llm)
-    assert set(models) == {"evaluate", "write", "assist form-fill", "find form"}
+    assert set(models) == {"evaluate", "write", "assist form-fill", "find form", "read alert emails"}
     ctx.close()
 
 

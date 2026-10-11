@@ -712,6 +712,7 @@ in your folder again. It does not run while another run is active.
 | `write` | Once per prepared application | Few calls, so a good writer is worth it |
 | `form_find` | Only on pages with several possible apply links | At most four calls per attempt |
 | `form_fill` | When you press `f` in assist | A few per form |
+| `alert_extract` | Only when an alert parser cannot name a card's employer or title, or finds no card | At most `sources.alerts.max_llm_extractions_per_run` (20) calls per run |
 
 Each task has its own model (`llm.tasks` in `config.yaml`). Costs are **estimates** from your token counts and the
 model's price. The provider's bill is what counts. OpenRouter prices are fetched automatically (once a day, no key);

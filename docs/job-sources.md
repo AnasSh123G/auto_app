@@ -190,6 +190,9 @@ sources:
     enabled: true
     folder: Jobalerts
     mode: search_first   # search_first (default) or platform
+    llm_fallback: true                 # the AI reads cards and emails the parsers cannot (default)
+    max_llm_extractions_per_run: 20    # at most this many AI reads per run
+    llm_unknown_senders: false         # also read alert-like emails from unknown senders (default off)
 ```
 
 - **`search_first` (default).** The app reads only the alert email. For each new job it searches
@@ -208,6 +211,33 @@ sources:
 - **`platform`.** The earlier behavior: the job-board page is read slowly with your browser profile (see
   [Detail fetching](#detail-fetching-page-parsing)), and employer lookup only happens when
   `sources.employer_careers.enabled` is true. Set it to `platform` if you prefer that.
+
+### When the parser cannot read a card or an email (AI fallback)
+
+The parsers can miss: a layout changes, a card does not name its employer (Workwise), a title is cut to a word or
+two, or a whole email gives no card. With `sources.alerts.llm_fallback: true` (default) the app then asks the
+`alert_extract` model (one of the entries under `llm.tasks`; without an entry it uses your `evaluate` model, and its
+calls count in the run's AI cost and call limit):
+
+1. **Extraction.** The model reads only the card's text, or the text of the whole email that gave no card, and names
+   `{title, company, city, link}`. Anything it names that is not written in that text is thrown away, so it cannot
+   invent a job. The text it sees is the *redacted* excerpt stored with the card: your name, address, email and phone
+   number, every email address, unsubscribe and tracking links and all link parameters are removed before anything is
+   stored or sent. At most `max_llm_extractions_per_run` calls are made per run.
+2. **Search by the card's text.** If the employer is still not named, the same redacted text (at most 4,000
+   characters) is put into the web search's objective, together with the job title and city. A page is accepted
+   only when it is this job's ad, the employer it names is also named in the card's text, and it is not a job board.
+   Such a job is marked **needs review**, is evaluated and prepared as usual, and is **never sent automatically**:
+   check the employer and the ad before you apply. In `review` mode it is not drafted unless you ask for that job.
+
+An email from a known sender that gives no card is marked as processed only after the model has read it. If the model
+found nothing either, the run warns (sender and subject) and the email is not read, or paid for, again. If the model
+could not run (the extraction cap was reached, no key, a failed call) or `llm_fallback` is `false`, the run shows
+the same warning and the email stays unprocessed and is read again in the next run. Emails from senders without a
+parser are only counted as unrecognised, unless `llm_unknown_senders: true`: then those that read like a job alert
+(subject or start of the text) go through the same fallback and their jobs are listed under the source `llm-alert`.
+
+The `alerts:` line of the run summary ends with `N needed LLM extraction`.
 
 Every run summary starts with `alert mode: ...` and, in `search_first`, counts how many alert jobs were found by
 searching, found on a careers page, not found or deferred. Search usage is reported separately from AI cost.

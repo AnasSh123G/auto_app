@@ -171,6 +171,8 @@ def run_pipeline(ctx: RunContext, profile_name: str | None = None, **overrides: 
         # Search first: the employer's own ad by company and title, then its careers pages, before any page is read.
         s.alerts = _guard(s, "alert ads", find_alert_ads, ctx, ctx=ctx, fetch=overrides.get("employer_fetch"),
                           api=overrides.get("employer_api"))
+        if s.alerts and s.search:
+            s.alerts.llm_extracted = s.search.alert_llm_extracted
     if alerts_search_first(ctx.config) or ctx.config.sources.employer_careers.enabled:
         s.employers = _guard(s, "employer sites", run_discovery, ctx, ctx=ctx, fetch=overrides.get("employer_fetch"),
                              api=overrides.get("employer_api"))
