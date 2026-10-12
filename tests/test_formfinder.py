@@ -695,3 +695,95 @@ def test_the_new_status_in_labels_markers_and_explanations():
     assert explain("restricted", "only on the Arbeitsagentur: x").short == "apply on the Arbeitsagentur"
     assert explain("restricted", "restricted target: arbeitsagentur.de; employer ad not searched yet: no key").short \
         == "employer ad not searched"
+
+
+def test_account_creation_terms_are_a_manual_handoff_even_without_a_password():
+    from autoapp.formfinder.detect import detect
+
+    account = """<h1>Bewerbung</h1><form><input name="first_name"><input name="email" type="email">
+<button>Zum Lebenslauf</button></form>
+<p>Mit Klick auf 'Zum Lebenslauf' erstellst du dein Profil bei Workwise GmbH.</p>"""
+    outcome = detect(account)
+    assert outcome.status == "login_required" and "creates an account/profile" in outcome.note
+    ordinary = account.replace("Mit Klick auf 'Zum Lebenslauf' erstellst du dein Profil bei Workwise GmbH.", "")
+    assert detect(ordinary).status == "found"
+    hidden = ordinary + '<div hidden><p>By clicking Continue you create an account.</p></div>'
+    assert detect(hidden).status == "found"
+
+
+@pytest.mark.parametrize("heading", [
+    "Apply now", "Bewerbungsformular", "Persönliche Angaben", "Personal information",
+    "Apply for this role", "Apply for the position", "Bewerbung für die Stelle",
+])
+def test_generic_form_headings_do_not_conflict_with_matching_metadata(heading):
+    from autoapp.formfinder.detect import detect
+
+    html = (FORM.replace("CBC Cologne Bewerbung", heading)
+            .replace('data-job-reference="346291"', 'data-job-reference="2026-17"')
+            .replace('data-company="CBC Cologne"', 'data-company="Muster GmbH"'))
+    assert detect(html, title="Backend Developer", company="Muster GmbH", reference="2026-17").status == "found"
+
+
+def test_a_matching_role_heading_with_an_explicit_other_employer_is_rejected():
+    from autoapp.formfinder.detect import detect
+
+    html = (FORM.replace("CBC Cologne Bewerbung", "Backend Developer application at Other GmbH")
+            .replace('data-job-reference="346291"', 'data-job-reference="2026-17"')
+            .replace('data-company="CBC Cologne"', 'data-company="Muster GmbH"'))
+    result = detect(html, title="Backend Developer", company="Muster GmbH", reference="2026-17")
+    assert result.status == "partial" and "conflicting" in result.note
+
+
+def test_a_different_explicit_role_at_the_same_employer_is_rejected():
+    html = (FORM.replace("CBC Cologne Bewerbung", "Application for Data Scientist at Muster GmbH")
+            .replace('data-job-reference="346291"', 'data-job-reference="2026-17"')
+            .replace('data-company="CBC Cologne"', 'data-company="Muster GmbH"'))
+    result = detect(html, title="Backend Developer", company="Muster GmbH", reference="2026-17")
+    assert result.status == "partial" and "conflicting" in result.note
+
+
+def test_matching_title_accepts_the_employers_short_name_in_the_heading():
+    html = (FORM.replace("CBC Cologne Bewerbung", "Application for Backend Developer at Muster")
+            .replace('data-job-reference="346291"', 'data-job-reference="2026-17"')
+            .replace('data-company="CBC Cologne"', 'data-company="Muster GmbH"'))
+    assert detect(html, title="Backend Developer", company="Muster GmbH", reference="2026-17").status == "found"
+
+
+def test_a_vague_bewerbung_heading_is_not_employer_conflict_evidence():
+    html = (FORM.replace("CBC Cologne Bewerbung", "Bewerbung bei uns")
+            .replace('data-job-reference="346291"', 'data-job-reference="2026-17"')
+            .replace('data-company="CBC Cologne"', 'data-company="Muster GmbH"'))
+    assert detect(html, title="Backend Developer", company="Muster GmbH", reference="2026-17").status == "found"
+
+
+def test_an_email_application_alternative_does_not_negate_account_creation_on_continue():
+    from autoapp.formfinder.detect import detect
+
+    html = FORM.replace("</body>",
+                        "<p>By clicking Continue you create an account, but you can also apply by email "
+                        "without creating an account.</p></body>")
+    result = detect(html)
+    assert result.status == "login_required" and "creates an account/profile" in result.note
+
+
+def test_sign_up_account_creation_does_not_block_an_account_free_application_option():
+    html = FORM.replace("</body>",
+                        "<p>By clicking Sign up you create an account.</p>"
+                        "<p>Apply without account</p></body>")
+    assert detect(html).status == "found"
+
+
+@pytest.mark.parametrize("prose", [
+    '<p style="display:none">By clicking Continue you create an account.</p>',
+    '<p>By clicking Continue you apply without creating an account.</p>',
+    '<p>By continuing you do not create a profile.</p>',
+])
+def test_hidden_and_negated_account_prose_is_not_an_account_wall(prose):
+    assert detect(FORM.replace("</body>", prose + "</body>")).status == "found"
+
+
+def test_a_captcha_library_in_a_script_is_not_itself_a_blocking_challenge():
+    html = '<h1>Application</h1><div id="root"></div><script src="https://captcha.example/hcaptcha.js"></script>'
+    assert detect(html).status is None
+    assert detect('<h1>Verify you are human</h1><div class="hcaptcha">Complete the challenge</div>').status == "captcha"
+    assert detect(html + '<div class="hcaptcha" style="display:none">Complete the challenge</div>').status is None

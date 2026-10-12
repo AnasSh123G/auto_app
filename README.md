@@ -68,7 +68,7 @@ Every interactive `autoapp run` asks how to handle emails. `--mode` skips the qu
 | Review first (`review`) | Every email is saved as a draft in the Drafts folder of your mailbox. Nothing is sent. You read the draft and send it yourself |
 | Test run (`test`) | Exactly like a real run, but every email a real run would send goes to your own sending address, with the subject `TEST_RUN: <normal subject>`. Nothing is recorded |
 
-Form applications are prepared the same way in every mode, including bounded GET requests to find the actual application page. A run never opens a browser, fills, uploads or submits; after an interactive run it offers to fill the prepared forms (default no). Test mode redirects email to you, but still requests public application pages. Scheduled runs use `run.default_mode` (default `review`, never `test`). See [Email](docs/email.md) for drafts, test runs and safeguards.
+Form applications are prepared the same way in every mode, including bounded GET requests to find the actual application page. Unresolved employer/ATS forms use a bounded, headless browser fallback with the configured `form_find` model. It never fills, uploads, creates accounts or submits; after an interactive run it offers to fill the prepared forms (default no). Test mode redirects email to you, but still requests public application pages. Scheduled runs use `run.default_mode` (default `review`, never `test`). See [Email](docs/email.md) for drafts, test runs and safeguards.
 
 `email.auto_send` no longer exists. An old config is migrated on load: `true` becomes `run.default_mode: automatic`, `false` becomes `review`.
 

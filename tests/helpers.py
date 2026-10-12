@@ -95,6 +95,8 @@ def _with_alert_mode(config: str, mode: str) -> str:
     data = yaml.load(config)
     alerts = data.setdefault("sources", {}).setdefault("alerts", {})
     alerts.setdefault("mode", mode)
+    # Ordinary unit workspaces never launch a live browser; browser-fallback tests explicitly opt in.
+    data.setdefault("assist", {}).setdefault("browser_fallback", False)
     out = io.StringIO()
     yaml.dump(data, out)
     return out.getvalue()

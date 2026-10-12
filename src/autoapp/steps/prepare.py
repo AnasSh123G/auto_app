@@ -234,7 +234,7 @@ def _prepare_one(ctx: RunContext, job, folder: Path, writer: LetterWriter, rende
     if r.channel != "email":
         from autoapp.formfinder.store import resolve
 
-        resolve(ctx, job)
+        resolve(ctx, job, browser=getattr(renderer, "browser", None))
         job = repo.get_job(job["id"])
     language = ctx.config.writing.language if ctx.config.writing.language != "auto" else r.language
     profile = ctx.profile

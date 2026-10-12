@@ -72,16 +72,22 @@ class Snapshot:
 # The page is read in the browser. Elements are numbered with an attribute so a choice can be clicked again later.
 _SNAPSHOT_JS = """([attr, start, limit]) => {
     const visible = (el) => {
-        const r = el.getClientRects();
-        if (!r.length) return false;
-        const s = getComputedStyle(el);
-        return s.visibility !== 'hidden' && s.display !== 'none' && !el.disabled && el.getAttribute('aria-disabled') !== 'true';
+        if (!el.getClientRects().length || el.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
+        for (let node = el; node; node = node.parentElement) {
+            const s = getComputedStyle(node);
+            if (s.visibility === 'hidden' || s.display === 'none' || s.opacity === '0') return false;
+        }
+        return !el.disabled && el.getAttribute('aria-disabled') !== 'true';
     };
+    const dialogs = [...document.querySelectorAll('[role="dialog"], [aria-modal="true"], dialog[open]')]
+        .filter(visible);
+    const dialog = dialogs.length ? dialogs[dialogs.length - 1] : null;
+    const root = dialog || document.body;
     const label = (el) => (el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('title') || '')
         .replace(/\\s+/g, ' ').trim().slice(0, 100);
     document.querySelectorAll('[' + attr + ']').forEach((el) => el.removeAttribute(attr));
-    const nodes = document.querySelectorAll(
-        'a[href], button, [role="button"], [role="link"], [role="tab"], input[type="button"], summary, [onclick]');
+    const nodes = root ? root.querySelectorAll(
+        'a[href], button, [role="button"], [role="link"], [role="tab"], input[type="button"], summary, [onclick]') : [];
     const out = [];
     let n = start;
     for (const el of nodes) {
@@ -93,11 +99,12 @@ _SNAPSHOT_JS = """([attr, start, limit]) => {
         const type = (el.getAttribute('type') || '').toLowerCase();
         const formOwned = tag !== 'a' && !!(el.form || el.closest('form'));
         el.setAttribute(attr, String(n));
-        out.push({n, tag, type, text, href: tag === 'a' ? el.href : '', form: formOwned});
+        out.push({n, tag, type, text, href: tag === 'a' ? el.href : '', form: formOwned,
+                  cookie: !!dialog && /cookie/i.test(dialog.innerText)});
         n += 1;
     }
-    const body = document.body ? document.body.innerText.replace(/\\s+/g, ' ').trim() : '';
-    return {title: document.title || '', text: body, elements: out};
+    const text = root ? root.innerText.replace(/\\s+/g, ' ').trim() : '';
+    return {title: document.title || '', text, elements: out, modal: !!dialog};
 }"""
 
 # Just before a click: a new window opens in the same tab, so the guard keeps watching it.
@@ -110,12 +117,30 @@ _SAME_TAB_JS = """(el) => {
 }"""
 
 
+def _account_action(element: dict) -> bool:
+    text, href = element.get("text", ""), element.get("href", "")
+    return bool(re.search(r"\b(?:log.?in|sign.?in|sign.?up|register|registrier\w*|anmelden)\b", text + " " + href, re.I)
+                and not re.search(r"(?:without|ohne).{0,30}(?:account|konto|login|anmeld)", text, re.I))
+
+
 def _clickable(element: dict) -> bool:
     """Whether an element may ever be offered to the model."""
     text, href = element.get("text", ""), element.get("href", "")
     if element.get("type") in ("submit", "reset", "image") or element.get("form"):
         return False
     if href and urlsplit(href).scheme in ("mailto", "tel", "sms", "data", "file"):
+        return False
+    if _account_action(element):
+        return False
+    if element.get("cookie") and not re.search(r"\b(?:reject|decline|deny|ablehn\w*)\b|"
+                                               r"(?:only|nur).{0,20}(?:necessary|essential|required|notwendig|erforderlich)",
+                                               text, re.I):
+        return False
+    if re.fullmatch(r"accept(?: all)?|allow(?: all)?|agree|akzeptieren|zustimmen|einverstanden", text.strip(), re.I):
+        return False
+    if re.search(r"\b(?:cookies?.{0,25}(?:akzept|accept|erlaub)|"
+                 r"(?:accept|allow|akzeptier\w*|zustimm\w*).{0,25}(?:cookies?|all)|"
+                 r"alle.{0,15}akzeptier\w*)", text, re.I):
         return False
     return not EXCLUDED.search(f"{text} {href}")
 
@@ -142,8 +167,9 @@ def snapshot(page, restricted: list[str]) -> Snapshot:
     """The page as the model sees it: every frame that may be used, its clickable elements numbered from 1."""
     snap = Snapshot(title="", url=page.url, text="")
     texts = []
+    main_modal = False
     for index, frame in enumerate(page.frames):
-        if is_restricted(frame.url, restricted):
+        if is_restricted(frame.url, restricted) or (index and main_modal):
             continue
         try:
             if frame.parent_frame and not frame.frame_element().is_visible():
@@ -154,6 +180,7 @@ def snapshot(page, restricted: list[str]) -> Snapshot:
             continue
         if index == 0:
             snap.title = data["title"]
+            main_modal = data["modal"]
         texts.append(data["text"])
         for element in data["elements"]:
             element["frame"] = index
@@ -208,7 +235,8 @@ def _settle(page) -> None:
 
 def navigate_with_model(page, guard, url: str, *, choose: Callable[[dict], NavAction | None], title: str = "",
                         company: str = "", reference: str | None = None, max_steps: int = 8,
-                        private: list[str] | None = None, say: Callable[[str], None] | None = None):
+                        private: list[str] | None = None, say: Callable[[str], None] | None = None,
+                        hops: list[dict[str, str]] | None = None):
     """Go from ``url`` to the application form with the model choosing each click.
 
     Returns ``(page, Outcome)``, or ``(page, None)`` when the model could not be used before the first click (the
@@ -220,7 +248,8 @@ def navigate_with_model(page, guard, url: str, *, choose: Callable[[dict], NavAc
     # The start page and up to two documents per step (a page and a frame in it); the step count is the real limit.
     guard.max_documents = 2 * max_steps + 2
     history: list[str] = []
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple] = set()
+    failures: dict[tuple, int] = {}
     reached = usable = url
     current = page
     try:
@@ -245,7 +274,9 @@ def navigate_with_model(page, guard, url: str, *, choose: Callable[[dict], NavAc
                 guard.reason = guard.status = None
             if valid_url(current.url) and not is_restricted(current.url, guard.restricted):
                 reached = usable = current.url
-            scope, detection = application_scope(current, guard.restricted, company=company, reference=reference)
+            if hops is not None:
+                hops.append({"url": _scrub_url(current.url, private), "reason": history[-1] if history else "entry"})
+            scope, detection = application_scope(current, guard.restricted, company=company, reference=reference, title=title)
             if scope:
                 return current, Outcome("found", usable, reached, "application form found; press [f] to fill")
             if detection:
@@ -253,6 +284,8 @@ def navigate_with_model(page, guard, url: str, *, choose: Callable[[dict], NavAc
             snap = snapshot(current, guard.restricted)
             offered = describe(snap, private)
             if not offered:
+                if any(_account_action(element) for element in snap.elements):
+                    return current, Outcome("login_required", usable, reached, "login or account creation requires manual action")
                 return current, Outcome("partial", usable, reached, "no apply button the app can safely click")
             action = choose({
                 "job": {"title": title, "company": company},
@@ -280,10 +313,10 @@ def navigate_with_model(page, guard, url: str, *, choose: Callable[[dict], NavAc
             if chosen is None:
                 history.append(f"step {step + 1}: chose element {action.element}, which is not in the list")
                 continue
-            key = (urlsplit(current.url)._replace(fragment="").geturl(), chosen["text"])
+            key = (urlsplit(current.url)._replace(fragment="").geturl(), chosen["text"], chosen.get("href", ""),
+                   chosen["frame"], snap.text)
             if key in seen:
                 return current, Outcome("partial", usable, reached, "navigation loop")
-            seen.add(key)
             if chosen.get("href") and is_restricted(chosen["href"], guard.restricted):
                 return current, Outcome("restricted", usable, reached,
                                         f"restricted target: {urlsplit(chosen['href']).hostname}")
@@ -295,12 +328,24 @@ def navigate_with_model(page, guard, url: str, *, choose: Callable[[dict], NavAc
             try:
                 target.evaluate(_SAME_TAB_JS)
                 target.click(timeout=5000)
+                seen.add(key)
             except BrowserError as error:
                 history[-1] += f" (failed: {str(error).splitlines()[0][:80]})"
+                failures[key] = failures.get(key, 0) + 1
+                if failures[key] >= 2:
+                    return current, Outcome("partial", usable, reached, "click failed twice; continue manually")
             _settle(current)
-        scope, detection = application_scope(current, guard.restricted, company=company, reference=reference)
+        if guard.reason:
+            return current, Outcome(guard.status, usable, current.url, guard.reason)
+        if valid_url(current.url) and not is_restricted(current.url, guard.restricted):
+            reached = usable = current.url
+        if hops is not None:
+            hops.append({"url": _scrub_url(current.url, private), "reason": history[-1] if history else "entry"})
+        scope, detection = application_scope(current, guard.restricted, company=company, reference=reference, title=title)
         if scope:
             return current, Outcome("found", usable, current.url, "application form found; press [f] to fill")
+        if detection:
+            return current, Outcome(detection.status, usable, reached, detection.note)
         return current, Outcome("partial", usable, reached, f"no form within {max_steps} steps")
     except BrowserError as error:
         return current, Outcome(guard.status or "unreachable", usable, reached,

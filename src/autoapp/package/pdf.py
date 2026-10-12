@@ -17,6 +17,11 @@ class PdfRenderer:
         self._pw: Playwright | None = None
         self._browser: Browser | None = None
 
+    @property
+    def browser(self) -> Browser | None:
+        """Share Chromium, but never a context, with preparation's navigation fallback."""
+        return self._browser
+
     def __enter__(self) -> PdfRenderer:
         self._pw = sync_playwright().start()
         try:

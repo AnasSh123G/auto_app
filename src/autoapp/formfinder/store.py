@@ -147,7 +147,7 @@ def save(ctx, job, entry, outcome: Outcome, *, refresh_package=False):
     ctx.emit("form_resolved", job, detail=_status_text(outcome), form_status=outcome.status)
 
 
-def resolve(ctx, job, *, again=False, refresh_package=False):
+def resolve(ctx, job, *, again=False, refresh_package=False, browser=None):
     app = ctx.repo.get_application(job["id"])
     entry = entry_url(ctx, job, app)
     if app and app["form_status"] == "found" and not again:
@@ -164,6 +164,10 @@ def resolve(ctx, job, *, again=False, refresh_package=False):
         # 1. the employer's own posting was not found (entry_url would have used it); 2. with the login, if allowed.
         entry, note = platform_apply_link(ctx, job, entry)
     outcome = find(ctx, entry, title=job["title"], company=job["company"], reference=reference, job_id=job["id"])
+    from autoapp.formfinder.browser import fallback
+
+    outcome = fallback(ctx, entry, outcome, title=job["title"], company=job["company"], reference=reference,
+                       job_id=job["id"], browser=browser)
     if note and outcome.status == "restricted":
         outcome = Outcome(outcome.status, outcome.url, outcome.reached, f"{outcome.note}; {note}")
     save(ctx, job, entry, outcome, refresh_package=refresh_package)

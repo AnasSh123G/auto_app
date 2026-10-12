@@ -4,6 +4,7 @@ from urllib.parse import urljoin, urlsplit
 
 from playwright.sync_api import Error as BrowserError
 
+from autoapp.assist.consent import cookie_request_allowed
 from autoapp.assist.filler import is_restricted
 from autoapp.formfinder.detect import detect
 from autoapp.formfinder.finder import Outcome
@@ -16,7 +17,7 @@ class ApplicationScope:
     selector: str
 
 
-def application_scope(page, restricted, *, company=None, reference=None):
+def application_scope(page, restricted, *, company=None, reference=None, title=None):
     wall = None
     for index, frame in enumerate(page.frames):
         if is_restricted(frame.url, restricted):
@@ -34,9 +35,15 @@ def application_scope(page, restricted, *, company=None, reference=None):
                 if (!nodes[i].getClientRects().length || getComputedStyle(nodes[i]).visibility === 'hidden')
                     node.setAttribute('hidden', '');
             });
-            return copy.outerHTML;
+            const heads = [...document.querySelectorAll('h1')];
+            copy.querySelectorAll('h1').forEach((node, i) => {
+                if (!heads[i].getClientRects().length || getComputedStyle(heads[i]).visibility === 'hidden')
+                    node.setAttribute('hidden', '');
+            });
+            return {html: copy.outerHTML, text: document.body ? document.body.innerText : ''};
         }""")
-        result = detect(rendered, company=company, reference=reference)
+        result = detect(rendered["html"], company=company, reference=reference, title=title,
+                        visible_text=rendered["text"])
         if result.status in ("login_required", "captcha", "partial"):
             wall = result
             if index == 0:
@@ -76,11 +83,17 @@ class NavigationGuard:
                 self.reason, self.status = "untracked popup refused", "partial"
                 route.abort()
                 return
+        try:
+            page_url = route.request.frame.page.url
+        except BrowserError:
+            page_url = ""  # Worker traffic cannot qualify for a page-specific preference exception.
         if is_restricted(route.request.url, self.restricted):
             if route.request.is_navigation_request():
                 self.reason, self.status = "restricted browser target", "restricted"
             route.abort()
-        elif self.navigation and route.request.method not in ("GET", "HEAD"):
+        elif (self.navigation and route.request.method not in ("GET", "HEAD")
+              and not cookie_request_allowed(route.request.url, route.request.method, route.request.post_data,
+                                             page_url)):
             if route.request.is_navigation_request():
                 self.reason, self.status = "submission refused during navigation", "partial"
             route.abort()
@@ -106,7 +119,9 @@ class NavigationGuard:
                 else:
                     self.documents += 1
             over_budget = self.navigation and navigation and self.documents > self.max_documents
-            submitting = self.navigation and request["method"] not in ("GET", "HEAD")
+            submitting = (self.navigation and request["method"] not in ("GET", "HEAD")
+                          and not cookie_request_allowed(request["url"], request["method"],
+                                                         request.get("postData"), page.url))
             if forbidden or over_budget or submitting:
                 if navigation:
                     self.status = "restricted" if forbidden else "partial"

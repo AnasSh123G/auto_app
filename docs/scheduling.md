@@ -77,7 +77,7 @@ run:
   default_mode: review  # or automatic
 ```
 
-Form applications are prepared in both modes; the run never opens a browser. Fill them later with the menu entry "Finish forms".
+Form applications are prepared in both modes. Unresolved employer/ATS links can use a bounded headless browser pass to find the form; filling, account creation and submission remain manual. Fill them later with the menu entry "Finish forms".
 
 See the logs with `journalctl --user -u autoapp` to verify each step.
 

@@ -358,6 +358,8 @@ class Assist(_Model):
     # code; it falls back to the rules when the model cannot be used). rules: only the built-in link rules.
     navigate_mode: Literal["model", "rules"] = "model"
     navigate_max_steps: int = Field(default=8, ge=1, le=15)
+    # Preparation/form rechecks try the configured form_find model in fresh Chromium after unresolved HTTP walks.
+    browser_fallback: bool = True
 
 
 class Setup(_Model):

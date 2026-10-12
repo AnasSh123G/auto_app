@@ -105,7 +105,8 @@ def find(ctx, entry: str | None, *, title: str = "", company: str = "", referenc
     return outcome
 
 
-def _record(ctx, job_id: str, hops: list[dict[str, str]], outcome: Outcome, duration_ms: int) -> None:
+def _record(ctx, job_id: str, hops: list[dict[str, str]], outcome: Outcome, duration_ms: int,
+            strategy: str = "http") -> None:
     """Store the trace; a trace that cannot be stored never fails form finding."""
     from autoapp.db.repo import now_iso
 
@@ -114,8 +115,8 @@ def _record(ctx, job_id: str, hops: list[dict[str, str]], outcome: Outcome, dura
         with ctx.conn:
             ctx.conn.execute(
                 "INSERT INTO form_attempts (job_id, strategy, hops, status, note, duration_ms, created_at) "
-                "VALUES (?, 'http', ?, ?, ?, ?, ?)",
-                (job_id, json.dumps(hops, ensure_ascii=False), outcome.status, note, duration_ms, now_iso()))
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (job_id, strategy, json.dumps(hops, ensure_ascii=False), outcome.status, note, duration_ms, now_iso()))
     except (sqlite3.Error, AttributeError) as error:
         log.warning("form attempt trace not stored: %s", error)
 
@@ -149,7 +150,7 @@ def _walk(ctx, entry: str | None, title: str, company: str, reference: str | Non
         if not response.ok:
             return Outcome("unreachable", usable, reached, response.reason or f"HTTP {response.status}")
         reached = usable = response.final_url or address
-        detection = detect(response.html or "", reference=reference, company=company)
+        detection = detect(response.html or "", reference=reference, company=company, title=title)
         if detection.status:
             return Outcome(detection.status, usable, reached, detection.note)
         if step and _script_built_form(reached, response.html or ""):

@@ -729,7 +729,7 @@ in your folder again. It does not run while another run is active.
 |---|---|---|
 | `evaluate` | Once per new job | Many calls, so a cheap model is fine |
 | `write` | Once per prepared application | Few calls, so a good writer is worth it |
-| `form_find` | Only on pages with several possible apply links | At most four calls per attempt |
+| `form_find` | Ambiguous HTTP links, or the headless fallback on unresolved employer/ATS pages | At most four HTTP choices plus `assist.navigate_max_steps` (default 8) browser choices |
 | `form_fill` | When you press `f` in assist | A few per form |
 | `alert_extract` | Only when an alert parser cannot name a card's employer or title, or finds no card | At most `sources.alerts.max_llm_extractions_per_run` (20) calls per run |
 
@@ -841,7 +841,9 @@ of a normal run).
 - *Privacy:* it does use your details, because you started it.
 
 **`form_find`: finds the right link to an application form.** Runs while preparing applications, and in assist when
-`assist.navigate_mode` is `model`.
+`assist.navigate_mode` is `model`. Preparation first tries HTTP, then a fresh headless browser on unresolved
+employer/ATS pages when `assist.browser_fallback` is true (the default). Both use the configured `form_find` model.
+Account/profile creation remains a manual handoff.
 - *Choosing a link:* a clear apply link needs no model call. When a job page has several plausible links, the model
   picks one or none: at most four calls per attempt, no retries.
 - *Navigating (assist):* at each step it sees the page title, address, a short text excerpt and a numbered list of
@@ -958,7 +960,9 @@ own. There are two ways to still reach the employer's form:
    found"): its letter is still prepared, the Arbeitsagentur page is shown only as **Job ad**, and the lookups are
    repeated after `failure_ttl_hours`. A lookup that did not run at all (no key, a limit) is not a miss; the job
    stays `_RESTRICTED` with the reason. An application form that is drawn by JavaScript (some job
-   portals) is marked `need your browser`; **Finish forms** opens it in the app's browser.
+   portals) first gets the bounded browser fallback. If it remains unresolved, it is marked `need your browser`;
+   **Finish forms** opens it in the app's browser. A page that requires creating a profile is marked `login required`
+   and needs manual continuation.
 2. **Read the company apply link with your login (off by default).** In **Settings > sources** choose "Also read
    them from the job page with my login" and the sites. Then log in once in the app's browser:
 

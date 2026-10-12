@@ -101,10 +101,13 @@ under `llm.prices`. Set the value to `0` to allow no AI calls. A fresh test run 
 
 Clear apply links need no model call. Ambiguous pages may make at most one selection call
 per available transition, four per finding attempt, with no retries or output-repair calls.
+Unresolved employer/ATS pages may also use the model in a fresh headless browser: at most
+`assist.navigate_max_steps` (default 8) choices, without output-repair retries. This pass never types, uploads,
+creates accounts or submits. Set `assist.browser_fallback: false` to keep preparation HTTP-only.
 Failed calls count too. All tasks share the same run call limit; exhaustion leaves a partial
 result. An authentication failure disables further link-selection calls for that run.
 
-The selection prompt contains public job hints and bounded candidate IDs, texts and URLs,
+The selection/browser prompt contains public job hints, bounded visible page text and candidate IDs, texts and URLs,
 not your profile, CV, letters or prepared answers. Queries/fragments and personal/token-like
 text are removed; the chosen ID is mapped back to its original URL locally. Page text is
 untrusted data. This privacy boundary is specific to `form_find`; writing and user-triggered

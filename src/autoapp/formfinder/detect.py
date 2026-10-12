@@ -3,6 +3,8 @@ from dataclasses import dataclass
 
 from bs4 import BeautifulSoup, Tag
 
+from autoapp.employers.hints import clean_title, short_name
+
 APPLICATION = re.compile(r"bewerb|application|apply|lebenslauf|resume|curriculum", re.I)
 EXCLUDED = re.compile(r"newsletter|subscribe|kontaktformular|\bkontakt\b|\bcontact\b|search", re.I)
 NAME = re.compile(r"vorname|nachname|first.?name|last.?name|full.?name|\bname\b", re.I)
@@ -27,10 +29,63 @@ def usable(control: Tag) -> bool:
     return True
 
 
-def detect(html: str, *, reference: str | None = None, company: str | None = None) -> Detection:
+# A heading is identity evidence only when it names a role or explicitly names
+# the vacancy/employer. Generic form and personal-information headings are neutral.
+_ROLE = re.compile(r"\b(?:developer|engineer|assistant|manager|consultant|analyst|designer|"
+                   r"specialist|administrator|architect|technician|intern|entwickler|ingenieur|"
+                   r"assistent|berater|werkstudent|praktikant|fachkraft|sachbearbeiter)\w*\b", re.I)
+
+
+def _heading_conflict(soup, title: str | None, company: str | None) -> bool:
+    if not title:
+        return False
+    wanted = set(re.findall(r"\w+", clean_title(title).casefold()))
+    for node in soup.find_all("h1"):
+        heading = clean_title(node.get_text(" ", strip=True))
+        employer = re.search(r"\b(?:at|bei)\s+(.+)$", heading, re.I)
+        if company and employer:
+            actual = set(re.findall(r"\w+", short_name(employer.group(1)).casefold()))
+            expected = set(re.findall(r"\w+", short_name(company).casefold()))
+            if actual and actual not in ({"uns"}, {"us"}, {"our", "company"}) and actual != expected:
+                return True
+        words = set(re.findall(r"\w+", heading.casefold()))
+        vacancy = re.search(r"(?:application|apply|bewerbung)\s+(?:for|für|als)\s+(.+?)(?:\s+(?:at|bei)\s+|$)", heading, re.I)
+        named = set(re.findall(r"\w+", vacancy.group(1).casefold())) if vacancy else set()
+        generic = {"this", "the", "a", "an", "our", "your", "any", "open", "available", "advertised",
+                   "job", "role", "position", "vacancy", "diese", "diesen", "die", "der", "das", "eine",
+                   "einen", "unsere", "offene", "ausgeschriebene", "stelle", "stellen"}
+        if ((_ROLE.search(heading) and not wanted <= words)
+                or (named - generic and not wanted <= named)):
+            return True
+    return False
+
+
+def _creates_account(text: str) -> bool:
+    # Evaluate one clause at a time: an email alternative in the next clause
+    # cannot negate what clicking Continue does.
+    pattern = r"(?:mit (?:dem )?klick|by clicking|by continuing).{0,180}?(?:erstellst|erstellen|creat\w*).{0,100}?(?:profil|konto|account|profile)"
+    negative = (r"without(?: needing to| having to| the need to)?\s+creat\w*|"
+                r"(?:do not|don't|not|never)\s+creat\w*|(?:ohne|nicht)\s+(?:zu\s+)?erstell\w*")
+    account_free = re.search(r"(?:apply|bewerben|bewerbung).{0,50}(?:without|ohne).{0,30}(?:account|profile|konto|profil)", text, re.I)
+    for clause in re.split(r"[.;!?]", text):
+        if account_free and re.search(r"by clicking\s+[\"'‘’“”]*(?:sign up|register)|mit (?:dem )?klick.{0,20}registrier", clause, re.I):
+            continue
+        for match in re.finditer(pattern, clause, re.I):
+            if not re.search(negative, match.group(), re.I):
+                return True
+    return False
+
+
+def detect(html: str, *, reference: str | None = None, company: str | None = None,
+           title: str | None = None, visible_text: str | None = None) -> Detection:
     soup = BeautifulSoup(html, "html.parser")
+    styled = bool(soup.select_one("style, link[rel=stylesheet]"))
     for node in soup.select("script, style, nav, header, footer"):
         node.decompose()
+    for node in list(soup.find_all(True)):
+        if node.attrs is not None and (node.has_attr("hidden") or node.has_attr("inert") or node.get("aria-hidden") == "true"
+                                      or re.search(r"display\s*:\s*none|visibility\s*:\s*hidden", str(node.get("style", "")), re.I)):
+            node.decompose()
     text = soup.get_text(" ", strip=True)
     logins = [node for node in soup.select('input[type="password"]') if usable(node)]
     if logins:
@@ -42,10 +97,16 @@ def detect(html: str, *, reference: str | None = None, company: str | None = Non
             return Detection("login_required", "login or account creation required")
     if re.search(r"just a moment|verify you are human|checking your browser|cf-chl-|challenge-platform", html, re.I):
         return Detection("captcha", "blocking anti-bot challenge")
-    if not soup.select_one("input, textarea, select") and re.search(r"recaptcha|hcaptcha", html, re.I):
+    if (not soup.select_one("input, textarea, select")
+            and soup.select_one('.g-recaptcha, .hcaptcha, .h-captcha, iframe[src*="recaptcha"], iframe[src*="hcaptcha"]')):
         return Detection("captcha", "blocking CAPTCHA challenge")
-    if re.search(r"create account|konto erstellen|sign in|anmelden|registrieren", text, re.I) and not APPLICATION.search(text):
+    account_text = text if visible_text is None else " ".join(visible_text.split())
+    if re.search(r"create account|konto erstellen|sign in|anmelden|registrieren", account_text, re.I) and not APPLICATION.search(account_text):
         return Detection("login_required", "login or account creation required")
+    if _creates_account(account_text):
+        if styled and visible_text is None:
+            return Detection("needs_browser", "account/profile requirement needs rendered confirmation")
+        return Detection("login_required", "continuing creates an account/profile; continue manually")
     for attr, expected in (("data-job-reference", reference), ("data-company", company)):
         identified = soup.select_one(f"[{attr}]")
         if expected and identified and str(identified.get(attr)).casefold() != expected.casefold():
@@ -76,6 +137,8 @@ def detect(html: str, *, reference: str | None = None, company: str | None = Non
             continue
         if not APPLICATION.search(context) and not APPLICATION.search(text):
             continue
+        if _heading_conflict(soup, title, company):
+            return Detection("partial", "conflicting vacancy heading; check the job manually")
         if node.name == "body":
             scope = "body"
         else:

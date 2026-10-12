@@ -30,10 +30,22 @@ Once automatic navigation has stopped, the browser is yours: the real page stays
 click anything (including apply buttons that open a new tab), and `[f]` fills the newest tab.
 The terminal says in plain words what happened and what to do next.
 
-Preparation uses plain GETs, never a browser. `autoapp forms` backfills old packages;
+Preparation starts with plain GETs. When an employer/ATS page remains unresolved, a fresh headless Chromium
+session uses your `form_find` model to navigate to the form. Workwise is also supported, but a step that would
+create a profile is saved as `login_required` for manual continuation. No values are typed or files uploaded.
+`assist.browser_fallback: false` disables this preparation/recheck fallback; `assist.navigate_mode: rules` also
+keeps it off. `assist.navigate_max_steps` (default 8) and the shared model budget bound each attempt. Missing model
+credentials or Chromium leave the HTTP result usable. Job-board pages other than Workwise are not browser targets.
+
+Cookie dialogs are read before the covered page. Optional-cookie acceptance is excluded from model choices.
+The only non-GET preference exception is Workwise's exact cookie-consent endpoint: its OPTIONS preflight and a
+POST containing exactly four false consent flags. Login, account creation and application writes remain blocked.
+A failed click can be retried once and is reported as a click failure, rather than a completed navigation loop.
+
+`autoapp forms` backfills old packages;
 `autoapp forms --again --job <id>` restarts at the original entry for any saved status.
-Every form-finding run also saves a trace in the database table `form_attempts`: the strategy (`http`;
-`browser` and `ats` are reserved for later), the pages visited with the reason for each (`entry`, `redirect`,
+Every form-finding run also saves a trace in the database table `form_attempts`: the strategy (`http` or `browser`;
+`ats` is reserved for later), the pages visited with the reason for each (`entry`, `redirect`,
 `link`, `model choice`), the final status, a short note and the duration. `form_note` stays the one-line summary.
 
 ### Audit of the saved links
