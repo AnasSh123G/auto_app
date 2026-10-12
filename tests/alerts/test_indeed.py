@@ -104,3 +104,72 @@ def test_match_email_with_work_location_line_keeps_title_company_and_city():
     [card] = IndeedParser().parse(msg)
     assert (card.title, card.company, card.locations) == ("JUNIOR DATA ENGINEER (M/W/D)", "Reply", ["Düsseldorf"])
     assert card.work_mode == "hybrid" and card.source_job_id == "db6a180f94b437a9"
+
+
+def test_current_job_alert_reads_all_fourteen_jobs_without_fallback():
+    from autoapp.sources.alerts.llm_extract import card_needs_fallback
+
+    msg = _load("indeed_alert.eml")
+    result = parse_email(msg)
+    assert IndeedParser().is_job_alert(msg)
+    assert result.warnings == [] and len(result.cards) == 14
+    cards = result.cards
+    assert [(c.title, c.company, c.locations) for c in cards[:3]] == [
+        ("AI Systems Engineer / Software Engineer (m/w/d)", "Ai System Engineers", ["Bad Hersfeld"]),
+        ("Backend Developer (m/w/x) – Java & AI-first Software Development", "BIG PICTURE GmbH", ["Berlin-Kreuzberg"]),
+        ("Software Developer - Modeling & Simulation (d/m/w)", "E Airbus Defence and Space GmbH", ["Immenstaad am Bodensee"]),
+    ]
+    assert cards[-1].company == "Instaffo GmbH" and cards[-1].locations == ["Leipzig"]
+    assert all(c.source == "indeed-alert" and not card_needs_fallback(c) for c in cards)
+    assert all(c.source_job_id is None and c.url is None for c in cards)
+    assert all(c.salary_estimate_min is None and c.salary_estimate_max is None for c in cards)
+    assert not IndeedParser().is_job_alert(_load("indeed_zero.eml"))
+
+
+def test_bare_job_links_keep_readable_keys_and_distinct_employers():
+    msg = EmailMessage()
+    msg["From"] = "Indeed <donotreply@jobalert.indeed.com>"
+    msg.set_content(
+        "Developer\nMuster - Software GmbH - Berlin\nhttps://de.indeed.com/viewjob?jk=aaaaaaaaaaaaaaaa&tk=SECRET\n\n"
+        "Developer\nOther GmbH - Hamburg\nhttps://de.indeed.com/pagead/clk/dl?ad=SECRET\n\n"
+        "Developer\nOther GmbH - München\nhttps://de.indeed.com/pagead/clk/dl?ad=SECOND_SECRET\n\n"
+        "Developer\nOther GmbH - Hamburg\nhttps://de.indeed.com/pagead/clk/dl?ad=SECRET\n"
+    )
+    cards = IndeedParser().parse(msg)
+    assert len(cards) == 3
+    assert cards[0].company == "Muster - Software GmbH"
+    assert cards[0].source_job_id == "aaaaaaaaaaaaaaaa"
+    assert cards[0].url == canonical_job_url("aaaaaaaaaaaaaaaa")
+    assert cards[1].url is None and cards[2].url is None
+
+
+def test_current_alert_stores_no_click_tokens_and_calls_no_extraction_llm(tmp_path):
+    from autoapp.llm.fake import FakeLLM
+    from autoapp.sources.alerts import FakeMailbox
+    from autoapp.sources.alerts.excerpt import Redactor, card_excerpts
+    from autoapp.steps.context import RunContext
+    from autoapp.steps.search import run_search
+    from tests.helpers import make_workspace
+
+    msg = _load("indeed_alert.eml")
+    text = msg.get_body(("plain",)).get_content().replace("ad=DUMMY", "ad=SECRET_CLICK_TOKEN&alid=SECRET_ACCOUNT")
+    msg.set_content(text)
+    cards = IndeedParser().parse(msg)
+    excerpts = card_excerpts(msg, cards, Redactor())
+    assert len(excerpts) == 14
+    assert cards[0].title in excerpts[0] and cards[1].title not in excerpts[0]
+    assert all("SECRET" not in e and "alid=" not in e for e in excerpts)
+    ctx = RunContext.open(make_workspace(tmp_path, alert_mode="search_first"))
+    ctx.config.sources.alerts.llm_fallback = True
+    client = FakeLLM()
+    ctx.clients["alert_extract"] = client
+    summary = run_search(ctx, api_sources=[], mailbox=FakeMailbox([("<indeed-alert@x>", msg)]))
+    assert summary.alert_cards == 14 and summary.alert_llm_extracted == 0
+    assert client.calls == []
+    rows = ctx.conn.execute("SELECT raw, url FROM job_sources WHERE source = 'indeed-alert'").fetchall()
+    assert len(rows) == 14
+    for row in rows:
+        blob = f"{row['raw']} {row['url']}"
+        assert "SECRET" not in blob and "alid=" not in blob and "ad=" not in blob
+        assert json.loads(row["raw"])["email_excerpt"]
+    ctx.close()

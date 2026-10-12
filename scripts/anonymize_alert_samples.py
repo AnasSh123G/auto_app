@@ -96,6 +96,9 @@ def _scrub_indeed(text: str) -> str:
         url = match.group(0)
         if "cts.indeed.com" in url:
             return indeed_dummy_link(job_key(url))
+        if "/pagead/clk" in url or "/viewjob" in url or "/rc/clk" in url:
+            jk = job_key(url)
+            return f"https://de.indeed.com/viewjob?jk={jk}" if jk else "https://de.indeed.com/pagead/clk/dl?ad=DUMMY"
         return "https://de.indeed.com/DUMMY"
 
     text = re.sub(r"https?://\S+", repl, text)
@@ -234,11 +237,11 @@ Abbestellen: https://de.indeed.com/DUMMY
 """
 
 
-def _find(kind: str) -> EmailMessage:
+def _find(kind: str, sender: str | None = None) -> EmailMessage:
     needle = {"linkedin": "linkedin.com", "stepstone": "stepstone.de", "indeed": "indeed.com", "workwise": "workwise.io"}[kind]
     for path in sorted(SAMPLES.glob("*.eml")):
         msg = BytesParser(policy=policy.default).parsebytes(path.read_bytes())
-        if needle in str(msg["From"]).lower():
+        if needle in str(msg["From"]).lower() and (sender is None or sender in str(msg["From"]).lower()):
             return msg  # type: ignore[return-value]
     raise SystemExit(f"no {kind} sample found in {SAMPLES}")
 
@@ -268,11 +271,14 @@ def main() -> int:
             "Keine neuen Treffer",
         ),
     }
+    alert = build(_find("indeed", "@jobalert.indeed.com"), "indeed", "<dummy-indeed-jobalert@example.com>")
+    (FIXTURES / "indeed_alert.eml").write_bytes(alert.as_bytes())
+    print("wrote indeed_alert.eml")
     workwise = build_workwise(_find("workwise"), "<dummy-workwise-alert@example.com>")
     (FIXTURES / "workwise_alert.eml").write_bytes(workwise.as_bytes())
     print("wrote workwise_alert.eml")
     for kind, (name, zero_name, zero_text, zero_from, zero_subject) in jobs.items():
-        msg = build(_find(kind), kind, f"<dummy-{kind}-alert@example.com>")
+        msg = build(_find(kind, "@match.indeed.com" if kind == "indeed" else None), kind, f"<dummy-{kind}-alert@example.com>")
         (FIXTURES / name).write_bytes(msg.as_bytes())
         zero = _compose(
             zero_from,

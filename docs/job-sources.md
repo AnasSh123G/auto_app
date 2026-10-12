@@ -239,6 +239,11 @@ calls count in the run's AI cost and call limit):
    Such a job is marked **needs review**, is evaluated and prepared as usual, and is **never sent automatically**:
    check the employer and the ad before you apply. In `review` mode it is not drafted unless you ask for that job.
 
+Current Indeed job alerts are parsed directly from their title and `company - city` lines, without an extraction
+model call when both are present. Some sponsored links contain only opaque click tokens, with no readable job key;
+those links are discarded and the card is resolved by employer/title search. A readable job key is kept in a
+canonical Indeed URL. Salary badges in this layout are ignored.
+
 Account and marketing mail is not sent to the model: an email from a known sender (LinkedIn, StepStone, Indeed,
 Workwise) that holds no job link for that platform (for example "confirm your email") is marked as processed as "not
 a job alert", without an AI call and without a warning. When in doubt, for example an email without a readable text,

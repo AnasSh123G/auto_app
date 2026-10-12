@@ -282,3 +282,13 @@ def test_an_arbeitsagentur_miss_is_seeded_into_the_careers_pages_after_the_own_a
     assert late is not None and late.enabled and late.employers[0].seeds == [job_id]
     assert any("official employer website" in c["objective"] for c in calls)
     ctx.close()
+
+
+def test_arbeitnow_is_a_board_but_its_source_backlink_is_still_valid():
+    from autoapp.employers.scope import is_directory
+    from autoapp.sources.arbeitnow import listing_url
+
+    url = "https://www.arbeitnow.com/jobs/backend-developer-123"
+    assert is_directory(url) and is_directory("https://jobs.arbeitnow.com/jobs/123")
+    assert not is_directory("https://arbeitnow.com.example.org/jobs/123")
+    assert listing_url(url) == url

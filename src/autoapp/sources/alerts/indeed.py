@@ -16,6 +16,10 @@ Card layout in the text part (one or more cards)::
     Leistungen:                         (optional, followed by "- ..." bullets)
     Job anzeigen: <tracking link>
 
+Current job-alert cards instead use ``<title>``, ``<company> - <city>``, optional
+badges/snippet, and a bare job URL. Sponsored links with opaque click tokens have
+no offline-readable job key: keep the company/title for employer search, but no URL.
+
 The footer ("Letzte Jobs: ...", "Mindestgrundgehalt: ...") describes the user's own
 Indeed profile and never becomes a card.
 """
@@ -118,20 +122,44 @@ class IndeedParser:
         match_mail = from_address(msg).endswith("@match.indeed.com")
         lines = [ln.strip() for ln in plain_text(msg).splitlines()]
         cards: list[AlertCard] = []
-        seen: set[str] = set()
+        seen: set[tuple[str, ...]] = set()
         block_start = 0
         for i, line in enumerate(lines):
             m = _ANCHOR.match(line)
-            if not m:
+            bare_job_link = bool(_URLS.fullmatch(line) and _DIRECT_JOB.search(line)
+                                 and urlsplit(line).hostname in {"de.indeed.com", "www.indeed.com", "indeed.com", "indeed.de", "www.indeed.de"})
+            if not m and not bare_job_link:
                 continue
-            block = [ln for ln in lines[block_start:i] if ln]
+            block = lines[block_start:i]
             block_start = i + 1
-            card = self._card(block, m.group(2), match_mail)
-            if card is None or (card.source_job_id or card.title) in seen:
+            if m:
+                card = self._card([ln for ln in block if ln], m.group(2), match_mail)
+            else:
+                # Current job alerts use a bare link after title, "company - city", and optional badges/snippet.
+                start = next((k + 1 for k in range(len(block) - 1, -1, -1) if not block[k]), 0)
+                card = self._alert_card(block[start:], line)
+            if card is None:
                 continue
-            seen.add(card.source_job_id or card.title)
+            identity = (card.source_job_id,) if card.source_job_id else (card.title, card.company, *card.locations)
+            if identity in seen:
+                continue
+            seen.add(identity)
             cards.append(card)
         return cards
+
+    @staticmethod
+    def _alert_card(block: list[str], link: str) -> AlertCard | None:
+        if len(block) < 2 or " - " not in block[1]:
+            return None
+        company, location = block[1].rsplit(" - ", 1)
+        title = block[0]
+        if not title or not company.strip() or not location.strip():
+            return None
+        jk = job_key(link)
+        # Sponsored pagead/clk/dl links can carry only opaque click tokens: do not store them or invent a key.
+        return AlertCard(source="indeed-alert", title=title, company=company.strip(),
+                         locations=[_POSTCODE.sub("", location.strip())], source_job_id=jk,
+                         url=canonical_job_url(jk) if jk else None, section="match")
 
     @staticmethod
     def _card(block: list[str], link: str, match_mail: bool) -> AlertCard | None:

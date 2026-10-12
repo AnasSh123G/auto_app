@@ -19,7 +19,7 @@ SHARED_HOSTS = frozenset({
 DIRECTORY_HOSTS = frozenset({
     "kununu.com", "glassdoor.com", "glassdoor.de", "xing.com", "indeed.com", "indeed.de", "stepstone.de",
     "linkedin.com", "monster.de", "meinestadt.de", "stellenanzeigen.de", "jobware.de", "jobs.de", "jooble.org",
-    "adzuna.de", "adzuna.com", "arbeitsagentur.de", "jobbörse.de", "kalaydo.de", "gelbeseiten.de", "dasoertliche.de",
+    "adzuna.de", "adzuna.com", "arbeitnow.com", "arbeitsagentur.de", "jobbörse.de", "kalaydo.de", "gelbeseiten.de", "dasoertliche.de",
     "northdata.de", "firmenwissen.de", "creditreform.de", "wikipedia.org", "facebook.com", "instagram.com",
     "twitter.com", "x.com", "youtube.com", "tiktok.com", "bing.com", "google.com", "yelp.com", "trustpilot.com",
     "hrb.de", "unternehmen24.info", "wlw.de", "europages.de", "yellowpages.com", "dnb.com", "zoominfo.com",
