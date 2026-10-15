@@ -57,7 +57,7 @@ Three rules the program never breaks:
 
 ## 2. Starting it
 
-Always start it from the project folder (`/home/anas/dev/auto_app`) with `uv run`:
+Always start it from the project folder (`<repo>`) with `uv run`:
 
 ```fish
 cd ~/dev/auto_app
@@ -264,7 +264,7 @@ bottom**. The statistics stay in view the whole time, from the search until the 
 ╰────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Feed ─────────────────────────────────────────────────────────────────────────────╮
 │ 14:01:00 APPROVED     FEAG GmbH, AI Engineer   score 82                            │
-│ 14:02:40 DRAFT SAVED  FEAG GmbH, AI Engineer   -> jobs@feag.de                     │
+│ 14:02:40 DRAFT SAVED  FEAG GmbH, AI Engineer   -> hr@acme.example                  │
 ╰────────────────────────────────────────────────────────────────────────────────────╯
 ```
 

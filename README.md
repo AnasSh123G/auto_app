@@ -127,7 +127,7 @@ During an interactive `autoapp run` the screen becomes a live view: run statisti
 │ 14:01:20 APPROVED    Delivery Hero SE, Fullstack Engineer I  score 82                            │
 │ 14:02:00 FOLDER SAVED FEAG GmbH, AI & Digital Solutions Engineer  application_feag-gmbh_ai-digi…  │
 │ 14:02:30 FOLDER SAVED Delivery Hero SE, Fullstack Engineer I  application_delivery-hero-se_full…  │
-│ 14:02:40 DRAFT SAVED FEAG GmbH, AI & Digital Solutions Engineer  → Jobs.FOR@feag.de (in [Gmail…  │
+│ 14:02:40 DRAFT SAVED FEAG GmbH, AI & Digital Solutions Engineer  → hr@firma.example (in [Gmail…  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 q: hide this view (the run continues)   f: filter the feed
 ```

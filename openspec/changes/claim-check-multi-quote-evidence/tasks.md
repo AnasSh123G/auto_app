@@ -1,10 +1,10 @@
 # Tasks
 
-Read `proposal.md`, `design.md` and `specs/cover-letter-writing/spec.md` first. Work in `/home/anas/.traycer/worktrees/anassh123g__auto_app/traycer-fix-mail-drafting` on branch `traycer/fix-mail-drafting` and run every command from there. Run tests with `uv run pytest -q <path>` and lint with `uv run ruff check src tests`.
+Read `proposal.md`, `design.md` and `specs/cover-letter-writing/spec.md` first. Work in `<worktree>` on branch `traycer/fix-mail-drafting` and run every command from there. Run tests with `uv run pytest -q <path>` and lint with `uv run ruff check src tests`.
 
 **The rule this change enforces:** a claim passes when *every* part of its evidence appears word for word in something the user wrote (CV, profile, writing instructions, search-profile instructions) or in a fact the app gave the writer (start date, salary sentence). The job ad, job title and company name are *never* evidence. Do not add fuzzy matching, translation or any other loosening beyond this.
 
-**Privacy rule for tests:** do not copy text from `/home/anas/dev/auto_app/workspace/documents/` (the user's real CV) into the repository. Use the invented German CV lines given below.
+**Privacy rule for tests:** do not copy text from `<repo>/workspace/documents/` (the user's real CV) into the repository. Use the invented German CV lines given below.
 
 ## 1. The checker (`src/autoapp/writing/claims.py`)
 
@@ -86,11 +86,11 @@ def _check_de(claims, app_facts=()):
   ```
 
   Verify: `git log -1 --stat` lists only the intended files.
-- [x] 7.2 Merge into `main`, which is checked out at `/home/anas/dev/auto_app` (you cannot check out `main` in this worktree). Run `git -C /home/anas/dev/auto_app status --short`; if it shows any change, stop and report (do not stash or discard the user's work). If clean: `git -C /home/anas/dev/auto_app merge --no-ff traycer/fix-mail-drafting -m "Merge branch 'traycer/fix-mail-drafting' into main"`. On conflicts run `git -C /home/anas/dev/auto_app merge --abort` and report the files; do not resolve by guessing. Do not push unless the user asks. Verify: `git -C /home/anas/dev/auto_app log --oneline -2` shows the merge commit, and `cd /home/anas/dev/auto_app && uv run pytest -q tests/writing` passes.
+- [x] 7.2 Merge into `main`, which is checked out at `<repo>` (you cannot check out `main` in this worktree). Run `git -C <repo> status --short`; if it shows any change, stop and report (do not stash or discard the user's work). If clean: `git -C <repo> merge --no-ff traycer/fix-mail-drafting -m "Merge branch 'traycer/fix-mail-drafting' into main"`. On conflicts run `git -C <repo> merge --abort` and report the files; do not resolve by guessing. Do not push unless the user asks. Verify: `git -C <repo> log --oneline -2` shows the merge commit, and `cd <repo> && uv run pytest -q tests/writing` passes.
 
 ## 8. Live check with the configured model (after the merge)
 
-- [x] 8.1 From `/home/anas/dev/auto_app`, regenerate one German and one English letter **without writing files or changing job state**, using the configured `write` model: write a throwaway script in the session scratchpad (not in the repo) that opens `RunContext.open(Workspace(Path("workspace")), start_run=False)`, builds `WritingContext`/`JobContext` for jobs `537eab` (German) and `6a1e45` (English) the same way `src/autoapp/steps/prepare.py::_prepare_one` does, calls `LetterWriter(...).write(...)`, and prints `outcome.llm_calls` and `outcome.needs_review` for each. This costs a few model calls. Verify: report both results. Expected: at most a few `needs_review` reasons, none of them a quote that is word for word in the CV. If a reason still names a quote that is in the CV, report it with the quote; do not change the checker again in this change.
+- [x] 8.1 From `<repo>`, regenerate one German and one English letter **without writing files or changing job state**, using the configured `write` model: write a throwaway script in the session scratchpad (not in the repo) that opens `RunContext.open(Workspace(Path("workspace")), start_run=False)`, builds `WritingContext`/`JobContext` for jobs `<job-a>` (German) and `<job-c>` (English) the same way `src/autoapp/steps/prepare.py::_prepare_one` does, calls `LetterWriter(...).write(...)`, and prints `outcome.llm_calls` and `outcome.needs_review` for each. This costs a few model calls. Verify: report both results. Expected: at most a few `needs_review` reasons, none of them a quote that is word for word in the CV. If a reason still names a quote that is in the CV, report it with the quote; do not change the checker again in this change.
 
 ## Workflow follow-up
 

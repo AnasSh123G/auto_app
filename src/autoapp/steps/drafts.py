@@ -26,7 +26,7 @@ from autoapp.db.status import Status
 from autoapp.mail.connection import MailAuthError, MailError
 from autoapp.mail.drafts import DraftFolderNotFound, DraftStore, ImapDraftStore, imap_utf7_decode
 from autoapp.mail.send import check_eligibility
-from autoapp.package.email_message import NoStoredEmail, application_email
+from autoapp.package.email_message import BUILD_ERRORS, NoStoredEmail, application_email, build_failed_reason
 from autoapp.package.folders import remove_application_folder
 from autoapp.package.pdf import PdfRenderer
 from autoapp.steps.context import RunContext
@@ -166,8 +166,10 @@ def draft_applications(
                     s.errors.append(str(err))
                     break
             new_id = make_msgid(domain=str(app["contact_email"]).rsplit("@", 1)[-1]) if again else None
+            built_ok = False
             try:
                 with application_email(ctx, job_id, renderer_factory=renderer_factory, message_id=new_id) as built:
+                    built_ok = True
                     msg = built.message
                     notes = _notes(ctx, job_id, built.bundle)
                     if notes:
@@ -181,6 +183,12 @@ def draft_applications(
                         store.append_draft(s.folder, msg)
             except NoStoredEmail as err:
                 s.not_drafted[job_id] = [str(err)]
+                continue
+            except BUILD_ERRORS as err:
+                if built_ok:  # raised while talking to the mailbox, not while building
+                    raise
+                s.not_drafted[job_id] = [build_failed_reason(err)]
+                ctx.emit("error", job, detail=f"draft not saved: {build_failed_reason(err)[:160]}")
                 continue
             except MailAuthError as err:
                 s.errors.append(str(err) + "; run `autoapp setup --section email`")

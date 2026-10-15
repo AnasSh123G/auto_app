@@ -18,7 +18,7 @@ from autoapp.steps.context import RunContext
 from autoapp.steps.drafts import check_drafts, draft_applications
 from autoapp.steps.pipeline import RunSummary, run_pipeline
 from autoapp.steps.prepare import prepare_jobs
-from autoapp.steps.send import load_message, send_test_applications
+from autoapp.steps.send import load_message, send_applications, send_test_applications, send_test_email
 from tests.helpers import make_workspace
 from tests.steps.test_prepare_step import LETTER, FakeRenderer, approved_job, factory
 
@@ -242,7 +242,7 @@ def test_test_run_sends_only_to_me_with_the_same_decisions(ctx):
             super().send(msg, to_addrs=to_addrs, keep_copy=keep_copy)
 
     mailer = Guard()
-    s = send_test_applications(ctx, mailer=mailer)
+    s = send_test_applications(ctx, mailer=mailer, renderer_factory=factory(FakeRenderer([1])))
     assert sorted(s.sent.values()) == ["a@x.de", "b@y.de", "c@z.de"]
     assert "below email.min_score" in " ".join(s.not_sent[ids[3]])
     for m in mailer.sent:
@@ -256,9 +256,76 @@ def test_test_run_sends_only_to_me_with_the_same_decisions(ctx):
 def test_test_run_simulates_the_daily_cap(ctx):
     ids = prepared(ctx, 3, emails=["a@x.de", "b@y.de", "c@z.de"])
     ctx.config.email.daily_cap = 2
-    s = send_test_applications(ctx, mailer=FakeMailer())
+    s = send_test_applications(ctx, mailer=FakeMailer(), renderer_factory=factory(FakeRenderer([1])))
     (held,) = s.not_sent.values()
     assert len(s.sent) == 2 and set(s.sent) | set(s.not_sent) == set(ids) and "daily cap of 2 reached" in " ".join(held)
+
+
+# --- one job whose email cannot be built does not stop the others --------------------------------
+
+
+def _break_letter(ctx, job_id):
+    ctx.repo.upsert_application(job_id, letter_md="Hallo, kein Anschreiben.")  # no '# <subject>' line
+
+
+def test_malformed_letter_is_not_drafted_and_the_others_are(ctx):
+    bad, good = prepared(ctx, 2)
+    _break_letter(ctx, bad)
+    store = FakeDraftStore()
+    s = draft_applications(ctx, store=store, renderer_factory=factory(FakeRenderer([1])))
+    assert s.saved == [good] and len(store.drafts) == 1
+    assert s.not_drafted[bad] == ["the email could not be built: cover_letter.md must start with '# <subject>'"]
+    assert ctx.repo.get_job(bad)["status"] == "prepared"
+    assert list(ctx.ws.applications_dir.iterdir()) == []
+
+
+def test_missing_document_file_is_reported_per_job(ctx):
+    ids = prepared(ctx, 2)
+    for path in ctx.documents.directory.iterdir():
+        path.unlink()
+    store = FakeDraftStore()
+    s = draft_applications(ctx, store=store, renderer_factory=factory(FakeRenderer([1])))
+    assert s.saved == [] and store.drafts == [] and set(s.not_drafted) == set(ids)
+    for reasons in s.not_drafted.values():
+        assert reasons[0].startswith("the email could not be built: ") and "No such file" in reasons[0]
+    assert {ctx.repo.get_job(j)["status"] for j in ids} == {"prepared"}
+
+
+def test_malformed_letter_is_not_sent_and_the_others_are(ctx):
+    bad, good = prepared(ctx, 2, emails=["a@x.de", "b@y.de"])
+    _break_letter(ctx, bad)
+    ctx.mode = "automatic"
+    mailer = FakeMailer()
+    s = send_applications(ctx, mailer=mailer, renderer_factory=factory(FakeRenderer([1])))
+    assert s.sent == [good] and [m["To"] for m in mailer.sent] == ["b@y.de"]
+    assert s.not_sent[bad][0].startswith("the email could not be built: ")
+    assert ctx.repo.get_job(bad)["status"] == "prepared"
+
+
+def test_malformed_letter_is_not_test_sent_and_the_others_are(ctx):
+    bad, good = prepared(ctx, 2, emails=["a@x.de", "b@y.de"])
+    _break_letter(ctx, bad)
+    s = send_test_applications(ctx, mailer=FakeMailer(), renderer_factory=factory(FakeRenderer([1])))
+    assert s.sent == {good: "b@y.de"} and s.not_sent[bad][0].startswith("the email could not be built: ")
+
+
+def test_test_email_of_a_malformed_letter_is_an_error(ctx):
+    (bad,) = prepared(ctx)
+    _break_letter(ctx, bad)
+    mailer = FakeMailer()
+    r = send_test_email(ctx, bad, mailer=mailer, renderer_factory=factory(FakeRenderer([1])))
+    assert r.error.startswith(f"job {bad}: the email could not be built: ") and mailer.sent == []
+
+
+def test_a_mailbox_error_after_building_still_propagates(ctx):
+    prepared(ctx)
+
+    class BrokenStore(FakeDraftStore):
+        def append_draft(self, folder, msg):
+            raise ConnectionResetError("socket closed")  # an OSError, but not a build error
+
+    with pytest.raises(ConnectionResetError):
+        draft_applications(ctx, store=BrokenStore(), renderer_factory=factory(FakeRenderer([1])))
 
 
 # --- 3.1 / 3.2 pipeline branching and summary ----------------------------------------------------
