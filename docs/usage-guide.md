@@ -211,7 +211,7 @@ form is looked up, but **no browser opens during a run**.
 | `daily_cap` | 100 | At most this many emails per calendar day (Berlin time) |
 | `company_cooldown_days` | 14 | No second email to the same company within this many days |
 | Free-mail rule | on | Recipients at gmail.com, gmx.de, web.de and similar go to manual review |
-| `needs_review` flag | always | A letter with warnings is never sent or drafted |
+| `needs_review` flag | always | A letter with warnings is never sent; review mode still drafts it with a "check before sending" note |
 | `max_attempts` / `max_bundle_mb` | 3 / 10.0 | Retries for a failed send, and the largest allowed attachment bundle |
 
 Review mode shows these as notes only. Your own values are in `workspace/config.yaml` under `email:`.
@@ -381,6 +381,10 @@ came from a search.
 Every prepared application gets a folder in `workspace/applications/`, named
 `application_<company>_<title>_<id>` and possibly ending in a marker.
 
+Email applications in **review mode** get no folder: the letter stays in the database and the application becomes
+one draft in your mailbox (section 6). The files below are what automatic mode (and test mode) create, and what
+older runs left behind.
+
 ### What is inside
 
 | File | Purpose |
@@ -390,7 +394,7 @@ Every prepared application gets a folder in `workspace/applications/`, named
 | `cover_letter.md` | The letter as text. **Edit this one**, then run `render` |
 | `cover_letter.pdf` | The letter as a one-page PDF |
 | `Bewerbungsmappe.pdf` | Letter + CV + certificates in one PDF |
-| `email.eml` | The finished email (email applications) |
+| `email.eml` | The finished email (automatic and test mode only) |
 | `apply.html` | Your answers with copy buttons, for forms you fill by hand |
 | `form_answers.md` | Prepared answers for common form questions, including the motivation text and answers you gave in `assist` |
 | `job.md` | The job ad as saved |

@@ -251,7 +251,7 @@ def prepare(
     job: list[str] = typer.Option(None, "--job", "-j", help="Prepare only these job IDs."),
     force: bool = typer.Option(False, "--force", help="Rebuild existing folders (the old letter is backed up)."),
 ) -> None:
-    """Create application folders for approved jobs."""
+    """Prepare approved jobs (email applications in review mode go to your mailbox's Drafts, without a local folder)."""
     from autoapp.steps.pipeline import RunSummary
     from autoapp.steps.prepare import prepare_jobs
 
@@ -260,6 +260,10 @@ def prepare(
         s = RunSummary(prepare=p)
         s.cost = ctx.prices.summarize(ctx.meter.usages)
         _echo_lines(s.lines(), ctx)
+        for j in p.prepared_ids:
+            app = ctx.repo.get_application(j)
+            if app is not None and app["channel"] == "email" and not app["folder"]:
+                typer.echo(f"{j}: letter stored; it is drafted in your mailbox by a review run or `autoapp draft {j}`")
         for j in p.skipped_existing:
             typer.echo(f"{j}: folder exists; use --force to rebuild it")
         for f in p.failed:
@@ -359,6 +363,8 @@ def draft(
                        f"Read it there and send it yourself; {job_id} is now drafted.")
         for note in s.notes.get(job_id, []):
             typer.echo(f"note: {note}")
+        if s.review.get(job_id):
+            typer.echo("check before sending: " + "; ".join(s.review[job_id]))
         if job_id in s.existing:
             typer.echo("A draft was already saved for this job. Use --again to save a new one.")
         for reason in s.not_drafted.get(job_id, []):
@@ -390,11 +396,16 @@ def drafts(
             if c.errors:
                 raise typer.Exit(code=1)
             return
+        import json
+
         rows = ctx.conn.execute(
-            "SELECT d.job_id, d.recipient, d.subject, d.created_at, j.status FROM drafts d JOIN jobs j ON j.id = d.job_id "
+            "SELECT d.job_id, d.recipient, d.subject, d.created_at, j.status, j.needs_review, "
+            "j.needs_review_reasons FROM drafts d JOIN jobs j ON j.id = d.job_id "
             "WHERE d.state = 'saved' ORDER BY d.created_at DESC").fetchall()
         for r in rows:
             typer.echo(f"{r['job_id']}  {r['status']:<9} {r['created_at'][:16]}  {r['recipient']}  {r['subject']}")
+            if r["needs_review"]:
+                typer.echo("    check before sending: " + "; ".join(json.loads(r["needs_review_reasons"] or "[]")))
         if not rows:
             typer.echo("No drafts saved yet. Review-first runs and `autoapp draft <id>` save them.")
 

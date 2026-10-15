@@ -27,6 +27,7 @@ APPLICATION_FIELDS = frozenset(
         "folder", "channel", "contact_person", "contact_email", "reference",
         "salary_expectation", "assumed_skills", "language", "prepared_at", "applied_at",
         "form_entry_url", "form_reached_url", "form_status", "form_checked_at", "form_note",
+        "letter_md", "email_subject", "email_body", "message_id",
     }
 )  # fmt: skip
 

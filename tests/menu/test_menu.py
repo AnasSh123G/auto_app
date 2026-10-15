@@ -311,6 +311,17 @@ def test_change_status_records_history(ws):
     ctx.close()
 
 
+def test_folderless_email_application_has_no_render_action(ws):
+    jid = _prepared_email_job(ws)
+    r, p = open_menu(ws, [("What would you like", "apps"), ("Which applications", ""), ("Which application", jid),
+                          ("What do you want to do", "folder"), ("What do you want to do", "letter"),
+                          ("What do you want to do", menu.BACK), ("What would you like", "quit")])
+    assert "No local folder: this application is a draft in your mailbox's Drafts folder." in p.shown
+    assert "Bei der Muster GmbH" in p.shown  # the stored letter text
+    actions = next(v for v in p.choice_values if "folder" in v)
+    assert "render" not in actions and "draft" in actions and "send" in actions
+
+
 def test_send_now_needs_confirmation(ws, monkeypatch):
     from autoapp.mail.connection import FakeMailer
 
@@ -337,6 +348,20 @@ def test_review_apply_approves(ws):
     ctx = RunContext.open(ws, start_run=False)
     assert ctx.repo.get_job(jid)["status"] == "approved"
     ctx.close()
+
+
+def test_review_shows_the_stored_letter_of_a_folderless_application(ws):
+    ctx = RunContext.open(ws, start_run=False)
+    jid = ctx.repo.insert_job(title="Dev", company="Maybe GmbH", status="review")
+    ctx.repo.add_evaluation(jid, fit_score=70, decision="maybe", payload={"result": {"rationale": "close match"}})
+    ctx.repo.upsert_application(jid, channel="email", contact_email="jobs@maybe-gmbh.de",
+                                letter_md="# Bewerbung\n\nSehr geehrte Damen und Herren,\n\nText der Bewerbung.")
+    ctx.close()
+    r, p = open_menu(ws, [("What would you like", "review"), ("Which job", jid), ("Decision", "letter"),
+                          ("What would you like", "quit")])
+    assert "Text der Bewerbung." in p.shown
+    actions = next(v for v in p.choice_values if "letter" in v)
+    assert "render" not in actions and "apply" in actions
 
 
 # --- 4.5 tests --------------------------------------------------------------------------------------------------

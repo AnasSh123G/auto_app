@@ -149,6 +149,7 @@ def test_detail_fetch_uses_and_closes_run_owned_transport(ctx):
 
 
 def _prepared(ctx):
+    ctx.mode = "automatic"  # these tests are about sending and rendering a folder package
     jid = approved_job(ctx)
     ctx.clients["write"] = FakeLLM(script={"write": [LETTER]})
     prepare_jobs(ctx, renderer_factory=factory(FakeRenderer([1])))
@@ -209,6 +210,15 @@ def test_german_email_excludes_english_cv_and_removes_legacy_attachment_on_rende
     assert filename not in [part.get_filename() for part in load_message(folder).iter_attachments()]
 
 
+def test_render_refuses_a_folderless_email_application(ctx):
+    jid = approved_job(ctx)  # the ctx fixture is review mode: the letter is stored, no folder
+    ctx.clients["write"] = FakeLLM(script={"write": [LETTER]})
+    prepare_jobs(ctx, renderer_factory=factory(FakeRenderer([1])))
+    assert ctx.repo.get_application(jid)["folder"] is None
+    with pytest.raises(ValueError, match=f"draft {jid} --again"):
+        render_application(ctx, jid)
+
+
 def test_render_uses_edited_letter_without_llm(ctx):
     jid = _prepared(ctx)
     folder = Path(ctx.repo.get_application(jid)["folder"])
@@ -244,6 +254,7 @@ def test_render_removes_arbeitsagentur_links_from_legacy_email_body(ctx):
 
 
 def test_prepare_and_render_keep_extra_documents_attached_to_email(ctx):
+    ctx.mode = "automatic"  # render rebuilds the folder's email.eml
     jid = approved_job(ctx)
     path = ctx.ws.documents_dir / "Portfolio.txt"
     path.write_text("Work sample", encoding="utf-8")
@@ -282,6 +293,7 @@ def test_declared_document_named_like_generated_file_fails_before_writing(ctx):
 
 
 def test_non_pdf_certificate_is_attached_to_email_and_kept_on_rerender(ctx):
+    ctx.mode = "automatic"  # render rebuilds the folder's email.eml
     jid = approved_job(ctx)
     path = ctx.ws.documents_dir / "Zeugnis.docx"
     path.write_bytes(b"docx certificate")

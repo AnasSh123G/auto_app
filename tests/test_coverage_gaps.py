@@ -351,6 +351,7 @@ def test_platform_estimate_never_changes_salary_expectation(ctx, estimate):
     assert ctx.repo.get_job(jid)["ad_salary_min"] is None
     llm = FakeLLM(script={"write": [LETTER]})
     ctx.clients["write"] = llm
+    ctx.mode = "automatic"  # this test reads the folder's form_answers.md
     prepare_jobs(ctx, renderer_factory=factory(FakeRenderer([1])))
     assert ctx.repo.get_application(jid)["salary_expectation"] == "65000"
     assert "65.000" in llm.calls[0][2]  # the salary line offered to the writer
@@ -375,6 +376,9 @@ def test_manual_send_confirmed_marks_sent_and_second_send_is_refused(ctx):
 
 
 def test_prepare_command_prepares_three_approved_jobs_without_search_or_evaluate(cli_ws, monkeypatch):
+    # this test checks the folder package, so the CLI runs in automatic mode
+    cli_ws.config_path.write_text(cli_ws.config_path.read_text(encoding="utf-8") + "\nrun:\n  default_mode: automatic\n",
+                                  encoding="utf-8")
     c = RunContext.open(cli_ws, start_run=False)
     ids = [approved_job(c, company=f"Firma {i}") for i in range(3)]
     c.close()

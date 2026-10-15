@@ -84,6 +84,7 @@ def prepared(ctx):
     jid = approved_job(ctx)
     ctx.repo.update_job(jid, application_url="https://jobs.muster-gmbh.de/apply/1")
     ctx.clients["write"] = FakeLLM(script={"write": [LETTER]})
+    ctx.mode = "automatic"  # assist fills the form in a folder
     prepare_jobs(ctx, renderer_factory=factory(FakeRenderer([1])))
     return jid
 

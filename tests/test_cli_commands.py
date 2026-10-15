@@ -92,6 +92,77 @@ def test_send_unknown_job_reports(ws):
     assert "not sent" in r.output
 
 
+def test_render_refuses_a_folderless_email_application(ws):
+    ctx = RunContext.open(ws, start_run=False)
+    jid = ctx.repo.insert_job(title="Dev", company="A GmbH")
+    ctx.repo.upsert_application(jid, channel="email", contact_email="jobs@a-gmbh.de",
+                                letter_md="# Bewerbung\n\nSehr geehrte Damen und Herren,\n\nText.\n\n"
+                                          "Mit freundlichen Grüßen\nMax Mustermann")
+    ctx.close()
+    r = cli(ws, "render", jid)
+    assert r.exit_code == 1 and f"draft {jid} --again" in r.output
+
+
+def test_drafts_listing_shows_the_check_note_for_flagged_jobs(ws):
+    ctx = RunContext.open(ws, start_run=False)
+    jid = ctx.repo.insert_job(title="Dev", company="A GmbH")
+    ctx.repo.upsert_application(jid, channel="email", contact_email="jobs@a-gmbh.de")
+    ctx.repo.set_needs_review(jid, ["score 61 is below min_score 75"])
+    ctx.conn.execute(
+        "INSERT INTO drafts (job_id, message_id, folder, recipient, subject, state, created_at) "
+        "VALUES (?, '<draft@example.com>', 'Entw&APw-rfe', 'jobs@a-gmbh.de', 'Bewerbung: Dev', 'saved', "
+        "'2026-01-02T10:00:00+00:00')", (jid,))
+    ctx.conn.commit()
+    ctx.close()
+    r = cli(ws, "drafts")
+    assert r.exit_code == 0
+    assert f"{jid}" in r.output and "jobs@a-gmbh.de" in r.output
+    assert "    check before sending: score 61 is below min_score 75" in r.output
+
+
+def test_draft_command_saves_from_the_stored_letter_and_prints_the_check_note(ws, monkeypatch):
+    from autoapp.llm.fake import FakeLLM
+    from autoapp.steps import drafts as drafts_mod
+    from autoapp.steps.prepare import prepare_jobs
+    from tests.steps.test_modes import FakeDraftStore
+    from tests.steps.test_prepare_step import LETTER, FakeRenderer, approved_job, factory
+
+    store = FakeDraftStore()
+    monkeypatch.setattr(drafts_mod, "default_store", lambda ctx: store)
+    # ``renderer_factory=PdfRenderer`` is bound when draft_applications is defined, so patch the default itself.
+    monkeypatch.setitem(drafts_mod.draft_applications.__kwdefaults__, "renderer_factory", factory(FakeRenderer([1])))
+    ctx = RunContext.open(ws, start_run=False)
+    jid = approved_job(ctx)
+    ctx.clients["write"] = FakeLLM(script={"write": [LETTER]})
+    prepare_jobs(ctx, renderer_factory=factory(FakeRenderer([1])))
+    assert ctx.repo.get_application(jid)["folder"] is None
+    ctx.repo.set_needs_review(jid, ["score 61 is below min_score 75"])
+    ctx.close()
+    r = cli(ws, "draft", jid)
+    assert r.exit_code == 0, r.output
+    assert "Saved the draft in your mailbox's [Gmail]/Entwürfe folder." in r.output
+    assert "check before sending: score 61 is below min_score 75" in r.output
+    assert len(store.drafts) == 1 and str(store.drafts[0]["To"]) == "jobs@muster-gmbh.de"
+
+
+def test_prepare_command_reports_stored_letters_in_review_mode(ws, monkeypatch):
+    from autoapp.llm.fake import FakeLLM
+    from autoapp.steps import prepare as prepare_mod
+    from autoapp.steps.context import RunContext
+    from tests.steps.test_prepare_step import LETTER, FakeRenderer, approved_job, factory
+
+    ctx = RunContext.open(ws, start_run=False)
+    jid = approved_job(ctx)
+    ctx.close()
+    llm = FakeLLM(script={"write": [LETTER]})
+    monkeypatch.setattr("autoapp.steps.context.RunContext.llm", lambda self, task: llm)
+    monkeypatch.setitem(prepare_mod.prepare_jobs.__kwdefaults__, "renderer_factory", factory(FakeRenderer([1])))
+    r = cli(ws, "prepare")
+    assert r.exit_code == 0, r.output
+    assert f"{jid}: letter stored; it is drafted in your mailbox by a review run or `autoapp draft {jid}`" in r.output
+    assert list(ws.applications_dir.iterdir()) == []
+
+
 def test_assist_refuses_unprepared(ws):
     assert "unknown job" in cli(ws, "assist", "nope").output
     ctx = RunContext.open(ws, start_run=False)

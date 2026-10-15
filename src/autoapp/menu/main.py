@@ -417,7 +417,9 @@ def application_actions(tctx: typer.Context, p: Prompter, job_id: str) -> str:
         folder = Path(app["folder"]) if app and app["folder"] else None
         email = bool(app and app["channel"] == "email")
         actions = [("folder", "Show the folder path"), ("letter", "Show the cover letter text"),
-                   ("status", "Change the status"), ("render", "Re-render after editing the letter")]
+                   ("status", "Change the status")]
+        if not (email and folder is None):
+            actions.append(("render", "Re-render after editing the letter"))
         if email:
             actions += [("draft", "Save as a draft in my mailbox"), ("send", "Send now (asks for confirmation)"),
                         ("test", "Send a test copy to myself")]
@@ -429,10 +431,18 @@ def application_actions(tctx: typer.Context, p: Prompter, job_id: str) -> str:
         if choice == BACK:
             return "Back."
         if choice == "folder":
-            p.say(str(folder) if folder else "No folder yet.")
+            if folder is not None:
+                p.say(str(folder))
+            elif email:
+                p.say("No local folder: this application is a draft in your mailbox's Drafts folder.")
+            else:
+                p.say("No folder yet.")
         elif choice == "letter":
             letter = folder / "cover_letter.md" if folder else None
-            p.say(letter.read_text(encoding="utf-8") if letter and letter.exists() else "No cover letter yet.")
+            if letter and letter.exists():
+                p.say(letter.read_text(encoding="utf-8"))
+            else:
+                p.say(app["letter_md"] if app and app["letter_md"] else "No cover letter yet.")
         elif choice == "status":
             new = p.select("New status", [(s, s) for s in ("approved", *APP_STATUSES, "skipped")], default=job["status"])
             _call(mark, tctx, job_id=job_id, status=new, note=None)
@@ -488,14 +498,18 @@ def entry_review(tctx: typer.Context, p: Prompter) -> str:
     p.say(_evaluation_summary(ws, job))
     actions = [("apply", "Apply (prepare it in the next run)"), ("skip", "Skip it")]
     _, app = _app_row(ws, pick)
+    if app and (app["folder"] or app["letter_md"]):
+        actions.append(("letter", "Show the cover letter path" if app["folder"] else "Show the cover letter text"))
     if app and app["folder"]:
-        actions += [("letter", "Show the cover letter path"), ("render", "Re-render after editing the letter")]
+        actions.append(("render", "Re-render after editing the letter"))
     actions.append((BACK, "Back"))
     choice = p.select("Decision", actions, default=BACK)
     if choice in ("apply", "skip"):
         _call(mark, tctx, job_id=pick, status=choice, note=None)
         return f"{pick}: {'approved' if choice == 'apply' else 'skipped'}."
     if choice == "letter":
+        if not app["folder"]:
+            return app["letter_md"] or "No cover letter yet."
         return str(Path(app["folder"]) / "cover_letter.md")
     if choice == "render":
         _call(render, tctx, job_id=pick)

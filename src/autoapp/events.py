@@ -22,8 +22,9 @@ from typing import Any
 log = logging.getLogger("autoapp")
 
 # Shown in the feed in full: every email and form saved or sent.
-FEED_KINDS = frozenset({"folder_saved", "email_sent", "email_would_send", "email_held", "email_failed",
-                        "form_filled", "form_resolved", "draft_saved", "draft_would_save", "test_sent", "test_would_send"})
+FEED_KINDS = frozenset({"folder_saved", "email_prepared", "email_sent", "email_would_send", "email_held",
+                        "email_failed", "form_filled", "form_resolved", "draft_saved", "draft_would_save",
+                        "test_sent", "test_would_send"})
 # Shown in the feed in a lower-key style.
 QUIET_KINDS = frozenset({"job_approved", "job_maybe", "job_skipped", "needs_review", "source_done",
                          "details_done", "warning", "error", "draft_exists", "employer_resolved", "employer_scanned",
@@ -46,6 +47,7 @@ LABELS = {
     "email_read": "EMAIL READ",
     "email_job": "EMAIL JOB",
     "folder_saved": "FOLDER SAVED",
+    "email_prepared": "EMAIL READY",
     "form_filled": "FORM FILLED",
     "form_resolved": "FORM CHECK",
     "draft_saved": "DRAFT SAVED",
@@ -151,6 +153,7 @@ class RunStats:
     maybe: int = 0
     skipped: int = 0
     folders_saved: int = 0
+    emails_prepared: int = 0
     email_folders: int = 0
     forms_saved: int = 0
     emails_sent: int = 0
@@ -249,6 +252,8 @@ class RunStats:
                 self.email_folders += 1
             else:
                 self.forms_saved += 1
+        elif k == "email_prepared":
+            self.emails_prepared += 1
         elif k == "email_sent":
             self.emails_sent += 1
         elif k == "email_would_send":

@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import email
 import mimetypes
 import re
 from collections.abc import Iterable
+from email import policy
 from email.headerregistry import Address
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
 from pathlib import Path
+
+
+def load_message(folder: Path) -> EmailMessage:
+    """Read the ``email.eml`` of an application folder."""
+    return email.message_from_bytes((folder / "email.eml").read_bytes(), policy=policy.default)  # type: ignore[return-value]
 
 
 def _without_arbeitsagentur_links(body: str) -> str:

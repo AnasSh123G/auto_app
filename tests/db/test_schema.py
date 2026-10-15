@@ -65,9 +65,28 @@ def test_migrates_version_eight_by_adding_judge_reviews_without_losing_evaluatio
     evaluation_id = conn.execute("SELECT id FROM evaluations WHERE job_id = 'j1'").fetchone()[0]
     conn.execute("INSERT INTO judge_reviews (evaluation_id, run_id, created_at, provider, model, score, agrees, payload) "
                  "VALUES (?, 'r1', 'x', 'fake', 'fake-model', 90, 1, '{}')", (evaluation_id,))
-    assert current_version(conn) == 9
+    assert current_version(conn) == len(schema.MIGRATIONS)
     assert conn.execute("SELECT score FROM judge_reviews WHERE evaluation_id = ?", (evaluation_id,)).fetchone()[0] == 90
     assert conn.execute("SELECT COUNT(*) FROM evaluations WHERE job_id = 'j1'").fetchone()[0] == 1
+
+
+def test_migrates_version_nine_by_adding_stored_email_columns(tmp_path):
+    path = tmp_path / "v9.db"
+    raw = sqlite3.connect(path)
+    for n, step in enumerate(schema.MIGRATIONS[:9]):
+        raw.executescript(f"BEGIN;\n{step}\nPRAGMA user_version = {n + 1};\nCOMMIT;")
+    raw.execute("INSERT INTO jobs (id, title, company, discovered_at, updated_at) "
+                "VALUES ('j1', 'Backend', 'Acme', 'x', 'x')")
+    raw.execute("INSERT INTO applications (job_id, folder) VALUES ('j1', 'application_acme_backend_j1')")
+    raw.commit()
+    raw.close()
+
+    conn = open_db(path)
+    assert current_version(conn) == len(schema.MIGRATIONS)
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(applications)")}
+    assert {"letter_md", "email_subject", "email_body", "message_id"} <= cols
+    row = conn.execute("SELECT folder, letter_md FROM applications WHERE job_id = 'j1'").fetchone()
+    assert row["folder"] == "application_acme_backend_j1" and row["letter_md"] is None
 
 
 def test_migrates_stepwise(tmp_path, monkeypatch):

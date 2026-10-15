@@ -87,7 +87,14 @@ def factory(renderer):
 
 @pytest.fixture
 def ctx(tmp_path):
-    c = RunContext.open(make_workspace(tmp_path))
+    c = RunContext.open(make_workspace(tmp_path), mode="automatic")
+    yield c
+    c.close()
+
+
+@pytest.fixture
+def review_ctx(tmp_path):
+    c = RunContext.open(make_workspace(tmp_path), mode="review")
     yield c
     c.close()
 
@@ -179,6 +186,73 @@ def test_limit(ctx):
     s = prepare_jobs(ctx, renderer_factory=factory(FakeRenderer([1])))
     assert s.prepared == 2 and s.waiting == 1
     assert len(ctx.repo.jobs_by_status("approved")) == 1
+
+
+def test_review_mode_email_job_writes_no_files(review_ctx):
+    ctx = review_ctx
+    jid = approved_job(ctx)
+    ctx.clients["write"] = FakeLLM(script={"write": [LETTER]})
+    seen: list[tuple[str, str | None]] = []
+    ctx.events.subscribe(lambda e: seen.append((e.kind, e.job_id)))
+    s = prepare_jobs(ctx, renderer_factory=factory(FakeRenderer([1])))
+    assert s.prepared == 1 and s.flagged == 0
+    assert ctx.repo.get_job(jid)["status"] == "prepared"
+    app = ctx.repo.get_application(jid)
+    assert app["folder"] is None and app["channel"] == "email"
+    assert app["contact_email"] == "jobs@muster-gmbh.de"
+    assert app["letter_md"] and app["email_subject"] and app["email_body"]
+    assert str(app["message_id"]).startswith("<")
+    assert list(ctx.ws.applications_dir.iterdir()) == []
+    kinds = {(kind, job_id) for kind, job_id in seen}
+    assert ("email_prepared", jid) in kinds and ("folder_saved", jid) not in kinds
+
+
+def test_review_mode_letter_too_long_is_flagged_without_files(review_ctx):
+    ctx = review_ctx
+    jid = approved_job(ctx)
+    ctx.clients["write"] = FakeLLM(script={"write": [LETTER, LETTER]})
+    s = prepare_jobs(ctx, renderer_factory=factory(FakeRenderer([2, 2])))
+    assert s.flagged == 1
+    assert "2 pages" in json.loads(ctx.repo.get_job(jid)["needs_review_reasons"])[0]
+    assert ctx.repo.get_application(jid)["folder"] is None
+    assert list(ctx.ws.applications_dir.iterdir()) == []
+
+
+def test_review_mode_force_reprepare_removes_old_folder(review_ctx):
+    ctx = review_ctx
+    jid = approved_job(ctx)
+    folder = ctx.ws.applications_dir / "application_muster-gmbh_backend-developer_xxxxxx"
+    folder.mkdir(parents=True)
+    (folder / "cover_letter.md").write_text("old", encoding="utf-8")
+    ctx.repo.upsert_application(jid, folder=str(folder), channel="email")
+    ctx.repo.transition(jid, Status.PREPARED)
+    ctx.clients["write"] = FakeLLM(script={"write": [LETTER]})
+    s = prepare_jobs(ctx, [jid], force=True, renderer_factory=factory(FakeRenderer([1])))
+    assert s.prepared == 1
+    app = ctx.repo.get_application(jid)
+    assert not folder.exists() and app["folder"] is None and app["letter_md"]
+
+
+def test_review_mode_form_job_still_gets_a_folder(review_ctx, monkeypatch):
+    ctx = review_ctx
+    jid = approved_job(ctx, company="Formular AG")
+    row = ctx.conn.execute("SELECT id, payload FROM evaluations WHERE job_id = ?", (jid,)).fetchone()
+    payload = json.loads(row["payload"])
+    payload["result"].update(channel="employer_form", apply_email=None,
+                             application_url="https://jobs.formular.de/apply/1")
+    ctx.conn.execute("UPDATE evaluations SET payload = ? WHERE id = ?", (json.dumps(payload), row["id"]))
+    ctx.conn.commit()
+    ctx.clients["write"] = FakeLLM(script={"write": [LETTER]})
+
+    def no_browser(*a, **kw):
+        raise AssertionError("a run must not open a browser")
+
+    monkeypatch.setattr("autoapp.assist.session.open_browser_context", no_browser)
+    s = prepare_jobs(ctx, renderer_factory=factory(FakeRenderer([1])))
+    assert s.prepared == 1
+    app = ctx.repo.get_application(jid)
+    folder = ctx.ws.applications_dir / app["folder"].split("/")[-1]
+    assert (folder / "apply.html").exists()
 
 
 @pytest.mark.browser

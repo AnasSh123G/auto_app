@@ -155,6 +155,19 @@ def test_upsert_application(repo):
     assert app["assumed_skills"] == '["Docker"]'
 
 
+def test_upsert_application_stores_letter_and_email_text(repo):
+    jid = _job(repo)
+    repo.upsert_application(
+        jid, letter_md="Sehr geehrte Damen und Herren,", email_subject="Bewerbung als AI Engineer",
+        email_body="anbei meine Bewerbung.", message_id="<m1@autoapp>",
+    )  # fmt: skip
+    app = repo.get_application(jid)
+    assert app["letter_md"] == "Sehr geehrte Damen und Herren,"
+    assert app["email_subject"] == "Bewerbung als AI Engineer"
+    assert app["email_body"] == "anbei meine Bewerbung."
+    assert app["message_id"] == "<m1@autoapp>"
+
+
 def test_db_usage_recorder(repo):
     repo.start_run("run-1")
     rec = DbUsageRecorder(repo.conn, "run-1")
