@@ -29,16 +29,22 @@ QUIET_KINDS = frozenset({"job_approved", "job_maybe", "job_skipped", "needs_revi
                          "details_done", "warning", "error", "draft_exists", "employer_resolved", "employer_scanned",
                          "employer_matched", "employer_unresolved", "employer_job_added", "employer_deferred",
                          "folder_renamed", "details_started", "detail_waiting", "detail_read", "detail_failed",
-                         "detail_blocked", "detail_skipped", "detail_closed", "apply_link", "posting_searched"})
+                         "detail_blocked", "detail_skipped", "detail_closed", "apply_link", "posting_searched",
+                         "email_read", "email_job", "judge_reviewed", "judge_failed", "judge_summary"})
 # Counted, never shown as feed lines.
 HIDDEN_KINDS = frozenset({"step_started", "step_finished", "llm_call", "run_finished", "employer_scan_started",
                           "employer_search_usage", "employer_discovery_done"})
 
 LABELS = {
+    "judge_reviewed": "JUDGE",
+    "judge_failed": "JUDGE UNAVAILABLE",
+    "judge_summary": "JUDGE SCORE",
     "email_sent": "EMAIL SENT",
     "email_would_send": "WOULD SEND",
     "email_held": "EMAIL HELD",
     "email_failed": "EMAIL FAILED",
+    "email_read": "EMAIL READ",
+    "email_job": "EMAIL JOB",
     "folder_saved": "FOLDER SAVED",
     "form_filled": "FORM FILLED",
     "form_resolved": "FORM CHECK",
@@ -137,6 +143,10 @@ class RunStats:
     details_processed: int = 0  # of those, read or given up so far
     details_wait_until: str | None = None  # the fetch step pauses until then (ISO time) before the next page
     evaluated: int = 0
+    judge_reviewed: int = 0
+    judge_score_total: int = 0
+    judge_disagreed: int = 0
+    judge_failed: int = 0
     approved: int = 0
     maybe: int = 0
     skipped: int = 0
@@ -147,6 +157,8 @@ class RunStats:
     emails_would_send: int = 0
     emails_held: int = 0
     emails_failed: int = 0
+    alert_emails_read: int = 0
+    alert_email_jobs: int = 0
     forms_filled: int = 0
     form_results: dict[str, str] = field(default_factory=dict)
     drafts_saved: int = 0
@@ -181,6 +193,10 @@ class RunStats:
     @property
     def approval_share(self) -> float | None:
         return self.approved / self.evaluated if self.evaluated else None
+
+    @property
+    def judge_score(self) -> float | None:
+        return self.judge_score_total / self.judge_reviewed if self.judge_reviewed else None
 
     @property
     def form_outcomes(self) -> dict[str, int]:
@@ -221,6 +237,12 @@ class RunStats:
             self.evaluated += 1
             name = _DECISION_COUNTER[k]
             setattr(self, name, getattr(self, name) + 1)
+        elif k == "judge_reviewed":
+            self.judge_reviewed += 1
+            self.judge_score_total += int(d["score"])
+            self.judge_disagreed += int(not d.get("agrees", True))
+        elif k == "judge_failed":
+            self.judge_failed += 1
         elif k == "folder_saved":
             self.folders_saved += 1
             if d.get("channel") == "email":
@@ -235,6 +257,10 @@ class RunStats:
             self.emails_held += 1
         elif k == "email_failed":
             self.emails_failed += 1
+        elif k == "email_read":
+            self.alert_emails_read += 1
+        elif k == "email_job":
+            self.alert_email_jobs += 1
         elif k == "form_filled":
             self.forms_filled += 1
         elif k == "form_resolved" and e.job_id:

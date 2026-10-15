@@ -1,6 +1,6 @@
 # LLM providers and cost
 
-autoapp works with Claude (Anthropic), Gemini (Google) and models via OpenRouter. Each provider requires an API key set in `.env`, and you can configure which model handles each task (evaluate, write, form find, form fill).
+autoapp works with Claude (Anthropic), Gemini (Google) and models via OpenRouter. Each provider requires an API key set in `.env`, and you can configure which model handles each task (evaluate, write, form find, form fill, alert extraction, judge).
 
 ## Setting up providers
 
@@ -55,11 +55,34 @@ llm:
     form_find:         # picks the right link when a job page has several (see below)
       provider: openrouter
       model: openai/gpt-6-luna
+    judge:             # audits 5% of successful evaluations
+      provider: openrouter
+      model: openai/gpt-6-luna
+      effort: medium
 ```
 
 The same model in all four is fine; it is just written four times. A config from an earlier version (one default
 `provider`/`model` plus overrides) keeps working: every task without an entry takes the old default, `form_find` the
 evaluate model, and a notice asks you to run the setup section once to write the four entries.
+
+### Evaluator quality checks
+
+The `judge` task independently reads the CV, job description and raw evaluator output for every twentieth
+successful evaluation in a run (20, 40, 60, ...). It checks evidence grounding, requirement coverage, score
+calibration, blockers and application contact accuracy. The candidate profile, search preferences and the
+final result after code-side rules provide context, so rule changes are not mistaken for evaluator errors.
+Judge reviews do not change application decisions.
+
+The run summary and Statistics show the **mean evaluator-performance score out of 100**, the number of
+reviews, disagreements and unavailable audits. This measures the sampled evaluator outputs; it is not a job
+fit score or a measure of every evaluation. Fewer than 20 successful evaluations produces no audit or score.
+Judge tokens, calls and estimated cost appear separately and share the existing run budget. An unavailable
+judge leaves successful evaluations intact and is reported explicitly. Each review is stored against its exact
+evaluation, including historical re-evaluations.
+
+Configure `llm.tasks.judge` separately in settings. When absent it follows the evaluator's provider/model with
+medium effort; this avoids silently choosing an expensive model. A stronger independent model can be selected
+if desired without increasing the 5% sampling rate.
 
 ### Configure effort (reasoning level)
 
@@ -93,9 +116,14 @@ under `llm.prices`. Set the value to `0` to allow no AI calls. A fresh test run 
 
 ### Form-link selection
 
-`alert_extract` is a fifth, optional task: it reads job-alert cards and emails the built-in parsers cannot (see
+`alert_extract` reads job-alert cards and emails the built-in parsers cannot (see
 [job-sources](job-sources.md)). Without an entry it uses the `evaluate` model with low effort; add
-`llm.tasks.alert_extract` to pick another one. It only ever sees the redacted card text.
+`llm.tasks.alert_extract` to pick another one. It only ever sees redacted email/card text. When fallback extraction
+is enabled, the run also reviews at most one otherwise-readable card using any remaining extraction allowance.
+This makes model activity visible even when the parsers already found all the cards, without reviewing every
+email. Previously, zero calls could simply mean all cards parsed successfully; it did not imply duplicate jobs.
+No usable unread cards, a disabled fallback, or an exhausted budget can still legitimately produce zero calls.
+`EMAIL READ` logs email processing and `EMAIL JOB` identifies each job's email source and duplicate status.
 
 `form_find` is one of the four tasks above and has its own model, with low effort unless you set one.
 

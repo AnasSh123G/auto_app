@@ -1,10 +1,11 @@
 """Where an Arbeitsagentur job's application link comes from, and what to say when there is none.
 
-An Arbeitsagentur page is a job board page, never the application page. The employer's own ad comes from the
+An Arbeitsagentur page is a job board page, never an application page. The employer's own ad comes from the
 direct "<company> <title>" search (``posting_searches``) and the careers-page lookup (``employer_seeds``). Only
 when both ran and found nothing is the job ``no_employer_link``; a search that has not run yet (no
 PARALLEL_API_KEY, a used-up cap, no company name) is not a miss and leaves the job ``restricted`` with the reason.
-The one exception is an ad posted directly on the Arbeitsagentur, whose link is then allowed.
+An ad posted directly on the Arbeitsagentur still has no verified employer application page and is not exposed as
+an application link.
 """
 
 from __future__ import annotations
@@ -26,8 +27,8 @@ _ARBEITSAGENTUR_HOSTS = frozenset({"arbeitsagentur.de"})
 
 @dataclass(frozen=True)
 class EmployerLink:
-    """``kind``: ``employer`` (``entry`` is the employer's address), ``direct`` (posted on the Arbeitsagentur
-    only), ``missing`` (searched, not found), ``deferred`` (not searched yet)."""
+    """``kind``: ``employer`` (``entry`` is the employer's address), ``missing`` (searched, not found),
+    ``deferred`` (not searched yet)."""
 
     kind: str
     entry: str | None = None
@@ -36,6 +37,11 @@ class EmployerLink:
 
 def _is_arbeitsagentur_page(url: str | None) -> bool:
     return bool(url) and host_matches(url, _ARBEITSAGENTUR_HOSTS)
+
+
+def is_arbeitsagentur_page(url: str | None) -> bool:
+    """Whether an address belongs to the Arbeitsagentur, regardless of the job's recorded source."""
+    return _is_arbeitsagentur_page(url)
 
 
 def is_arbeitsagentur_job(ctx, job) -> bool:  # noqa: ANN001
@@ -124,7 +130,7 @@ def employer_link(ctx, job, app=None) -> EmployerLink:  # noqa: ANN001
         return EmployerLink("deferred", reason=why)
     direct = not external and bool(partner) and site_family(partner) == "arbeitsagentur"
     if direct:
-        return EmployerLink("direct", reason="posted directly on the Arbeitsagentur; the employer's site has no ad for it")
+        return EmployerLink("missing", reason="the ad is hosted on the Arbeitsagentur; no employer application page was verified")
     found = (search["reason"] or "nothing usable").strip()
     seen = (careers["reason"] or careers["outcome"].replace("_", " ")).strip()
     return EmployerLink("missing", reason=f"searched by company and title ({found}); careers pages ({seen})")
@@ -134,8 +140,6 @@ def outcome_for(ctx, job, link: EmployerLink):  # noqa: ANN001
     """The form outcome of an Arbeitsagentur job that has no employer address to open. Nothing is fetched."""
     from autoapp.formfinder.finder import Outcome
 
-    if link.kind == "direct":
-        return Outcome("restricted", job["job_url"], None, f"{ONLY_ON_ARBEITSAGENTUR}: {link.reason}")
     if link.kind == "missing":
         return Outcome(NO_EMPLOYER_LINK, None, None, f"{NOT_FOUND_YET}: {link.reason}")
     host = bare_host(job["job_url"] or "") or "arbeitsagentur.de"

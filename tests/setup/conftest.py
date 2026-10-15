@@ -144,6 +144,8 @@ def llm_answers() -> list[Any]:
         ("Model for form_fill", ENTER),
         ("Provider for form_find", ENTER),
         ("Model for form_find", ENTER),
+        ("Provider for judge", ENTER),
+        ("Model for judge", ENTER),
         ("Anthropic API key", ANTHROPIC_KEY),
         ("Test the API key", True),
     ]

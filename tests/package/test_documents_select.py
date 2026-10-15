@@ -29,8 +29,9 @@ def test_english_ad_picks_english_cv():
     assert select_documents(make_profile(CV_DE, CV_EN), "en", [], False).cv == CV_EN
 
 
-def test_fallback_to_any_cv():
-    assert select_documents(make_profile(CV_DE), "en", [], False).cv == CV_DE
+def test_opposite_language_cv_is_not_a_fallback():
+    selection = select_documents(make_profile(CV_DE), "en", [], False)
+    assert selection.cv is None and "CV (en)" in selection.missing
 
 
 def test_no_cv():
@@ -53,15 +54,15 @@ def test_portfolio_found_by_label_or_file():
     ]
 
 
-def test_writing_samples_never_attached():
+def test_all_remaining_documents_are_prepared_for_attachment():
     sel = select_documents(make_profile(CV_DE, SAMPLE, CERT1), "de", ["certificates", "photo"], True)
-    assert SAMPLE not in [sel.cv, *sel.certificates, *sel.extras, sel.photo]
+    assert SAMPLE in sel.extras
 
 
-def test_certificates_only_when_requested_or_flag():
+def test_all_certificates_and_work_references_are_prepared_for_upload():
     p = make_profile(CV_DE, CERT1, CERT2)
-    assert select_documents(p, "de", [], False).certificates == []
-    assert select_documents(p, "de", ["portfolio"], False).certificates == []
+    assert select_documents(p, "de", [], False).certificates == [CERT1, CERT2]
+    assert select_documents(p, "de", ["portfolio"], False).certificates == [CERT1, CERT2]
     assert select_documents(p, "de", ["certificates"], False).certificates == [CERT1, CERT2]
     assert select_documents(p, "de", ["References"], False).certificates == [CERT1, CERT2]
     assert select_documents(p, "de", [], True).certificates == [CERT1, CERT2]
@@ -76,7 +77,9 @@ def test_requested_certificates_but_none_exist():
 def test_photo_only_when_requested():
     p = make_profile(CV_DE, PHOTO)
     assert select_documents(p, "de", [], False).photo is None
+    assert PHOTO in select_documents(p, "de", [], False).extras
     assert select_documents(p, "de", ["photo"], False).photo == PHOTO
+    assert PHOTO not in select_documents(p, "de", ["photo"], False).extras
     assert select_documents(make_profile(CV_DE), "de", ["photo"], False).missing == ["photo"]
 
 
@@ -89,14 +92,31 @@ def test_language_specific_documents_follow_the_letter_and_any_is_always_sent():
     de_cert = DocumentEntry(file="zeugnis_de.pdf", role="certificate", language="de")
     en_cert = DocumentEntry(file="cert_en.pdf", role="certificate", language="en")
     anywhere = DocumentEntry(file="degree.pdf", role="certificate", language="any")
-    profile = make_profile(CV_DE, CV_EN, de_cert, en_cert, anywhere, CERT1)
+    english_other = DocumentEntry(file="portfolio_en.pdf", role="other", language="en")
+    profile = make_profile(CV_DE, CV_EN, de_cert, en_cert, anywhere, CERT1, english_other)
     german = select_documents(profile, "de", ["certificates"], False)
     english = select_documents(profile, "en", ["certificates"], False)
     assert german.certificates == [de_cert, anywhere, CERT1]
-    assert english.certificates == [en_cert, anywhere, CERT1]  # unset behaves like any
+    assert english.certificates == [en_cert, anywhere, CERT1]
+    assert german.extras == []
+    assert english.extras == [english_other]
 
 
 def test_any_language_cv_is_the_fallback_after_the_matching_one():
     any_cv = DocumentEntry(file="cv.pdf", role="cv", language="any")
     assert select_documents(make_profile(CV_DE, any_cv), "en", [], False).cv == any_cv
     assert select_documents(make_profile(any_cv, CV_EN), "en", [], False).cv == CV_EN
+
+
+def test_all_other_documents_are_selected_even_without_an_ad_request():
+    first = DocumentEntry(file="portfolio.pdf", role="other")
+    second = DocumentEntry(file="certificate-extra.pdf", role="other")
+    sel = select_documents(make_profile(CV_DE, first, second), "de", [], False)
+    assert sel.extras == [first, second]
+
+
+def test_arbeitszeugnis_filename_is_treated_as_a_work_reference():
+    reference = DocumentEntry(file="Arbeitszeugnis_2024.pdf", role="other")
+    sel = select_documents(make_profile(CV_DE, reference), "de", [], False)
+    assert sel.certificates == [reference]
+    assert sel.extras == []

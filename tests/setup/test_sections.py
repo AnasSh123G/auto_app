@@ -347,6 +347,7 @@ def test_llm_per_task_models_and_key_check(ws):
         ("Provider for write", "anthropic"), ("Model for write", ENTER),
         ("Provider for form_fill", ENTER), ("Model for form_fill", ENTER),  # offered from the answer before
         ("Provider for form_find", ENTER), ("Model for form_find", ENTER),
+        ("Provider for judge", ENTER), ("Model for judge", ENTER),
         ("OpenRouter API key", "sk-or-SECRET"), ("Anthropic API key", ANTHROPIC_KEY),
         ("Test the API key", True),
     ]
@@ -369,14 +370,18 @@ def test_llm_asks_every_task_and_prefills_from_the_config_file_else_the_previous
         ("Provider for write", ENTER), ("Model for write", ENTER),  # already in config.yaml: that value is offered
         ("Provider for form_fill", ENTER), ("Model for form_fill", ENTER),  # not saved: the write answer is offered
         ("Provider for form_find", ENTER), ("Model for form_find", "openai/gpt-6-luna"),
+        ("Provider for judge", ENTER), ("Model for judge", "openai/gpt-6-luna"),
         ("OpenRouter API key", "sk-or-X"), ("Test the API key", False),
     ]
     p = run(ws, "llm", answers)
     raw = load_yaml(ws.config_path)["llm"]
-    assert set(raw) == {"tasks"} and set(raw["tasks"]) == {"evaluate", "write", "form_fill", "form_find"}  # no single default
+    assert set(raw) == {"tasks"} and set(raw["tasks"]) == {
+        "evaluate", "write", "form_fill", "form_find", "judge"
+    }  # no single default
     assert {t: raw["tasks"][t]["model"] for t in raw["tasks"]} == {
         "evaluate": "openai/gpt-6-luna", "write": "anthropic/claude-haiku-5.5",
-        "form_fill": "anthropic/claude-haiku-5.5", "form_find": "openai/gpt-6-luna"}
+        "form_fill": "anthropic/claude-haiku-5.5", "form_find": "openai/gpt-6-luna",
+        "judge": "openai/gpt-6-luna"}
     assert not any("Use a different provider" in m for _, m in p.asked)  # there is no "one model for everything" choice
 
 
@@ -391,7 +396,8 @@ def test_llm_key_failure_offers_reentering_key(ws):
 def test_llm_enter_keeps_saved_key(ws):
     run(ws, "llm", llm_answers())
     answers = llm_answers()
-    answers[8] = ("Anthropic API key", ENTER)
+    key_answer = next(i for i, (question, _) in enumerate(answers) if question == "Anthropic API key")
+    answers[key_answer] = ("Anthropic API key", ENTER)
     run(ws, "llm", answers)
     assert ANTHROPIC_KEY in ws.env_path.read_text()
 

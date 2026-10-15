@@ -225,6 +225,11 @@ def _search_alerts(ctx: RunContext, summary: SearchSummary, profiles: list[Searc
                 (mid, sender, datetime.now(UTC).isoformat(), cards),
             )
 
+    def email_read(mid: str, provider: str, subject: str) -> None:
+        safe_subject = subject or "(no subject)"
+        ctx.emit("email_read", detail=f"{provider} · {mid} · {safe_subject}",
+                 message_id=mid, provider=provider, subject=subject)
+
     from autoapp.sources.alerts.excerpt import Redactor
 
     redactor = Redactor.from_personal(ctx.profile.personal, ctx.config.mail.alerts.address if ctx.config.mail.alerts else None)
@@ -234,6 +239,7 @@ def _search_alerts(ctx: RunContext, summary: SearchSummary, profiles: list[Searc
         result = ingest_alerts(mailbox, alerts.folder, is_processed, mark,
                                redactor=redactor, fallback=fallback,
                                fallback_unknown_senders=alerts.llm_unknown_senders,
+                               on_email_read=email_read,
                                per_sender=ctx.sample.alerts_per_sender if ctx.sample else None,
                                scan=ctx.sample.alert_scan if ctx.sample else 60)
     except Exception as err:  # noqa: BLE001
@@ -253,12 +259,32 @@ def _search_alerts(ctx: RunContext, summary: SearchSummary, profiles: list[Searc
     own_resolver = resolver is None
     resolver = resolver or StepStoneLinkResolver()
     try:
-        for _mid, card in result.cards:
+        cards = list(result.cards)
+        # The previous policy only called alert_extract when parsing failed or a parsed card lacked a usable title or
+        # company. Fully parsed alert mail therefore produced zero alert_extract calls, even with LLM enabled. Keep
+        # those targeted fallbacks first, then spend at most one remaining call reviewing a normally parsed card.
+        for index, (_mid, card) in enumerate(cards):
             if extractor is not None and not card.llm_extracted and card_needs_fallback(card):
                 card, completed = extractor.complete_card(card)  # the redacted excerpt, nothing else, goes to the model
                 summary.alert_llm_extracted += completed
+                cards[index] = (_mid, card)
+        if extractor is not None and extractor.calls < extractor.max_calls and not extractor.stopped:
+            sample_index = next((i for i, (_mid, card) in enumerate(cards)
+                                 if not card.llm_extracted and not card_needs_fallback(card)), None)
+            if sample_index is not None:
+                mid, card = cards[sample_index]
+                card, completed = extractor.complete_card(card)  # one bounded review sample per run
+                summary.alert_llm_extracted += completed
+                cards[sample_index] = (mid, card)
+
+        for _mid, card in cards:
             resolved = resolver.resolve(card.url) if card.source.startswith("stepstone") and card.url else None
+            linked_before = report.linked
             job_id = _store(ctx, card_to_raw(card, resolved), report, profiles, today)
+            duplicate = report.linked > linked_before
+            ctx.emit("email_job", {"id": job_id, "company": card.company, "title": card.title},
+                     detail=f"{card.source}; duplicate={str(duplicate).lower()}",
+                     message_id=_mid, source=card.source, duplicate=duplicate)
             if job_id and resolved is not None and not resolved.ok:
                 # Unresolvable card: keep the email data, mark it for manual handling.
                 repo.transition(job_id, Status.DESCRIPTION_UNAVAILABLE, note=resolved.error)

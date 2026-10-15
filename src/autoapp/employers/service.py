@@ -301,6 +301,8 @@ def _process_group(ctx, group: Group, report: EmployerReport, summary: Discovery
     cfg = ctx.config.sources.employer_careers
     resolver = IdentityResolver(emp, cfg, fetch, meter, gateway, emit, now=now)
     ident = resolver.confirm(group, website) if website else resolver.resolve(group, again=again, refresh_site=refresh_site)
+    if ident.status == "deferred" and ident.reason and "page limit" in ident.reason.casefold():
+        ident.reason = _page_budget_message(cfg, run_budget)
     report.identity, report.employer_id, report.source = ident.status, ident.employer_id, ident.source
     report.searches, report.reason, report.kind = ident.searches, ident.reason, ident.kind
     why = f": {ident.reason}" if ident.status in ("unresolved", "ambiguous", "deferred") and ident.reason else ""
@@ -320,6 +322,8 @@ def _process_group(ctx, group: Group, report: EmployerReport, summary: Discovery
     wanted = wanted_priority(group.titles, _profiles_for(group, profiles))
     scanner = EmployerScanner(emp, cfg, fetch, run_budget, meter, emit, now=now, run_id=ctx.run_id)
     scan = scanner.scan(employer, again=again, want=wanted)
+    if scan.reason == "page limit reached for this run":
+        scan.reason = _page_budget_message(cfg, run_budget)
     report.scan = scan
     summary.pages += scan.pages
     if scan.status == "failed" and not scan.listings:
@@ -628,9 +632,9 @@ def _direct_postings(ctx, rows, emp: EmployerRepo, gateway: SearchGateway, fetch
             continue
         meter = PageMeter(run_budget, MAX_PAGES)  # its own pages: the website check cannot use them up
         if meter.left <= 0:
-            emit("posting_searched", "own ad not searched: the page limit for this run is used up", job_id=job["id"],
-                 found=False)
-            report(job["id"], "deferred", "page limit for this run reached")
+            reason = _page_budget_message(cfg, run_budget)
+            emit("posting_searched", f"own ad not searched: {reason}", job_id=job["id"], found=False)
+            report(job["id"], "deferred", reason)
             continue
         summary.searched += 1
         result = find_posting(gateway, meter.wrap(fetch), job_id=job["id"], company=seed.company, title=seed.title,
@@ -704,7 +708,10 @@ def _excerpt_postings(ctx, rows: list[tuple[Any, str]], emp: EmployerRepo, gatew
             continue
         meter = PageMeter(run_budget, MAX_PAGES)
         if meter.left <= 0:
-            on_result(job["id"], "deferred", "page limit for this run reached")
+            reason = _page_budget_message(cfg, run_budget)
+            emit("posting_searched", f"ad not searched by the alert's text: {reason}", job_id=job["id"],
+                 found=False)
+            on_result(job["id"], "deferred", reason)
             continue
         summary.searched += 1
         result = find_posting_from_excerpt(gateway, meter.wrap(fetch), job_id=job["id"], title=job["title"],
@@ -725,6 +732,14 @@ def _excerpt_postings(ctx, rows: list[tuple[Any, str]], emp: EmployerRepo, gatew
         found.append(job["id"])
         on_result(job["id"], "found", f"found by the alert's text, needs review ({result.reason})")
     return found
+
+
+def _page_budget_message(cfg, run_budget: RunBudget) -> str:  # noqa: ANN001
+    """Explain the configured page cap and actual usage without making it sound like an AI-credit cap."""
+    cap = cfg.max_pages_per_run
+    used = max(0, cap - run_budget.pages)
+    return (f"sources.employer_careers.max_pages_per_run={cap} is exhausted ({used}/{cap} employer-site page reads); "
+            "these are website reads, not AI credits; retry in the next run")
 
 
 def _attach_direct(ctx, emp: EmployerRepo, job, app, hit: PostingHit, restricted, emit) -> None:  # noqa: ANN001

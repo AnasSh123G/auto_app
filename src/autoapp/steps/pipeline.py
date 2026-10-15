@@ -97,6 +97,9 @@ class RunSummary:
             e = self.evaluate
             out.append(f"evaluate: {e.evaluated} evaluated ({e.approved} apply, {e.review} review, {e.skipped} skip), "
                        f"{e.failed} failed, {e.waiting} waiting")
+            score = "not sampled yet" if e.judge_score is None else f"{e.judge_score:.1f}/100"
+            out.append(f"judge: evaluator performance {score}; {e.judge_reviewed} reviews, "
+                       f"{e.judge_failed} unavailable (every 20 successful evaluations)")
         if self.prepare:
             p = self.prepare
             out.append(f"prepare: {p.prepared} prepared ({p.flagged} need review), {p.waiting} waiting")

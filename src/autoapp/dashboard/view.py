@@ -148,6 +148,12 @@ def render_stats_page(st: Stats, width: int, *, interactive: bool = False) -> Re
     ] or [("-", "no evaluations in this period")], compact)
     parts.append(_layout([models, ads, apps], compact))
     parts.append(_layout([sources, llm, statuses], compact))
+    parts.append(_kv("Judge: evaluator performance", [
+        ("sampling", "every 20 successful evaluations (5%)"),
+        ("reviews completed", st.judge_reviewed),
+        ("performance score (mean)", "not sampled yet" if st.judge_score is None else f"{st.judge_score:.1f}/100"),
+        ("disagreements", st.judge_disagreed), ("reviews unavailable", st.judge_failed),
+    ], compact))
     parts.append(_model_table(st, compact))
     if st.employer is not None:
         e = st.employer
@@ -245,7 +251,11 @@ def render_run_top(rs: RunStats, width: int, *, now: datetime | None = None, sta
     cost = "unknown" if rs.cost_unknown else format_cost(rs.cost_usd)
     counters = [
         ("ads read", rs.ads_found), ("new", rs.ads_new), ("filtered", rs.filtered),
+        ("emails read", rs.alert_emails_read), ("jobs from email", rs.alert_email_jobs),
         ("evaluated", rs.evaluated), ("approved", f"{rs.approved} ({_pct(rs.approval_share)})"),
+        ("judge reviews", rs.judge_reviewed),
+        ("evaluator performance", "not sampled yet" if rs.judge_score is None else f"{rs.judge_score:.1f}/100"),
+        ("judge disagreements", rs.judge_disagreed), ("judge unavailable", rs.judge_failed),
         ("folders saved", rs.folders_saved), (sent_label, sent_value), ("forms saved", rs.forms_saved),
         ("form links", _form_counts(rs.form_outcomes)),
         ("held back", rs.emails_held), ("errors", rs.errors),
@@ -262,11 +272,12 @@ def render_run_top(rs: RunStats, width: int, *, now: datetime | None = None, sta
         lines = [Text(f"{k}: {v}") for k, v in counters]
         return Group(title, progress, *lines, Text("models:", style="dim"), *models)
     grid = Table.grid(padding=(0, 3), expand=True)
-    for _ in range(4):
+    columns = 4 if width >= 160 else 3 if width >= 120 else 2
+    for _ in range(columns):
         grid.add_column()
     cells = [Text.assemble((f"{k} ", "dim"), (str(v), "bold")) for k, v in counters]
-    for i in range(0, len(cells), 4):
-        grid.add_row(*cells[i:i + 4], *[Text("")] * (4 - len(cells[i:i + 4])))
+    for i in range(0, len(cells), columns):
+        grid.add_row(*cells[i:i + columns], *[Text("")] * (columns - len(cells[i:i + columns])))
     return Panel(Group(title, progress, Text(""), grid, Text(""), Text("models", style="dim"), *models),
                  border_style="cyan")
 

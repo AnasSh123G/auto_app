@@ -75,6 +75,8 @@ class RunContext:
     sample: SampleLimits | None = None  # set only by the quick test
     # The quick test's preparation sample, chosen after evaluation and before the own-ad search (job ids, best first).
     sample_job_ids: list[str] | None = None
+    evaluation_count: int = 0  # successful evaluations in this run; every twentieth is audited
+    judge_stopped: str | None = None  # avoid repeating a judge authentication/configuration failure
 
     @classmethod
     def open(cls, ws: Workspace, *, dry_run: bool = False, interactive: bool = True,

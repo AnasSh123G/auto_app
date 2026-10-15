@@ -601,7 +601,7 @@ def load_config(ws: Workspace) -> Config:
         if old_keys or unset:
             used = "; ".join(f"{t}: {config.llm.resolve(t)[0]} {config.llm.resolve(t)[1]}" for t in TASK_NAMES)
             config._notices.append(
-                "llm: every task has its own model now (llm.tasks.evaluate, write, form_fill, form_find). "
+                "llm: every task has its own model now (llm.tasks.evaluate, write, form_fill, form_find, judge). "
                 f"Using {used}. Run `autoapp setup --section llm` to set them and remove the old "
                 f"{'/'.join(old_keys) + ' ' if old_keys else ''}keys."
             )

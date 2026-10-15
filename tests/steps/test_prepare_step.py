@@ -22,6 +22,7 @@ AD = (
     "Ansprechpartnerin Frau Weber, Kennziffer 2026-17. Wir bieten 60.000 bis 70.000 EUR."
 )
 
+
 LETTER = {
     "paragraphs": [
         "Bei der Muster GmbH entwickle ich seit 2022 Python-Services mit FastAPI.",

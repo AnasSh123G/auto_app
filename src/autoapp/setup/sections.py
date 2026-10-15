@@ -872,6 +872,7 @@ TASK_QUESTIONS = (
     ("write", "writing the cover letters (few calls, so a strong writer is worth it)"),
     ("form_fill", "answering free-text questions when `assist` fills a web form"),
     ("form_find", "finding the real application page behind a job link"),
+    ("judge", "auditing every twentieth evaluation against the job and CV (5% of evaluations)"),
 )
 
 

@@ -8,6 +8,7 @@ existing job instead of creating a new one, so every role is evaluated at most o
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
@@ -43,6 +44,14 @@ CITY_COORDS: dict[str, tuple[float, float]] = {
     "ingolstadt": (48.766, 11.426), "wolfsburg": (52.423, 10.787), "jena": (50.927, 11.589),
     "luebeck": (53.866, 10.686), "chemnitz": (50.833, 12.92), "halle": (51.483, 11.97),
     "st. ingbert": (49.277, 7.116), "sankt ingbert": (49.277, 7.116),
+    "oberhausen": (51.496, 6.863), "bottrop": (51.524, 6.922), "herne": (51.538, 7.219),
+    "gelsenkirchen": (51.517, 7.085), "recklinghausen": (51.614, 7.197), "witten": (51.444, 7.352),
+    "hattingen": (51.398, 7.186), "moers": (51.451, 6.626), "hagen": (51.359, 7.475),
+    "muelheim an der ruhr": (51.427, 6.883), "muelheim": (51.427, 6.883), "castrop-rauxel": (51.55, 7.312),
+    "gladbeck": (51.571, 6.985), "unna": (51.537, 7.689), "dinslaken": (51.563, 6.735),
+    "dorsten": (51.661, 6.965), "herten": (51.596, 7.138), "marl": (51.656, 7.09),
+    # Approximate center of the Ruhrgebiet; used by form assistance when a workplace choice is requested.
+    "ruhrgebiet": (51.48, 7.20),
 }
 
 
@@ -50,7 +59,16 @@ def _coords(city: str | None) -> tuple[float, float] | None:
     if not city:
         return None
     key = norm_text(city.split(",")[0])
-    return CITY_COORDS.get(key)
+    if key in CITY_COORDS:
+        return CITY_COORDS[key]
+    # Options often append a work mode, state, or short note in parentheses ("Essen (hybrid)").
+    # Match the longest known city token sequence within the option text.
+    text = norm_text(city)
+    for name in sorted(CITY_COORDS, key=len, reverse=True):
+        normalized = norm_text(name)
+        if re.search(rf"(?<![a-z0-9]){re.escape(normalized)}(?![a-z0-9])", text):
+            return CITY_COORDS[name]
+    return None
 
 
 def distance_km(a: str | None, b: str | None) -> float | None:

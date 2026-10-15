@@ -22,6 +22,7 @@ ALL_COUNTED = [
     ("folder_saved", {"channel": "email"}), ("folder_saved", {"channel": "employer_form"}),
     ("email_sent", {}), ("email_would_send", {}), ("email_held", {}), ("email_failed", {}),
     ("form_filled", {}), ("needs_review", {}), ("warning", {}), ("error", {}),
+    ("judge_reviewed", {"score": 80, "agrees": False}), ("judge_failed", {}),
     ("llm_call", {"tokens": 100, "cost_usd": 0.01}), ("llm_call", {"tokens": 50, "cost_usd": None}),
 ]
 
@@ -37,6 +38,7 @@ def test_each_kind_updates_its_counter():
     assert (st.emails_sent, st.emails_would_send, st.emails_held, st.emails_failed) == (1, 1, 1, 1)
     assert (st.forms_filled, st.needs_review, st.warnings, st.errors) == (1, 1, 1, 1)
     assert st.llm_calls == 2 and st.tokens == 150 and st.cost_usd == pytest.approx(0.01) and st.cost_unknown
+    assert (st.judge_reviewed, st.judge_score, st.judge_disagreed, st.judge_failed) == (1, 80, 1, 1)
     assert st.sent_today == 3 and st.approval_share == 0.25
     st.apply(RunEvent("step_started", detail="evaluate"))
     assert st.step == "evaluate"
@@ -123,7 +125,7 @@ def test_llm_calls_are_not_stored_as_feed_rows(tmp_path):
 def test_models_in_use_names_every_task(tmp_path):
     ctx = _ctx(tmp_path)
     models = models_in_use(ctx.config.llm)
-    assert set(models) == {"evaluate", "write", "assist form-fill", "find form", "read alert emails"}
+    assert set(models) == {"evaluate", "write", "assist form-fill", "find form", "read alert emails", "judge"}
     ctx.close()
 
 

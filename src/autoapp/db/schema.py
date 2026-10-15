@@ -316,7 +316,22 @@ CREATE TABLE form_attempts (
 CREATE INDEX idx_form_attempts_job ON form_attempts(job_id, id);
 """
 
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8]
+_V9 = """
+CREATE TABLE judge_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    evaluation_id INTEGER NOT NULL UNIQUE REFERENCES evaluations(id) ON DELETE CASCADE,
+    run_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    score INTEGER NOT NULL CHECK (score BETWEEN 0 AND 100),
+    agrees INTEGER NOT NULL CHECK (agrees IN (0, 1)),
+    payload TEXT NOT NULL
+);
+CREATE INDEX idx_judge_reviews_run ON judge_reviews(run_id);
+"""
+
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9]
 
 
 def current_version(conn: sqlite3.Connection) -> int:

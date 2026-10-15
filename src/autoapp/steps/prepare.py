@@ -20,8 +20,9 @@ from typing import get_args
 from autoapp.db.repo import now_iso
 from autoapp.db.status import Status
 from autoapp.employers.posting import email_text_reasons
+from autoapp.employers.scope import host_matches
 from autoapp.evaluation.schema import FinalEvaluation
-from autoapp.formfinder.employer_link import NO_EMPLOYER_LINK
+from autoapp.formfinder.employer_link import NO_EMPLOYER_LINK, is_arbeitsagentur_page
 from autoapp.llm.base import LLMAuthError, LLMCallLimitReached, LLMError
 from autoapp.package import render as R
 from autoapp.package.documents_select import select_documents
@@ -71,6 +72,24 @@ def _copy(src: Path, folder: Path) -> Path:
     dest = folder / src.name
     shutil.copy2(src, dest)
     return dest
+
+
+class DocumentCopyError(ValueError):
+    """Declared documents would overwrite another document or a generated application file."""
+
+
+def _check_document_names(paths: list[Path]) -> None:
+    """Reject ambiguous copies before writing a letter or overwriting generated package files."""
+    reserved = {"cover_letter.md", "cover_letter.pdf", BUNDLE_NAME.casefold(), "job.md", "evaluation.md",
+                "email.eml", "apply.html", "readme.md", "form_answers.md", "filled_form.md", "filled_form.html"}
+    seen: dict[str, Path] = {}
+    for path in paths:
+        name = path.name.casefold()
+        if name in reserved:
+            raise DocumentCopyError(f"Document {path.name} conflicts with a generated application file; rename the document")
+        previous = seen.setdefault(name, path.resolve())
+        if previous != path.resolve():
+            raise DocumentCopyError(f"Documents share the filename {path.name}; give them distinct filenames before preparing")
 
 
 def _is_complete(ctx: RunContext, job_id: str, folder: Path) -> bool:
@@ -192,7 +211,7 @@ def prepare_jobs(
                 summary.stopped = str(err)
                 summary.waiting += len(jobs) - i
                 break
-            except LLMError as err:
+            except (LLMError, DocumentCopyError) as err:
                 summary.failed.append(f"{job['id']}: {err}")
                 ctx.emit("error", job, detail=f"preparation failed: {str(err)[:160]}")
                 continue
@@ -248,6 +267,10 @@ def _prepare_one(ctx: RunContext, job, folder: Path, writer: LetterWriter, rende
     docs = ctx.documents
     selection = select_documents(profile, language, list(r.requested_documents),
                                  ctx.config.writing.always_attach_certificates)
+    selected_entries = ([selection.cv] if selection.cv else []) + selection.certificates + selection.extras
+    if selection.photo:
+        selected_entries.append(selection.photo)
+    _check_document_names([docs.path_of(entry) for entry in selected_entries])
     sp = ctx.search_profile(job["search_profile"])
 
     samples = [docs.texts[e.file] for e in docs.by_role("writing_sample") if e.file in docs.texts]
@@ -286,15 +309,38 @@ def _prepare_one(ctx: RunContext, job, folder: Path, writer: LetterWriter, rende
 
     # Documents
     files: list[str] = ["cover_letter.md", "cover_letter.pdf"]
-    cv_copy = _copy(docs.path_of(selection.cv), folder) if selection.cv else None
-    cert_copies = [_copy(docs.path_of(e), folder) for e in selection.certificates]
-    extra_copies = [_copy(docs.path_of(e), folder) for e in selection.extras]
+    copied: set[Path] = set()
+
+    def copy_entries(entries) -> list[Path]:
+        out = []
+        for entry in entries:
+            source = docs.path_of(entry)
+            if source.resolve() not in copied:
+                out.append(_copy(source, folder))
+                copied.add(source.resolve())
+        return out
+
+    cv_copy = copy_entries([selection.cv])[0] if selection.cv else None
+    cert_copies = copy_entries(selection.certificates)
+    extra_copies = copy_entries(selection.extras)
     if selection.photo:
-        extra_copies.append(_copy(docs.path_of(selection.photo), folder))
+        extra_copies.extend(copy_entries([selection.photo]))
     files += [p.name for p in ([cv_copy] if cv_copy else []) + cert_copies + extra_copies]
 
     b = bundle(letter_pdf, cv_copy, cert_copies, folder / BUNDLE_NAME, ctx.config.email.max_bundle_mb)
+    email_extra_copies = extra_copies + [path for path in ([cv_copy] if cv_copy else []) + cert_copies
+                                       if path.suffix.lower() != ".pdf"]
     files.append(BUNDLE_NAME)
+    package_warnings = list(b.skipped)
+    if r.channel == "email":
+        unique_extra_paths = {path.resolve(): path for path in email_extra_copies}.values()
+        attachments_size = b.size_bytes + sum(path.stat().st_size for path in unique_extra_paths)
+        if attachments_size > ctx.config.email.max_bundle_mb * 1024 * 1024:
+            package_warnings.append(
+                f"Combined email attachments total {attachments_size / 1024 / 1024:.1f} MB; "
+                f"max_bundle_mb={ctx.config.email.max_bundle_mb:g} MB is checked against "
+                "Bewerbungsmappe.pdf only."
+            )
 
     # Form answers and helper page
     answers = R.FormAnswers(
@@ -314,13 +360,17 @@ def _prepare_one(ctx: RunContext, job, folder: Path, writer: LetterWriter, rende
 
     now_app = repo.get_application(job["id"])
     no_employer = now_app is not None and now_app["form_status"] == NO_EMPLOYER_LINK
+    arbeitsagentur_job = is_arbeitsagentur_page(job["job_url"])
     application_url = None if no_employer else job["application_url"] or r.application_url
+    if host_matches(application_url or "", {"arbeitsagentur.de"}):
+        application_url = None
+    package_job_url = None if arbeitsagentur_job else job["job_url"]
 
     sources = repo.sources(job["id"])
     arbeitnow_link = source_link(sources)
     (folder / "apply.html").write_text(
         R.render_apply_html(R.ApplyData(job["title"], job["company"], answers.items(), upload,
-                                        job["job_url"], application_url, arbeitnow_url=arbeitnow_link,
+                                        package_job_url, application_url, arbeitnow_url=arbeitnow_link,
                                         no_employer=no_employer)),
         encoding="utf-8",
     )
@@ -331,7 +381,10 @@ def _prepare_one(ctx: RunContext, job, folder: Path, writer: LetterWriter, rende
     if channel == "email" and r.apply_email:
         msg = build_application_email(
             sender_name=f"{personal.first_name} {personal.last_name}", sender_email=personal.email,
-            to=r.apply_email, subject=letter.subject, body=letter.email_body, attachment=folder / BUNDLE_NAME,
+            to=r.apply_email, subject=letter.subject,
+            body=letter.email_body,
+            attachment=folder / BUNDLE_NAME,
+            extra_attachments=email_extra_copies,
         )
         write_eml(msg, folder / "email.eml")
         files.append("email.eml")
@@ -341,7 +394,7 @@ def _prepare_one(ctx: RunContext, job, folder: Path, writer: LetterWriter, rende
     locations += [loc["city"] for loc in repo.locations(job["id"])]
     (folder / "job.md").write_text(R.render_job_md(R.JobInfo(
         title=job["title"], company=job["company"], description=job["description"] or "",
-        locations=locations, job_url=job["job_url"], application_url=application_url,
+        locations=locations, job_url=package_job_url, application_url=application_url,
         sources=sorted({s["source"] for s in sources}), ad_salary_min=job["ad_salary_min"],
         ad_salary_max=job["ad_salary_max"], salary_estimate_min=job["salary_estimate_min"],
         salary_estimate_max=job["salary_estimate_max"],
@@ -355,10 +408,10 @@ def _prepare_one(ctx: RunContext, job, folder: Path, writer: LetterWriter, rende
     (folder / "README.md").write_text(R.render_readme_md(R.ReadmeData(
         title=job["title"], company=job["company"], channel=channel, job_id=job["id"], files=files,
         apply_email=r.apply_email, application_url=application_url,
-        job_url=job["job_url"], reference=r.reference, missing_documents=selection.missing,
+        job_url=package_job_url, reference=r.reference, missing_documents=selection.missing,
         needs_review_reasons=review, assumed_skills=letter.assumed_skills,
         salary_note=needs_salary_note(expectation, asks), bundle_size_mb=round(b.size_bytes / 1024 / 1024, 2),
-        bundle_max_mb=ctx.config.email.max_bundle_mb, bundle_too_large=b.too_large, warnings=list(b.skipped),
+        bundle_max_mb=ctx.config.email.max_bundle_mb, bundle_too_large=b.too_large, warnings=package_warnings,
         arbeitnow_url=arbeitnow_link, no_employer=no_employer,
     )), encoding="utf-8")
 
@@ -374,7 +427,8 @@ def _prepare_one(ctx: RunContext, job, folder: Path, writer: LetterWriter, rende
 
         application = repo.get_application(job["id"])
         refresh(folder, Outcome(application["form_status"], job["application_url"],
-                                application["form_reached_url"], application["form_note"]))
+                                application["form_reached_url"], application["form_note"]),
+                suppress_job_ad=arbeitsagentur_job)
         from autoapp.package.folders import sync_folder_name
 
         sync_folder_name(ctx, job["id"])

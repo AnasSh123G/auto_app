@@ -5,6 +5,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from autoapp.config.models import DocumentEntry
 from autoapp.db.status import Status
 from autoapp.fetch.http_fetcher import HttpFetcher
 from autoapp.llm.fake import FakeLLM
@@ -17,7 +18,7 @@ from autoapp.steps.fetch import fetch_details
 from autoapp.steps.prepare import prepare_jobs
 from autoapp.steps.render import parse_cover_letter_md, render_application
 from autoapp.steps.search import run_search
-from autoapp.steps.send import send_applications
+from autoapp.steps.send import load_message, send_applications
 from tests.helpers import make_workspace
 from tests.steps.test_prepare_step import LETTER, FakeRenderer, approved_job, factory
 
@@ -188,6 +189,26 @@ def test_manual_send_asks_for_confirmation(ctx):
     assert asked and s.not_sent[jid] == ["not confirmed"]
 
 
+def test_german_email_excludes_english_cv_and_removes_legacy_attachment_on_render(ctx):
+    from autoapp.config.models import DocumentEntry
+    from tests.helpers import _pdf
+
+    filename = "CV_english.pdf"
+    ctx.profile.documents.append(DocumentEntry(file=filename, role="cv", language="en"))
+    _pdf(ctx.ws.documents_dir / filename, "English CV")
+    jid = _prepared(ctx)
+    folder = Path(ctx.repo.get_application(jid)["folder"])
+    assert not (folder / filename).exists()
+    assert filename not in [part.get_filename() for part in load_message(folder).iter_attachments()]
+    # Old packages can already contain and attach a second CV; re-render must remove it.
+    (folder / filename).write_bytes((ctx.ws.documents_dir / filename).read_bytes())
+    message = load_message(folder)
+    message.add_attachment((folder / filename).read_bytes(), maintype="application", subtype="pdf", filename=filename)
+    (folder / "email.eml").write_bytes(message.as_bytes())
+    render_application(ctx, jid, renderer_factory=factory(FakeRenderer([1])))
+    assert filename not in [part.get_filename() for part in load_message(folder).iter_attachments()]
+
+
 def test_render_uses_edited_letter_without_llm(ctx):
     jid = _prepared(ctx)
     folder = Path(ctx.repo.get_application(jid)["folder"])
@@ -204,6 +225,81 @@ def test_render_uses_edited_letter_without_llm(ctx):
     render_application(ctx, jid, renderer_factory=factory(Capture([1])))
     assert "Ich freue mich sehr auf Ihre Antwort." in seen[0]
     assert ctx.clients == {}  # no LLM client was even created
+
+
+def test_render_removes_arbeitsagentur_links_from_legacy_email_body(ctx):
+    jid = _prepared(ctx)
+    folder = Path(ctx.repo.get_application(jid)["folder"])
+    msg = load_message(folder)
+    body = msg.get_body(("plain",))
+    assert body is not None
+    body.set_content("Bitte bewerben Sie sich hier: https://www.arbeitsagentur.de/jobsuche/jobdetail/123")
+    (folder / "email.eml").write_bytes(msg.as_bytes())
+
+    render_application(ctx, jid, renderer_factory=factory(FakeRenderer([1])))
+
+    rebuilt = load_message(folder)
+    plain = rebuilt.get_body(("plain",))
+    assert plain is not None and "arbeitsagentur.de" not in plain.get_content()
+
+
+def test_prepare_and_render_keep_extra_documents_attached_to_email(ctx):
+    jid = approved_job(ctx)
+    path = ctx.ws.documents_dir / "Portfolio.txt"
+    path.write_text("Work sample", encoding="utf-8")
+    entry = DocumentEntry(file="Portfolio.txt", role="other", label="Portfolio")
+    ctx.profile.documents.append(entry)
+    ctx.documents.entries.append(entry)
+    ctx.clients["write"] = FakeLLM(script={"write": [LETTER]})
+    prepare_jobs(ctx, renderer_factory=factory(FakeRenderer([1])))
+
+    folder = Path(ctx.repo.get_application(jid)["folder"])
+    parsed = load_message(folder)
+    assert [part.get_filename() for part in parsed.iter_attachments()] == ["Bewerbungsmappe.pdf", "Portfolio.txt"]
+
+    render_application(ctx, jid, renderer_factory=factory(FakeRenderer([1])))
+    rebuilt = load_message(folder)
+    assert [part.get_filename() for part in rebuilt.iter_attachments()] == ["Bewerbungsmappe.pdf", "Portfolio.txt"]
+
+
+def test_declared_document_named_like_generated_file_fails_before_writing(ctx):
+    jid = approved_job(ctx)
+    original = b"my own cover letter"
+    path = ctx.ws.documents_dir / "cover_letter.pdf"
+    path.write_bytes(original)
+    entry = DocumentEntry(file="cover_letter.pdf", role="other", label="Anschreiben")
+    ctx.profile.documents.append(entry)
+    ctx.documents.entries.append(entry)
+    ctx.clients["write"] = FakeLLM(script={"write": [LETTER]})
+
+    summary = prepare_jobs(ctx, renderer_factory=factory(FakeRenderer([1])))
+
+    assert ctx.clients["write"].calls == []  # rejected before the letter is written
+    assert any(f"{jid}:" in failure and "cover_letter.pdf" in failure for failure in summary.failed)
+    assert path.read_bytes() == original  # the declared document is untouched
+    folder = Path(ctx.repo.get_application(jid)["folder"]) if ctx.repo.get_application(jid) else None
+    assert folder is None or not (folder / "cover_letter.pdf").exists()
+
+
+def test_non_pdf_certificate_is_attached_to_email_and_kept_on_rerender(ctx):
+    jid = approved_job(ctx)
+    path = ctx.ws.documents_dir / "Zeugnis.docx"
+    path.write_bytes(b"docx certificate")
+    entry = DocumentEntry(file="Zeugnis.docx", role="certificate")
+    ctx.profile.documents.append(entry)
+    ctx.documents.entries.append(entry)
+    ctx.clients["write"] = FakeLLM(script={"write": [LETTER]})
+    prepare_jobs(ctx, renderer_factory=factory(FakeRenderer([1])))
+
+    folder = Path(ctx.repo.get_application(jid)["folder"])
+    attachments = {p.get_filename(): p for p in load_message(folder).iter_attachments()}
+    assert set(attachments) == {"Bewerbungsmappe.pdf", "Zeugnis.docx"}
+    assert attachments["Zeugnis.docx"].get_content() == b"docx certificate"
+
+    render_application(ctx, jid, renderer_factory=factory(FakeRenderer([1])))
+    rebuilt = {p.get_filename(): p for p in load_message(folder).iter_attachments()}
+    assert set(rebuilt) == {"Bewerbungsmappe.pdf", "Zeugnis.docx"}
+    assert rebuilt["Zeugnis.docx"].get_content() == b"docx certificate"
 
 
 def test_parse_cover_letter_roundtrip():

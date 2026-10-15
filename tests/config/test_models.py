@@ -142,7 +142,8 @@ def test_llm_section_uses_llm_settings(tmp_path: Path) -> None:
 
 
 def test_llm_with_one_model_per_task_has_no_notice(tmp_path: Path) -> None:
-    tasks = "".join(f"    {t}: {{provider: openrouter, model: m/{t}}}\n" for t in ("evaluate", "write", "form_fill", "form_find"))
+    tasks = "".join(f"    {t}: {{provider: openrouter, model: m/{t}}}\n"
+                     for t in ("evaluate", "write", "form_fill", "form_find", "judge"))
     cfg = load_config(ws_with(tmp_path, MIN_CONFIG + "llm:\n  tasks:\n" + tasks))
     assert cfg.llm.resolve("form_fill")[:2] == ("openrouter", "m/form_fill")
     assert not any("every task has its own model" in n for n in cfg.notices)

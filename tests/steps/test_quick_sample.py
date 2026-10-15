@@ -53,13 +53,13 @@ def _account_mails(count=2):
 
 def test_the_newest_alert_of_each_sender_is_read_and_newer_account_mail_is_ignored(ctx):
     ctx.sample = SampleLimits()
-    ctx.clients["alert_extract"] = llm = FakeLLM()
+    ctx.clients["alert_extract"] = llm = FakeLLM({"alert_extract": [{"jobs": []}]})
     mbox = FakeMailbox([("<old>", _eml("indeed_match.eml")), ("<l1>", _eml("linkedin_alert.eml")),
                         ("<s1>", _eml("stepstone_alert.eml")), *_account_mails()])
     s = run_search(ctx, api_sources=[], mailbox=mbox, resolver=FakeResolver())
     assert s.alert_emails == 3 and set(s.alert_parsers) == {"indeed", "linkedin", "stepstone"}  # no workwise entry
     assert all(cards for cards in s.alert_parsers.values()) and s.alert_cards > 0
-    assert llm.calls_for("alert_extract") == [] and s.warnings == []
+    assert len(llm.calls_for("alert_extract")) == 1 and s.warnings == []
     ids = {r[0] for r in ctx.conn.execute("SELECT message_id FROM processed_emails")}
     assert ids == {"<old>", "<l1>", "<s1>"}
 
@@ -81,11 +81,13 @@ def test_the_sample_only_looks_at_the_scanned_window_of_recent_messages(ctx):
 
 
 def test_a_normal_run_marks_account_mail_processed_without_a_fallback_call_or_warning(ctx):
-    ctx.clients["alert_extract"] = llm = FakeLLM()
+    ctx.clients["alert_extract"] = llm = FakeLLM({"alert_extract": [{"jobs": []}]})
     mbox = FakeMailbox([("<l1>", _eml("linkedin_alert.eml")), *_account_mails()])
     s = run_search(ctx, api_sources=[], mailbox=mbox, resolver=FakeResolver())
     assert s.alert_emails == 1 and s.alert_not_alerts == 2 and s.warnings == [] and s.alert_unprocessed == 0
-    assert llm.calls_for("alert_extract") == [] and "workwise" not in s.alert_parsers
+    [(_, _, user)] = llm.calls_for("alert_extract")
+    assert "Confirm your email" not in user and "workwise.io/confirm" not in user
+    assert "workwise" not in s.alert_parsers
     rows = {r[0]: r[1] for r in ctx.conn.execute("SELECT message_id, cards FROM processed_emails")}
     assert rows["<acc0>"] == 0 and rows["<acc1>"] == 0 and rows["<l1>"] > 0
 

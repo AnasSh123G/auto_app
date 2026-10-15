@@ -32,9 +32,7 @@
 {% else %}
 - **Application link:** {{ d.application_url or d.job_url or "not available" }}
 {% endif %}
-{% if d.job_url %}
-- **Job ad:** {{ d.job_url }}
-{% endif %}
+- **Job ad:** {{ d.job_url or "not available" }}
 {% if arbeitnow_url %}
 - **Source link:** [Arbeitnow]({{ arbeitnow_url }})
 {% endif %}

@@ -227,6 +227,41 @@ def test_opening_the_job_link_stays_in_the_menu_so_the_form_address_can_be_paste
     ctx.close()
 
 
+def test_arbeitsagentur_link_can_be_opened_manually_in_normal_browser(ws, monkeypatch):
+    job = _form_job(ws, "Agentur", "partial", "only on the Arbeitsagentur: posted directly there")
+    aa_url = "https://www.arbeitsagentur.de/jobsuche/jobdetail/10000-1234567890-S"
+    ctx = RunContext.open(ws, start_run=False)
+    ctx.repo.update_job(job, application_url=aa_url)
+    ctx.close()
+
+    opened = []
+    monkeypatch.setattr("webbrowser.open", lambda url: opened.append(url))
+    r, p = open_menu(ws, [
+        ("What would you like", "forms"), ("Which application", job),
+        ("What do you want to do", "link"), ("What do you want to do", menu.BACK),
+        ("Which application", menu.BACK), ("What would you like", "quit"),
+    ])
+
+    assert r.exit_code == 0 and opened == [aa_url] and p.remaining == 0
+    assert any(f"Opened {aa_url}" in line for line in p.output)
+
+
+def test_normal_browser_launch_failure_reports_the_url(ws, monkeypatch):
+    job = _form_job(ws, "Manual", "partial", "continue manually")
+    ctx = RunContext.open(ws, start_run=False)
+    ctx.repo.update_job(job, application_url="https://employer.example/apply")
+    ctx.close()
+    monkeypatch.setattr("webbrowser.open", lambda url: False)
+    result, prompts = open_menu(ws, [
+        ("What would you like", "forms"), ("Which application", job),
+        ("What do you want to do", "link"), ("What do you want to do", menu.BACK),
+        ("Which application", menu.BACK), ("What would you like", "quit"),
+    ])
+    assert result.exit_code == 0
+    assert any("Could not launch" in line and "https://employer.example/apply" in line for line in prompts.output)
+    assert not any("Opened https://employer.example/apply" in line for line in prompts.output)
+
+
 def test_a_page_without_a_clear_apply_button_says_what_to_click(ws, monkeypatch):
     job = _form_job(ws, "Agentur", "partial", "no unambiguous safe navigation; continue manually")
     opened = []

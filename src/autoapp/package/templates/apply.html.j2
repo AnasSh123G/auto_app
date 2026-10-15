@@ -39,9 +39,11 @@
 {% if d.job_url %}
 <a href="{{ d.job_url }}" rel="noopener">Job ad</a>
 {% endif %}
-{% if not d.no_employer %}
-<a href="{{ d.application_url or d.job_url or '' }}" rel="noopener">Application page</a>
+<!-- autoapp application -->
+{% if d.application_url or (d.job_url and not d.no_employer) %}
+<a href="{{ d.application_url or d.job_url }}" rel="noopener">Application page</a>
 {% endif %}
+<!-- /autoapp application -->
 {% if arbeitnow_url %}
 <a href="{{ arbeitnow_url }}" rel="noopener">Source: Arbeitnow</a>
 {% endif %}

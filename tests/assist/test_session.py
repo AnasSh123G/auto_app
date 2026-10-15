@@ -3,8 +3,10 @@ from types import SimpleNamespace
 
 import pytest
 
+from autoapp.assist.fields import FieldInfo
 from autoapp.assist.filler import FillReport
 from autoapp.assist.session import AssistSession, NotPrepared
+from autoapp.llm.base import LLMError
 from autoapp.llm.fake import FakeLLM
 from autoapp.steps.context import RunContext
 from autoapp.steps.prepare import prepare_jobs
@@ -90,6 +92,38 @@ def test_refuses_unprepared(ctx):
     jid = ctx.repo.insert_job(title="Dev", company="A")
     with pytest.raises(NotPrepared, match="autoapp prepare"):
         AssistSession(ctx, jid)
+
+
+def test_legacy_arbeitsagentur_board_urls_are_not_used_as_assist_entry(ctx):
+    jid = prepared(ctx)
+    board = "https://www.arbeitsagentur.de/jobsuche/jobdetail/123"
+    ctx.repo.update_job(jid, job_url=board, application_url=board)
+    ctx.repo.upsert_application(jid, form_entry_url=board)
+    sess = AssistSession(ctx, jid, say=lambda _: None, use_llm=False)
+    assert sess.url is None
+
+    employer = "https://jobs.muster-gmbh.de/apply/1"
+    ctx.repo.upsert_application(jid, form_entry_url=employer)
+    sess = AssistSession(ctx, jid, say=lambda _: None, use_llm=False)
+    assert sess.url == employer
+
+
+def test_workplace_fallback_does_not_ask_when_form_fill_configuration_fails(ctx, monkeypatch):
+    jid = prepared(ctx)
+    sess = AssistSession(ctx, jid, say=lambda _: None, use_llm=True, ask_questions=True)
+    field = FieldInfo(field_id="work", frame_index=0, selector="#work", tag="select", type="select",
+                      label="Preferred work location",
+                      options=[("unknown", "Unknown City"), ("ber", "Berlin"), ("ess", "Essen")])
+    monkeypatch.setattr("autoapp.assist.session.collect_fields", lambda *args, **kwargs: [field])
+
+    def unavailable(*args, **kwargs):
+        raise LLMError("form_fill is not configured")
+
+    monkeypatch.setattr(sess, "_extra_assignments", unavailable)
+    assignments, review, open_fields = sess._plan(FakePage())
+    assert [(item.field_id, item.value) for item in assignments] == [("work", "ess")]
+    assert review == ["Preferred work location: Essen (nearest locally recognized option; please review)"]
+    assert open_fields == []
 
 
 def test_fill_then_submitted_marks_status(ctx):
