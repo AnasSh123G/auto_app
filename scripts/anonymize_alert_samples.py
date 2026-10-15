@@ -42,7 +42,7 @@ def _scrub_names(text: str, display: str, parts: list[str]) -> str:
     if display:
         text = re.sub(re.escape(display), DUMMY_NAME, text, flags=re.IGNORECASE)
     if parts:
-        # Greeting ("Hallo Anas,") and any stray remaining occurrence of a name part.
+        # Greeting ("Hallo Max,") and any stray remaining occurrence of a name part.
         text = re.sub(r"(?m)^(Hallo )[^\n,]+,", rf"\1{DUMMY_NAME},", text)
         for part in parts:
             text = re.sub(rf"\b{re.escape(part)}\b", "Mustermann", text, flags=re.IGNORECASE)

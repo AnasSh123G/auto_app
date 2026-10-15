@@ -12,7 +12,7 @@ See `proposal.md` (Why) for the two root causes. Facts about the current code th
 - `CoverLetter.to_markdown()` holds subject, salutation, paragraphs, closing and signature, but **not** `email_body`; the email body only lives in `email.eml` today.
 - `Repo.upsert_application` only accepts names in `db/repo.py::APPLICATION_FIELDS`.
 - DB migrations are the list `MIGRATIONS = [_V1 … _V9]` in `db/schema.py`; step N moves `PRAGMA user_version` from N-1 to N.
-- Gmail is reached with the existing `mail.sending` account (`preset: gmail`, `address: alshoker.anas@gmail.com`, password env `AUTOAPP_SMTP_PASSWORD`, which is set in `workspace/.env`). IMAP APPEND to `[Gmail]/Entwürfe`/`[Gmail]/Drafts` already works in `ImapDraftStore`.
+- Gmail is reached with the existing `mail.sending` account (`preset: gmail`, `address: you@gmail.example`, password env `AUTOAPP_SMTP_PASSWORD`, which is set in `workspace/.env`). IMAP APPEND to `[Gmail]/Entwürfe`/`[Gmail]/Drafts` already works in `ImapDraftStore`.
 
 ## Goals / Non-Goals
 
