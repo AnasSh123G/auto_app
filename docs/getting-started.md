@@ -7,7 +7,10 @@ You never have to edit configuration files by hand, although you can.
 
 ```bash
 uv sync
+uv run playwright install chromium
 ```
+
+The second command downloads the Chromium browser the program uses to read ads and fill web forms. It is needed once.
 
 Run the tool with `uv run autoapp ...`, or activate the virtual environment and run `autoapp ...`.
 
