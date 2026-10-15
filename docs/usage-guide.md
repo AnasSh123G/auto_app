@@ -57,7 +57,16 @@ Three rules the program never breaks:
 
 ## 2. Starting it
 
-Always start it from the project folder (`<repo>`) with `uv run`:
+**First time only:** install the dependencies and the Chromium browser the program uses to read ads and fill
+web forms. Without Chromium, the browser steps fail.
+
+```fish
+uv sync
+uv run playwright install chromium
+uv run autoapp setup        # the onboarding wizard
+```
+
+Always start it from the project folder with `uv run`:
 
 ```fish
 cd ~/dev/auto_app
