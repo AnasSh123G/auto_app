@@ -17,20 +17,6 @@ uv run autoapp status
 
 Your personal data lives in `./workspace/` (git-ignored): `config.yaml`, `profile.yaml`, `.env`, `documents/`, `applications/`, `applications.csv`.
 
-## Keys you need
-
-Keys and passwords go in `workspace/.env` (the setup wizard writes them there):
-
-| Variable | Needed? | What it unlocks |
-|---|---|---|
-| `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY` or `GOOGLE_API_KEY` | **Yes**, the key of the one AI provider you pick | Every AI step |
-| `AUTOAPP_SMTP_PASSWORD` | **Yes** for email applications | Drafts, sending and test emails (Gmail: an app password) |
-| `AUTOAPP_ALERTS_PASSWORD` | Only if you read job-alert emails | Reading the alert mailbox |
-| `PARALLEL_API_KEY` | Optional, recommended with alert emails | Finding the employer's own ad and careers site |
-| `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` | Optional, both together | The Adzuna job search |
-
-Where to get each key: [Keys you need](docs/usage-guide.md#keys-you-need) in the usage guide.
-
 ## Commands
 
 Run each command from the project folder as `uv run autoapp <command>`, for example
