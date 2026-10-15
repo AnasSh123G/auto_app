@@ -278,7 +278,7 @@ _SOURCE_WORDS = {"cache": "saved site", "search": "new lookup", "trusted_link": 
 
 
 def resolved_text(name: str, status: str, source: str | None) -> str:
-    """The feed text of an employer lookup: ``FEAG GmbH: website verified (saved site)``."""
+    """The feed text of an employer lookup: ``Acme GmbH: website verified (saved site)``."""
     how = f" ({_SOURCE_WORDS.get(source, source)})" if source else ""
     return {
         "verified": f"{name}: website verified{how}",

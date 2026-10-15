@@ -242,7 +242,7 @@ def test_tags_name_the_thing_and_the_outcome_and_share_one_width():
     lines = [feed_line(_ev(kind, 0, company="ACME GmbH", title="Data Engineer", detail="x"), 120).plain
              for kind in LABELS]
     assert len({line.index("ACME") for line in lines}) == 1  # the company starts in the same column in every line
-    assert resolved_text("FEAG GmbH", "verified", "cache") == "FEAG GmbH: website verified (saved site)"
+    assert resolved_text("Acme GmbH", "verified", "cache") == "Acme GmbH: website verified (saved site)"
     assert resolved_text("X", "verified", "search").endswith("(new lookup)")
     assert "no website could be verified" in resolved_text("X", "unresolved", None)
 

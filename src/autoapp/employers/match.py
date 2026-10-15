@@ -34,7 +34,7 @@ def place_key(value: str | None) -> str:
 
 
 def title_key(title: str | None, company: str | None = None) -> str:
-    """Normalised title without gender tags and without a trailing ``für die FEAG Gruppe``/``bei mittwald``
+    """Normalised title without gender tags and without a trailing ``für die Acme Gruppe``/``bei mittwald``
     that only repeats the employer's name."""
     text = norm_text(title)
     core = norm_text(core_name(company or ""))
