@@ -589,8 +589,10 @@ def test_both_lookups_missing_prepares_the_letter_and_marks_the_folder_noemploye
     assert folder.name.endswith(f"_{jid}_NOEMPLOYER") and (folder / "cover_letter.pdf").exists()
     for name, text in texts.items():
         assert "employer ad not found yet" in text, name
-    assert f"- **Job ad:** {BA_PAGE}" in texts["README.md"] and "Application link:** none yet" in texts["README.md"]
-    assert f'<a href="{BA_PAGE}" rel="noopener">Job ad</a>' in texts["apply.html"]
+    assert "Job ad:** not available" in texts["README.md"] and "Application link:** none yet" in texts["README.md"]
+    assert "arbeitsagentur.de" not in texts["README.md"]
+    assert "arbeitsagentur.de" not in texts["job.md"] and "arbeitsagentur.de" not in texts["apply.html"]
+    assert "Job ad</a>" not in texts["apply.html"]
     assert "Application page</a>" not in texts["apply.html"]
     assert "Application page:** none yet" in texts["job.md"]
     for text in texts.values():
@@ -636,6 +638,7 @@ def test_a_job_prepared_before_the_lookups_ran_follows_them(ctx):
     folder, texts = prepared_texts(ctx, jid)
     assert ctx.repo.get_application(jid)["form_status"] == "no_employer_link" and folder.name.endswith("_NOEMPLOYER")
     assert "employer ad not found yet" in texts["README.md"] and seen == []
+    assert all("arbeitsagentur.de" not in text for text in texts.values())
 
 
 def test_a_search_that_has_not_run_is_not_a_miss(ctx, monkeypatch):
@@ -657,24 +660,34 @@ def test_a_search_that_has_not_run_is_not_a_miss(ctx, monkeypatch):
     assert seen == []
 
 
-def test_an_ad_posted_only_on_the_arbeitsagentur_keeps_that_link_with_a_label(ctx):
+def test_an_ad_posted_only_on_the_arbeitsagentur_has_no_application_link(ctx):
     jid = aa_job(ctx, partner="arbeitsagentur.de", external=None)
     record_misses(ctx, jid)
     seen = transport(ctx, lambda r: httpx.Response(200, text=FORM))
     prepare_jobs(ctx, [jid], renderer_factory=factory(FakeRenderer([1])))
     app = ctx.repo.get_application(jid)
-    assert app["form_status"] == "restricted" and app["form_note"].startswith("only on the Arbeitsagentur")
-    assert ctx.repo.get_job(jid)["application_url"] == BA_PAGE and seen == []
-    _, texts = prepared_texts(ctx, jid)
-    assert f"Application link:** {BA_PAGE} (only on the Arbeitsagentur)" in texts["README.md"]
-    assert "only on the Arbeitsagentur" in texts["apply.html"] and "NOEMPLOYER" not in ctx.repo.get_application(jid)["folder"]
+    assert app["form_status"] == "no_employer_link" and app["form_note"].startswith("employer ad not found yet")
+    assert app["form_entry_url"] is None
+    assert ctx.repo.get_job(jid)["application_url"] is None and seen == []
+    folder, texts = prepared_texts(ctx, jid)
+    assert folder.name.endswith("_NOEMPLOYER")
+    assert "Application link:** none yet" in texts["README.md"]
+    assert "Application page:** none yet" in texts["job.md"]
+    assert "Application page</a>" not in texts["apply.html"]
+    assert all("arbeitsagentur.de" not in text for text in texts.values())
+    assert "Job ad:** not available" in texts["README.md"]
 
 
-def test_a_direct_posting_still_waits_for_both_lookups(ctx):
+def test_a_direct_posting_waits_for_both_lookups_then_stays_manual_review(ctx):
     jid = aa_job(ctx, partner="arbeitsagentur.de", external=None)
     transport(ctx, lambda r: httpx.Response(200, text=FORM))
     outcome = resolve(ctx, ctx.repo.get_job(jid), again=True)
     assert outcome.status == "restricted" and outcome.url is None and "not searched yet" in outcome.note
+    record_misses(ctx, jid)
+    outcome = resolve(ctx, ctx.repo.get_job(jid), again=True)
+    assert outcome.status == "no_employer_link" and outcome.url is None
+    assert "no employer application page was verified" in outcome.note
+    assert ctx.repo.get_application(jid)["form_entry_url"] is None
 
 
 def test_an_employers_own_externe_url_is_still_followed(ctx):
@@ -692,9 +705,40 @@ def test_the_new_status_in_labels_markers_and_explanations():
     assert marker_for("employer_form", "no_employer_link") == "NOEMPLOYER" and marker_for("email", "no_employer_link") is None
     found = explain("no_employer_link", "employer ad not found yet: the search found only job boards")
     assert found.short == "employer ad not found" and "job boards" in found.what
-    assert explain("restricted", "only on the Arbeitsagentur: x").short == "apply on the Arbeitsagentur"
+    legacy = explain("restricted", "only on the Arbeitsagentur: x")
+    assert legacy.short == "employer page unverified"
+    assert "not a verified application page" in legacy.what
+    assert "Apply on the Arbeitsagentur" not in " ".join(legacy.lines())
     assert explain("restricted", "restricted target: arbeitsagentur.de; employer ad not searched yet: no key").short \
         == "employer ad not searched"
+
+
+def test_legacy_arbeitsagentur_outcomes_never_render_an_application_link():
+    from autoapp.formfinder.store import _block
+
+    legacy = Outcome("restricted", BA_PAGE, None, "only on the Arbeitsagentur: old saved result")
+    missing = Outcome("no_employer_link", BA_PAGE, None, "employer ad not found yet: not verified")
+    found = Outcome("found", BA_PAGE, BA_PAGE, "legacy stale form result")
+    assert "legacy Arbeitsagentur link removed" in _block("README.md", "Application link", legacy)
+    for outcome in (legacy, missing, found):
+        readme = _block("README.md", "Application link", outcome)
+        job = _block("job.md", "Application page", outcome)
+        apply = _block("apply.html", "", outcome)
+        assert BA_PAGE not in readme + job + apply
+        assert "Application page</a>" not in apply
+
+
+def test_save_clears_arbeitsagentur_urls_from_found_form_outcomes(ctx):
+    from autoapp.formfinder.store import save
+
+    jid = form_job(ctx)
+    job = ctx.repo.get_job(jid)
+    save(ctx, job, BA_PAGE, Outcome("found", BA_PAGE, BA_PAGE, "found"))
+
+    app = ctx.repo.get_application(jid)
+    assert app["form_status"] == "restricted"
+    assert app["form_entry_url"] is None and app["form_reached_url"] is None
+    assert ctx.repo.get_job(jid)["application_url"] is None
 
 
 def test_account_creation_terms_are_a_manual_handoff_even_without_a_password():

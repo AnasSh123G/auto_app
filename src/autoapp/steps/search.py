@@ -1,7 +1,8 @@
 """Search step: query the sources, ingest with deduplication, pre-filter.
 
-A failing source never stops the others. Arbeitsagentur details are fetched only for
-new jobs that pass the pre-filter. Alert emails are read from the alert mailbox;
+Alert emails are ingested before website sources are created or queried. A failing
+source never stops the others. Arbeitsagentur details are fetched for new jobs and
+incomplete email jobs that pass the pre-filter. Alert emails are read from the alert mailbox;
 StepStone links are resolved to job IDs at ingestion (their tracking links expire).
 """
 
@@ -11,6 +12,7 @@ import os
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
+from typing import get_args
 
 from autoapp.config.models import SearchProfile
 from autoapp.db.status import Status
@@ -18,9 +20,10 @@ from autoapp.discovery.ingest import card_to_raw, ingest
 from autoapp.discovery.prefilter import Candidate, check
 from autoapp.sources.alerts.imap_reader import AlertMailbox, EmailFallback, ImapAlertMailbox, ingest_alerts
 from autoapp.sources.alerts.llm_extract import AlertExtractor, card_needs_fallback
+from autoapp.sources.alerts.models import AlertSource
 from autoapp.sources.models import RawJob
 from autoapp.sources.stepstone_links import StepStoneLinkResolver
-from autoapp.steps.context import RunContext
+from autoapp.steps.context import SOURCE_MODES, RunContext
 
 
 @dataclass
@@ -67,8 +70,14 @@ def _store(ctx: RunContext, raw: RawJob, report: SourceReport, profiles: list[Se
     out = ingest(ctx.repo, raw, home_city=_home_city(sp))
     if not out.created:
         report.linked += 1
-        return None
-    report.new += 1
+        job = ctx.repo.get_job(out.job_id)
+        # Email cards arrive first and often lack full text. Let a later API enrich
+        # that same job, while completed and filtered duplicates need no detail call.
+        if (detail is None or job["status"] != Status.NEW.value or (job["description"] or "").strip()
+                or not any(s["source"] in get_args(AlertSource) for s in ctx.repo.sources(out.job_id))):
+            return None
+    else:
+        report.new += 1
     candidate = Candidate.from_raw_job(raw)
     if raw.source == "arbeitnow":
         from autoapp.sources.arbeitnow import candidate_of
@@ -76,15 +85,16 @@ def _store(ctx: RunContext, raw: RawJob, report: SourceReport, profiles: list[Se
         candidate = candidate_of(raw)
     reason = _filter_reason(candidate, [sp] if sp else profiles, today)
     if reason:
-        report.filtered += 1
-        ctx.repo.transition(out.job_id, Status.FILTERED, note=reason)
+        if out.created:
+            report.filtered += 1
+            ctx.repo.transition(out.job_id, Status.FILTERED, note=reason)
         return None
     if detail is not None:
         try:
             ingest(ctx.repo, detail(raw), home_city=_home_city(sp))
         except Exception as err:  # noqa: BLE001 - one bad detail call must not stop the search
             report.note = f"some details failed: {type(err).__name__}"
-    return out.job_id
+    return out.job_id if out.created else None
 
 
 def run_search(
@@ -97,11 +107,21 @@ def run_search(
     today: date | None = None,
     email_fallback: EmailFallback | None = None,
 ) -> SearchSummary:
+    if ctx.source_mode not in SOURCE_MODES:
+        raise ValueError(f"unknown source mode: {ctx.source_mode!r}")
     summary = SearchSummary()
     today = today or datetime.now(UTC).date()
     profiles = [p for p in ctx.config.search_profiles if profile_name in (None, p.name)]
     if profile_name and not profiles:
         summary.warnings.append(f"no search profile named {profile_name!r}")
+        return summary
+
+    if ctx.source_mode != "web_only":
+        _search_alerts(ctx, summary, profiles, today, mailbox, resolver, email_fallback)
+        if "alerts" in summary.sources:
+            _emit_source(ctx, "alerts", summary.sources["alerts"], unrecognised=summary.unrecognised_emails)
+
+    if ctx.source_mode == "email_only":
         return summary
 
     if api_sources is None:
@@ -126,9 +146,6 @@ def run_search(
         report.details = dict(getattr(source, "diagnostics", {}))
         _emit_source(ctx, source.name, report)
 
-    _search_alerts(ctx, summary, profiles, today, mailbox, resolver, email_fallback)
-    if "alerts" in summary.sources:
-        _emit_source(ctx, "alerts", summary.sources["alerts"], unrecognised=summary.unrecognised_emails)
     return summary
 
 
@@ -225,6 +242,11 @@ def _search_alerts(ctx: RunContext, summary: SearchSummary, profiles: list[Searc
                 (mid, sender, datetime.now(UTC).isoformat(), cards),
             )
 
+    def email_read(mid: str, provider: str, subject: str) -> None:
+        safe_subject = subject or "(no subject)"
+        ctx.emit("email_read", detail=f"{provider} · {mid} · {safe_subject}",
+                 message_id=mid, provider=provider, subject=subject)
+
     from autoapp.sources.alerts.excerpt import Redactor
 
     redactor = Redactor.from_personal(ctx.profile.personal, ctx.config.mail.alerts.address if ctx.config.mail.alerts else None)
@@ -234,6 +256,7 @@ def _search_alerts(ctx: RunContext, summary: SearchSummary, profiles: list[Searc
         result = ingest_alerts(mailbox, alerts.folder, is_processed, mark,
                                redactor=redactor, fallback=fallback,
                                fallback_unknown_senders=alerts.llm_unknown_senders,
+                               on_email_read=email_read,
                                per_sender=ctx.sample.alerts_per_sender if ctx.sample else None,
                                scan=ctx.sample.alert_scan if ctx.sample else 60)
     except Exception as err:  # noqa: BLE001
@@ -251,17 +274,40 @@ def _search_alerts(ctx: RunContext, summary: SearchSummary, profiles: list[Searc
         ctx.emit("warning", detail=f"alert email from {email.sender} ({email.subject!r}): {email.reason}; left unprocessed",
                  message_id=email.message_id)
     own_resolver = resolver is None
-    resolver = resolver or StepStoneLinkResolver()
     try:
-        for _mid, card in result.cards:
+        cards = list(result.cards)
+        # The previous policy only called alert_extract when parsing failed or a parsed card lacked a usable title or
+        # company. Fully parsed alert mail therefore produced zero alert_extract calls, even with LLM enabled. Keep
+        # those targeted fallbacks first, then spend at most one remaining call reviewing a normally parsed card.
+        for index, (_mid, card) in enumerate(cards):
             if extractor is not None and not card.llm_extracted and card_needs_fallback(card):
                 card, completed = extractor.complete_card(card)  # the redacted excerpt, nothing else, goes to the model
                 summary.alert_llm_extracted += completed
-            resolved = resolver.resolve(card.url) if card.source.startswith("stepstone") and card.url else None
+                cards[index] = (_mid, card)
+        if extractor is not None and extractor.calls < extractor.max_calls and not extractor.stopped:
+            sample_index = next((i for i, (_mid, card) in enumerate(cards)
+                                 if not card.llm_extracted and not card_needs_fallback(card)), None)
+            if sample_index is not None:
+                mid, card = cards[sample_index]
+                card, completed = extractor.complete_card(card)  # one bounded review sample per run
+                summary.alert_llm_extracted += completed
+                cards[sample_index] = (mid, card)
+
+        for _mid, card in cards:
+            resolved = None
+            if card.source.startswith("stepstone") and card.url:
+                if resolver is None:
+                    resolver = StepStoneLinkResolver()
+                resolved = resolver.resolve(card.url)
+            linked_before = report.linked
             job_id = _store(ctx, card_to_raw(card, resolved), report, profiles, today)
+            duplicate = report.linked > linked_before
+            ctx.emit("email_job", {"id": job_id, "company": card.company, "title": card.title},
+                     detail=f"{card.source}; duplicate={str(duplicate).lower()}",
+                     message_id=_mid, source=card.source, duplicate=duplicate)
             if job_id and resolved is not None and not resolved.ok:
                 # Unresolvable card: keep the email data, mark it for manual handling.
                 repo.transition(job_id, Status.DESCRIPTION_UNAVAILABLE, note=resolved.error)
     finally:
-        if own_resolver:
+        if own_resolver and resolver is not None:
             resolver.close()

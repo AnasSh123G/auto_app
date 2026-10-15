@@ -157,7 +157,7 @@ class EmployerCareersConfig(_Model):
     # Searches employer discovery leaves unused each run and day, so the own-ad search (company + title) still has some.
     reserved_for_own_ad_search: int = Field(default=25, ge=0)
     max_pages_per_employer: int = Field(default=20, ge=1)
-    max_pages_per_run: int = Field(default=100, ge=1)
+    max_pages_per_run: int = Field(default=100000, ge=1)
     max_openings_per_employer: int = Field(default=50, ge=1)
     max_openings_per_run: int = Field(default=100, ge=1)
     scan_ttl_hours: int = Field(default=24, ge=0)
@@ -601,7 +601,7 @@ def load_config(ws: Workspace) -> Config:
         if old_keys or unset:
             used = "; ".join(f"{t}: {config.llm.resolve(t)[0]} {config.llm.resolve(t)[1]}" for t in TASK_NAMES)
             config._notices.append(
-                "llm: every task has its own model now (llm.tasks.evaluate, write, form_fill, form_find). "
+                "llm: every task has its own model now (llm.tasks.evaluate, write, form_fill, form_find, judge). "
                 f"Using {used}. Run `autoapp setup --section llm` to set them and remove the old "
                 f"{'/'.join(old_keys) + ' ' if old_keys else ''}keys."
             )

@@ -53,7 +53,7 @@ def test_run_counters_are_separate_from_job_totals(ran):
 
 def test_run_view_shows_the_employer_step_and_counters(ran):
     ws, ctx, stats, _ = ran
-    text = to_text(render_run_top(stats, 120), 120)
+    text = " ".join(to_text(render_run_top(stats, 120), 120).split())
     assert "employer sites" in text and "alerts at employer 1 (1 recovered)" in text and "employer jobs 1" in text
     narrow = to_text(render_run_top(stats, 70), 70)
     assert "employer sites: 1 (0 saved)" in narrow

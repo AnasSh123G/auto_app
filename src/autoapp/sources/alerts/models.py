@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 AlertSource = Literal[
     "linkedin-alert", "stepstone-alert", "stepstone-alert-recommended", "indeed-alert", "indeed-match",
-    "workwise-alert", "llm-alert",
+    "workwise-alert", "xing-alert", "llm-alert",
 ]
 
 

@@ -135,7 +135,7 @@ class Store:
 
 def _unknown() -> EmailMessage:
     msg = EmailMessage()
-    msg["From"] = "alerts@xing.com"
+    msg["From"] = "alerts@example.com"
     msg["Message-ID"] = "<indeed-1@example.com>"
     msg.set_content("Data Scientist\nACME\nBerlin\n")
     return msg

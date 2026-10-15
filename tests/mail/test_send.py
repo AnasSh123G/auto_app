@@ -194,3 +194,18 @@ def test_message_id_required(repo):
     m = EmailMessage()
     with pytest.raises(ValueError):
         send_application(repo, prepared(repo), m, FakeMailer())
+
+
+@pytest.mark.parametrize("empty_selection", [[], set()])
+def test_pending_reconciliation_empty_selection_changes_nothing(repo, empty_selection):
+    jid = prepared(repo)
+    repo.conn.execute(
+        "INSERT INTO send_attempts (job_id, message_id, state, created_at, updated_at, recipient) "
+        "VALUES (?, ?, 'pending', ?, ?, ?)",
+        (jid, "<pending@example.com>", "2020-01-01T00:00:00+00:00",
+         "2020-01-01T00:00:00+00:00", "jobs@example.com"),
+    )
+    repo.conn.commit()
+    assert reconcile_pending(repo, job_ids=empty_selection) == []
+    assert repo.get_job(jid)["status"] == "prepared"
+    assert reconcile_pending(repo) == [jid]

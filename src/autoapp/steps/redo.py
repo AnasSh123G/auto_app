@@ -13,6 +13,8 @@ first. The usual per-run limits still apply, so a big redo continues with the ne
 from __future__ import annotations
 
 import sqlite3
+from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -35,16 +37,19 @@ class RedoPlan:
         return len(self.job_ids)
 
 
-def plan(conn: sqlite3.Connection) -> RedoPlan:
-    result = RedoPlan()
-    for row in conn.execute("SELECT id, status FROM jobs ORDER BY discovered_at, id"):
-        status = row["status"]
-        if status in {s.value for s in REDO}:
-            result.counts[status] = result.counts.get(status, 0) + 1
-            result.job_ids.append(row["id"])
-        elif status in {s.value for s in PROTECTED_NOTE}:
-            result.kept[status] = result.kept.get(status, 0) + 1
-    return result
+def plan(conn: sqlite3.Connection, *, jobs: Sequence[sqlite3.Row] | None = None) -> RedoPlan:
+    rows = list(conn.execute("SELECT id, status FROM jobs ORDER BY discovered_at, id")) if jobs is None else jobs
+    redoable = [row for row in rows if row["status"] in {s.value for s in REDO}]
+    protected = [row for row in rows if row["status"] in {s.value for s in PROTECTED_NOTE}]
+    return RedoPlan(counts=dict(Counter(row["status"] for row in redoable)),
+                    kept=dict(Counter(row["status"] for row in protected)),
+                    job_ids=[row["id"] for row in redoable])
+
+
+def plan_for_run(ctx) -> RedoPlan:  # noqa: ANN001 - RunContext
+    """Preview only jobs belonging to this run's selected sources."""
+    rows = list(ctx.conn.execute("SELECT id, status FROM jobs ORDER BY discovered_at, id"))
+    return plan(ctx.conn, jobs=ctx.jobs_for_sources(rows))
 
 
 def describe(p: RedoPlan) -> list[str]:
@@ -71,7 +76,7 @@ def backup_database(ctx, now: datetime | None = None) -> str:  # noqa: ANN001 - 
 
 def redo_unsent(ctx) -> RedoPlan:  # noqa: ANN001 - RunContext
     """Reset every redoable job to ``new`` and forget what its old folder and form lookup concluded."""
-    p = plan(ctx.conn)
+    p = plan_for_run(ctx)
     for job_id in p.job_ids:
         ctx.repo.transition(job_id, Status.NEW, note="redo: processed again")
         ctx.repo.set_needs_review(job_id, [])

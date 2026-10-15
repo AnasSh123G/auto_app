@@ -10,7 +10,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Provider = Literal["anthropic", "google", "openrouter"]
-Task = Literal["evaluate", "write", "form_fill", "form_find", "alert_extract"]
+Task = Literal["evaluate", "write", "form_fill", "form_find", "alert_extract", "judge"]
 Effort = Literal["low", "medium", "high"]
 
 # Environment variable holding each provider's API key.
@@ -27,12 +27,13 @@ DEFAULT_TASK_EFFORT: dict[str, Effort] = {
     "form_fill": "low",
     "form_find": "low",
     "alert_extract": "low",
+    "judge": "medium",
 }
 
 
 DEFAULT_PROVIDER: Provider = "anthropic"
 DEFAULT_MODEL = "claude-sonnet-5-5"
-TASK_NAMES: tuple[str, ...] = ("evaluate", "write", "form_fill", "form_find", "alert_extract")
+TASK_NAMES: tuple[str, ...] = ("evaluate", "write", "form_fill", "form_find", "alert_extract", "judge")
 
 
 class TaskModel(BaseModel):
@@ -94,7 +95,7 @@ class LLMSettings(BaseModel):
                 continue
             entry = dict(entry)
             # form_find and alert_extract follow the evaluate model; the other tasks the default model.
-            base = tasks["evaluate"] if task in ("form_find", "alert_extract") and "evaluate" in tasks else {
+            base = tasks["evaluate"] if task in ("form_find", "alert_extract", "judge") and "evaluate" in tasks else {
                 "provider": default_provider, "model": default_model}
             if not entry.get("provider"):
                 entry["provider"] = base["provider"]

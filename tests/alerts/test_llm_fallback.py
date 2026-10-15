@@ -26,6 +26,7 @@ from autoapp.sources.alerts.llm_extract import (
 )
 from autoapp.steps.context import RunContext
 from autoapp.steps.search import run_search
+from tests.alerts.conftest import load_eml
 from tests.employers.identity_world import search_client
 from tests.employers.test_service import EMP_CONFIG
 from tests.employers.webfake import FakeWeb
@@ -101,6 +102,34 @@ def test_the_model_sees_only_the_redacted_text(tmp_path) -> None:
     run_search(ctx, api_sources=[], mailbox=FakeMailbox([broken_linkedin()]))
     [(_, _, user)] = llm.calls_for("alert_extract")
     assert EMAIL not in user and "Mustermann" not in user and "Acme Robotics" in user
+    ctx.close()
+
+
+def test_a_readable_alert_gets_one_bounded_llm_review_and_email_events(tmp_path) -> None:
+    llm = FakeLLM({"alert_extract": [GOOD]})
+    ctx = ctx_with(tmp_path, llm)
+    events = []
+    ctx.events.subscribe(events.append)
+
+    summary = run_search(ctx, api_sources=[], mailbox=FakeMailbox([
+        ("<readable@x>", load_eml("linkedin_alert.eml")),
+        ("<same-jobs@x>", load_eml("linkedin_alert.eml")),
+    ]))
+
+    assert summary.alert_cards == 12
+    assert len(llm.calls_for("alert_extract")) == 1  # one review sample, even though all cards parsed cleanly
+    reads = [event for event in events if event.kind == "email_read"]
+    assert len(reads) == 2
+    assert reads[0].data == {
+        "message_id": "<readable@x>", "provider": "linkedin",
+        "subject": "Data Scientist / Softwareentwickler (m/w/d) at AITAD GmbH",
+    }
+    jobs = [event for event in events if event.kind == "email_job"]
+    assert len(jobs) == 12
+    assert jobs[0].title == "Data Scientist / Softwareentwickler (m/w/d)"
+    assert jobs[0].company == "AITAD GmbH"
+    assert jobs[0].data["source"] == "linkedin-alert" and jobs[0].data["duplicate"] is False
+    assert all(event.data["duplicate"] for event in jobs[6:])
     ctx.close()
 
 

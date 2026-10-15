@@ -37,7 +37,7 @@ while you work.
 
 | Step | What happens | Uses the AI? |
 |---|---|---|
-| **Search** | Looks at Arbeitsagentur, Adzuna, Workwise, optionally Arbeitnow, and the job-alert emails (LinkedIn, Indeed, StepStone, Workwise) in your mailbox | no |
+| **Search** | Reads the job-alert emails (LinkedIn, Indeed, StepStone, Workwise, XING) in your mailbox first, then searches Arbeitsagentur, Adzuna, Workwise and optionally Arbeitnow | no |
 | **Fetch** | Reads the full text of ads that arrived with only a short snippet. Alert jobs get their ad by a web search for the employer's own posting (`sources.alerts.mode: search_first`, the default), not from LinkedIn, Indeed, StepStone or Workwise | no |
 | **Evaluate** | Scores each job from 0 to 100 against your CV and decides: apply, maybe, or skip | yes (task `evaluate`) |
 | **Prepare** | Writes a cover letter, renders PDFs, builds the application folder, looks for the real application form | yes (tasks `write`, `form_find`) |
@@ -139,7 +139,8 @@ The simplest daily routine, from safest to most automatic.
 ### The careful routine (recommended while you are still testing)
 
 1. `uv run autoapp` and choose **Run now**.
-2. Choose **Review first**. Every email application becomes a **draft** in your mailbox. Nothing is sent.
+2. Choose where to find jobs: **Email only**, **Full**, or **Web only**, then choose **Review first**.
+   Every email application becomes a **draft** in your mailbox. Nothing is sent.
 3. Watch the live screen (section 7). At the end press q or Enter when it says so (not needed when forms are ready to finish: the list opens straight away under the pinned statistics).
 4. At the end, if there are web-form applications, the **Finish forms** list appears (section 10). Press Enter for
    "Not now", or pick a job to work on.
@@ -173,7 +174,7 @@ Redo unsent · Add a job by URL · Tests · Settings · Quit
 
 | Entry | What it is for | Details |
 |---|---|---|
-| **Run now** | The whole pipeline | Asks the run mode first (section 6), then shows the live screen |
+| **Run now** | The whole pipeline | Asks for job sources, then application delivery mode (section 6), then shows the live screen |
 | **Statistics** | What the tool did and what it cost | Press `p` to change the period (run, today, 7d, 30d, all), `q` to go back |
 | **Applications** | Browse jobs by status | Per job: show folder path, show the letter, change status, re-render PDFs after editing, save a draft, send now (asks first), send a test copy to yourself, fill the form |
 | **Review queue** | Jobs that need your decision | Shows the score, the reasons and missing requirements. Choose **Apply** (it is prepared in the next run) or **Skip** |
@@ -214,6 +215,31 @@ form is looked up, but **no browser opens during a run**.
 | `max_attempts` / `max_bundle_mb` | 3 / 10.0 | Retries for a failed send, and the largest allowed attachment bundle |
 
 Review mode shows these as notes only. Your own values are in `workspace/config.yaml` under `email:`.
+
+### Where should this run find jobs?
+
+**Run now** first offers three source choices; **Full** is the default:
+
+| Source choice | Jobs found and processed |
+|---|---|
+| **Email only** | Jobs from alert emails, including XING. Employer pages are still fetched for those jobs' descriptions and application forms; website sources and additional employer openings are skipped. |
+| **Full** | Email alerts first, then enabled website sources. |
+| **Web only** | Enabled website sources; the alert mailbox is not read. |
+
+The choice also applies to saved pending jobs, including evaluation, preparation and delivery.
+A job independently found by both an email alert and a website belongs to both choices. Matching an
+email job to its employer's page alone does not turn it into a website-discovered job. Manual jobs
+and employer openings without an email source are included in Web only. Other jobs stay saved for
+a later run. The selection lasts for this run and does not change your source settings.
+
+This source choice is separate from **Review first**, **Full automatic**, and **Test run**, which
+still determine how application emails are delivered. Web only can still send or draft applications
+if that is the delivery mode you choose.
+
+For CLI runs, use `uv run autoapp run --sources email-only`, `--sources full`, or `--sources web-only`.
+For example, `uv run autoapp run --sources web-only --mode review --non-interactive` discovers website
+jobs and prepares drafts without reading alert emails. Scheduled runs and preselected delivery modes
+use Full unless `--sources` is supplied; quick tests continue to sample all configured sources.
 
 ### Which mode do scheduled runs use?
 

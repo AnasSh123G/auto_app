@@ -142,7 +142,8 @@ def test_llm_section_uses_llm_settings(tmp_path: Path) -> None:
 
 
 def test_llm_with_one_model_per_task_has_no_notice(tmp_path: Path) -> None:
-    tasks = "".join(f"    {t}: {{provider: openrouter, model: m/{t}}}\n" for t in ("evaluate", "write", "form_fill", "form_find"))
+    tasks = "".join(f"    {t}: {{provider: openrouter, model: m/{t}}}\n"
+                     for t in ("evaluate", "write", "form_fill", "form_find", "judge"))
     cfg = load_config(ws_with(tmp_path, MIN_CONFIG + "llm:\n  tasks:\n" + tasks))
     assert cfg.llm.resolve("form_fill")[:2] == ("openrouter", "m/form_fill")
     assert not any("every task has its own model" in n for n in cfg.notices)
@@ -293,7 +294,7 @@ def test_employer_careers_defaults_disabled_and_old_configs_load(tmp_path: Path)
     assert (ec.max_employers_per_run, ec.max_search_requests_per_run, ec.max_search_requests_per_day,
             ec.max_search_requests_per_month) == (10, 300, 1000, 5000)
     assert (ec.max_pages_per_employer, ec.max_pages_per_run, ec.max_openings_per_employer,
-            ec.max_openings_per_run, ec.scan_ttl_hours, ec.failure_ttl_hours) == (20, 100, 50, 100, 24, 24)
+            ec.max_openings_per_run, ec.scan_ttl_hours, ec.failure_ttl_hours) == (20, 100000, 50, 100, 24, 24)
     assert ec.search_cost_per_1000_usd == 1
 
 
@@ -301,7 +302,7 @@ def test_employer_careers_defaults_disabled_and_old_configs_load(tmp_path: Path)
     {"max_search_requests_per_run": 0},
     {"max_search_requests_per_run": 1100, "max_search_requests_per_day": 1000},
     {"max_search_requests_per_day": 6000},
-    {"max_pages_per_employer": 200},
+    {"max_pages_per_employer": 200, "max_pages_per_run": 100},
     {"max_openings_per_employer": 500},
     {"scan_ttl_hours": -1},
 ])

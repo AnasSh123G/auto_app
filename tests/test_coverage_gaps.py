@@ -108,7 +108,7 @@ def test_adzuna_unconfigured_is_skipped_and_other_sources_still_run(ctx):
 
 def test_run_summary_shows_unrecognised_email_count(ctx):
     msg = EmailMessage()
-    msg["From"] = "XING <alert@xing.com>"
+    msg["From"] = "Unknown Jobs <alert@example.com>"
     msg["To"] = "me@example.com"
     msg["Subject"] = "New jobs for you"
     msg["Message-ID"] = "<indeed-1@indeed.com>"

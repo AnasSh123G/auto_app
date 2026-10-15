@@ -694,6 +694,7 @@ def run(
     tctx: typer.Context,
     profile: str | None = typer.Option(None, "--profile", "-p", help="Run only this search profile."),
     mode: str | None = typer.Option(None, "--mode", help="automatic, review or test (skips the question)."),
+    sources: str | None = typer.Option(None, "--sources", help="email-only, full or web-only (skips the source question)."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Do everything except sending, drafting and marking emails."),
     non_interactive: bool = typer.Option(False, "--non-interactive", help="Never prompt (for scheduled runs)."),
     no_dashboard: bool = typer.Option(False, "--no-dashboard", help="Print plain lines instead of the live view."),
@@ -705,6 +706,10 @@ def run(
     """Run the whole pipeline: search, fetch, evaluate, prepare, then send, draft or test-send, and export."""
     from autoapp.config.models import RUN_MODES
 
+    source_mode = sources.replace("-", "_") if sources is not None else None
+    if source_mode is not None and source_mode not in ("email_only", "full", "web_only"):
+        typer.echo(f"error: unknown sources {sources!r}; the valid values are email-only, full and web-only", err=True)
+        raise typer.Exit(code=2)
     if mode is not None and mode not in RUN_MODES:
         typer.echo(f"error: unknown mode {mode!r}; the valid values are automatic, review and test", err=True)
         raise typer.Exit(code=2)
@@ -716,7 +721,7 @@ def run(
         typer.echo("error: --redo and --fresh cannot be combined: --fresh already starts from an empty history", err=True)
         raise typer.Exit(code=2)
     run_with_mode(tctx, profile=profile, mode="test" if fresh else mode, dry_run=dry_run, interactive=interactive,
-                  no_dashboard=no_dashboard, fresh=fresh, redo=redo)
+                  no_dashboard=no_dashboard, fresh=fresh, redo=redo, source_mode=source_mode)
 
 
 @app.command(name="test")
@@ -754,7 +759,7 @@ def quick_test(
 
 def run_with_mode(tctx: typer.Context, *, profile: str | None, mode: str | None, dry_run: bool, interactive: bool,
                   no_dashboard: bool = False, prompter=None, ask_mode: bool = True, fresh: bool = False,
-                  redo: bool = False, sample: bool = False) -> None:
+                  redo: bool = False, sample: bool = False, source_mode: str | None = None) -> None:
     """``run`` and the menu's "Run now": resolve the mode, run, then offer to finish forms.
 
     ``fresh`` (test mode only) runs in a new test workspace with an empty job history (``steps.sandbox``).
@@ -771,7 +776,8 @@ def run_with_mode(tctx: typer.Context, *, profile: str | None, mode: str | None,
         app_ctx.workspace = box.ws
         try:
             run_with_mode(tctx, profile=profile, mode="test", dry_run=dry_run, interactive=interactive,
-                          no_dashboard=no_dashboard, prompter=prompter, ask_mode=False, sample=sample)
+                          no_dashboard=no_dashboard, prompter=prompter, ask_mode=False, sample=sample,
+                          source_mode=source_mode)
         finally:
             app_ctx.workspace = real
             sandbox.merge_back(box)
@@ -801,8 +807,10 @@ def run_with_mode(tctx: typer.Context, *, profile: str | None, mode: str | None,
                 from datetime import UTC, datetime
 
                 choice = choose_run(prompter, ctx.config, sends_today(ctx.repo, datetime.now(UTC)),
-                                    ask_profile=profile is None)
-                mode, profile = choice.mode, profile or choice.profile
+                                    ask_profile=profile is None, ask_sources=source_mode is None,
+                                    source_mode=source_mode or "full")
+                mode, profile, source_mode = choice.mode, profile or choice.profile, choice.source_mode
+            ctx.source_mode = source_mode or "full"
             if redo and not _start_redo(ctx, dry_run=dry_run, interactive=interactive, prompter=prompter):
                 return
             ctx.mode = mode or ctx.config.run.default_mode
@@ -875,7 +883,7 @@ def _start_redo(ctx, *, dry_run: bool, interactive: bool, prompter) -> bool:  # 
     """Show what a redo would touch, ask (interactive), back the database up and reset the jobs."""
     from autoapp.steps import redo
 
-    p = redo.plan(ctx.conn)
+    p = redo.plan_for_run(ctx)
     for line in redo.describe(p):
         typer.echo(line)
     if dry_run:

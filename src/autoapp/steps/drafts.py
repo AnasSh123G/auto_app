@@ -63,7 +63,7 @@ def current_draft(ctx: RunContext, job_id: str):
 
 def draftable_jobs(ctx: RunContext) -> list[str]:
     out = []
-    for job in ctx.repo.jobs_by_status(Status.PREPARED):
+    for job in ctx.jobs_for_sources(ctx.repo.jobs_by_status(Status.PREPARED)):
         app = ctx.repo.get_application(job["id"])
         if app is not None and app["channel"] == "email" and app["contact_email"]:
             out.append(job["id"])
@@ -103,6 +103,8 @@ def draft_applications(ctx: RunContext, job_ids: list[str] | None = None, *, aga
             job = repo.get_job(job_id)
             if job is None:
                 s.not_drafted[job_id] = [f"unknown job {job_id}"]
+                continue
+            if not ctx.jobs_for_sources([job]):
                 continue
             existing = current_draft(ctx, job_id)
             if existing is not None and not again:
@@ -180,7 +182,7 @@ def check_drafts(ctx: RunContext, *, store: DraftStore | None = None,
     s = CheckSummary()
     if ctx.dry_run:
         return s
-    drafted = ctx.repo.jobs_by_status(Status.DRAFTED)
+    drafted = ctx.jobs_for_sources(ctx.repo.jobs_by_status(Status.DRAFTED))
     if not drafted:
         return s
     own = store is None

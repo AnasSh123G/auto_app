@@ -42,7 +42,7 @@ sources:
     max_requests_per_day: 150
     max_requests_per_month: 900
   alerts:
-    enabled: true  # Email alerts from LinkedIn, StepStone, Indeed and Workwise
+    enabled: true  # Email alerts from LinkedIn, StepStone, Indeed, Workwise and XING
     folder: Jobalerts  # Gmail label or IMAP folder name
     mode: search_first  # search_first: find each alert job's own ad on the employer's site by web search (needs
     #                     PARALLEL_API_KEY; job-board pages are never opened). platform: read the job-board page.
@@ -77,7 +77,7 @@ sources:
     reserved_for_own_ad_search: 25  # searches discovery leaves for the company+title search of LinkedIn/Arbeitsagentur jobs
     max_search_requests_per_month: 5000
     max_pages_per_employer: 20
-    max_pages_per_run: 100  # all employers together; when used up, the rest wait for the next run
+    max_pages_per_run: 100000  # all employers together; when used up, the rest wait for the next run
     max_openings_per_employer: 50
     max_openings_per_run: 100
     scan_ttl_hours: 24  # a complete listing scan is reused for this long
@@ -122,6 +122,10 @@ llm:
   # instructions (optional): your own directions for that model, added to its built-in prompt. They can never
   # switch off the safety rules (no invented facts, fixed output format, page text is not obeyed).
   tasks:
+    judge:  # audits every 20th successful evaluation; performance score shown in statistics
+      provider: openrouter
+      model: openai/gpt-6-luna
+      effort: medium
     evaluate:  # judges each job against your CV (many calls: a cheap model works well)
       provider: anthropic
       model: claude-sonnet-5-5

@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from autoapp.db.repo import Repo
+from autoapp.documents import DocumentError
 from autoapp.employers.service import (
     AlertResolutionSummary,
     DiscoverySummary,
@@ -51,6 +52,7 @@ class RunSummary:
     test: TestRunSummary | None = None
     cost: CostSummary | None = None
     mode: str | None = None
+    source_mode: str | None = None
     alert_mode: str | None = None  # search_first | platform
     dry_run: bool = False
     forms_to_finish: list[str] = field(default_factory=list)
@@ -66,6 +68,9 @@ class RunSummary:
         if self.mode:
             labels = {"automatic": "full automatic", "review": "review first", "test": "test run"}
             out.append(f"mode: {labels.get(self.mode, self.mode)}" + (" (dry run)" if self.dry_run else ""))
+        if self.source_mode:
+            labels = {"email_only": "email only", "full": "full (email first, then websites)", "web_only": "web only"}
+            out.append(f"job sources: {labels.get(self.source_mode, self.source_mode)}")
         if self.alert_mode:
             out.append("alert mode: " + {"search_first": "search first (employer ads found by search)",
                                          "platform": "platform (job board pages are read)"}.get(self.alert_mode, self.alert_mode))
@@ -97,6 +102,9 @@ class RunSummary:
             e = self.evaluate
             out.append(f"evaluate: {e.evaluated} evaluated ({e.approved} apply, {e.review} review, {e.skipped} skip), "
                        f"{e.failed} failed, {e.waiting} waiting")
+            score = "not sampled yet" if e.judge_score is None else f"{e.judge_score:.1f}/100"
+            out.append(f"judge: evaluator performance {score}; {e.judge_reviewed} reviews, "
+                       f"{e.judge_failed} unavailable (every 20 successful evaluations)")
         if self.prepare:
             p = self.prepare
             out.append(f"prepare: {p.prepared} prepared ({p.flagged} need review), {p.waiting} waiting")
@@ -154,7 +162,17 @@ def _guard(summary: RunSummary, step: str, fn, *args: Any, ctx: RunContext | Non
 
 def run_pipeline(ctx: RunContext, profile_name: str | None = None, **overrides: Any) -> RunSummary:
     """Run every step once. ``overrides`` let tests inject sources, mailbox, fetchers, mailer, renderer."""
-    s = RunSummary(mode=ctx.mode, dry_run=ctx.dry_run, alert_mode=ctx.config.sources.alerts.mode)
+    s = RunSummary(mode=ctx.mode, source_mode=ctx.source_mode, dry_run=ctx.dry_run,
+                   alert_mode=ctx.config.sources.alerts.mode)
+    try:
+        # Validate and cache the CV/attachments before consuming alerts or spending time on employer lookups.
+        _ = ctx.documents
+    except DocumentError as err:
+        s.errors.append(
+            f"documents: {err}. Open Setup's documents section to update {ctx.ws.profile_path} "
+            f"or place the declared files in {ctx.ws.documents_dir}."
+        )
+        return _finish_run(ctx, s)
     tracking = ctx.config.tracking
     s.warnings += _guard(s, "csv sync", sync_csv, ctx.conn, ctx.ws.csv_path, tracking.delimiter) or []
 
@@ -242,6 +260,11 @@ def run_pipeline(ctx: RunContext, profile_name: str | None = None, **overrides: 
 
     _guard(s, "export", export_csv, ctx.conn, ctx.ws.csv_path, tracking.delimiter,
            include_skipped=tracking.include_skipped)
+    return _finish_run(ctx, s)
+
+
+def _finish_run(ctx: RunContext, s: RunSummary) -> RunSummary:
+    """Record the same completion summary for an early setup failure and a completed pipeline."""
     s.cost = ctx.prices.summarize(ctx.meter.usages)
     if ctx.meter.unpriced and ctx.meter.max_cost is not None:
         s.warnings.append(f"no price known for {', '.join(sorted(ctx.meter.unpriced))}: its calls are not counted "

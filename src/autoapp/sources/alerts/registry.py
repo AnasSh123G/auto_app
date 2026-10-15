@@ -45,8 +45,9 @@ def _build_registry() -> list[Parser]:
     from autoapp.sources.alerts.linkedin import LinkedInParser
     from autoapp.sources.alerts.stepstone import StepStoneParser
     from autoapp.sources.alerts.workwise import WorkwiseParser
+    from autoapp.sources.alerts.xing import XingParser
 
-    return [LinkedInParser(), StepStoneParser(), IndeedParser(), WorkwiseParser()]
+    return [LinkedInParser(), StepStoneParser(), IndeedParser(), WorkwiseParser(), XingParser()]
 
 
 REGISTRY: list[Parser] = _build_registry()

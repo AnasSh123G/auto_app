@@ -8,7 +8,9 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
+from autoapp.config.models import DocumentEntry
 from autoapp.package import render as R
+from autoapp.package.documents_select import document_matches_language, select_documents
 from autoapp.package.eml import build_application_email, write_eml
 from autoapp.package.pdf import PdfRenderer, bundle
 from autoapp.steps.context import RunContext
@@ -59,8 +61,13 @@ def render_application(ctx: RunContext, job_id: str, *, renderer_factory=PdfRend
     if pages > 1:
         warnings.append(f"the cover letter is {pages} pages long")
     docs = {p.name for p in folder.iterdir()}
-    cv = next((folder / e.file for e in ctx.profile.documents if e.role == "cv" and e.file in docs), None)
-    certs = [folder / e.file for e in ctx.profile.documents if e.role in ("certificate", "work_reference") and e.file in docs]
+    selection = select_documents(ctx.profile, language, [], ctx.config.writing.always_attach_certificates)
+    cv = folder / selection.cv.file if selection.cv and selection.cv.file in docs else None
+    certs = [folder / e.file for e in selection.certificates if e.file in docs]
+    extras = [folder / e.file for e in selection.extras if e.file in docs]
+    if selection.photo and selection.photo.file in docs:
+        extras.append(folder / selection.photo.file)
+    extras.extend(path for path in ([cv] if cv else []) + certs if path.suffix.lower() != ".pdf")
     b = bundle(folder / "cover_letter.pdf", cv, certs, folder / BUNDLE, ctx.config.email.max_bundle_mb)
     warnings += b.skipped
     if b.too_large:
@@ -68,10 +75,35 @@ def render_application(ctx: RunContext, job_id: str, *, renderer_factory=PdfRend
     if (folder / "email.eml").exists():
         old = load_message(folder)
         body = old.get_body(("plain",))
+        bundled_names = {BUNDLE, *(path.name for path in ([cv] if cv else []) + certs
+                                  if path.suffix.lower() == ".pdf")}
+        for part in old.iter_attachments():
+            filename = part.get_filename()
+            if not filename or filename in bundled_names or Path(filename).name != filename:
+                continue
+            entry = next((entry for entry in ctx.profile.documents if Path(entry.file).name == filename), None)
+            if entry is not None:
+                if not document_matches_language(entry, language):
+                    continue
+                if entry.role == "cv" and (selection.cv is None or entry.file != selection.cv.file):
+                    continue
+            elif not document_matches_language(DocumentEntry(file=filename), language):
+                continue
+            copied = folder / filename
+            if copied.is_file():
+                extras.append(copied)
+        unique_extras = {path.resolve(): path for path in extras}.values()
+        attachments_size = b.size_bytes + sum(path.stat().st_size for path in unique_extras)
+        if attachments_size > ctx.config.email.max_bundle_mb * 1024 * 1024:
+            warnings.append(
+                f"Combined email attachments total {attachments_size / 1024 / 1024:.1f} MB; "
+                f"max_bundle_mb={ctx.config.email.max_bundle_mb:g} MB is checked against "
+                "Bewerbungsmappe.pdf only."
+            )
         msg = build_application_email(
             sender_name=f"{personal.first_name} {personal.last_name}", sender_email=personal.email,
             to=old["To"], subject=letter.subject, body=body.get_content() if body else "",
-            attachment=folder / BUNDLE,
+            attachment=folder / BUNDLE, extra_attachments=extras,
         )
         write_eml(msg, folder / "email.eml")
     return warnings

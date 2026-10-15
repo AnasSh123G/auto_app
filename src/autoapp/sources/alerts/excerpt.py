@@ -12,6 +12,7 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from email.message import EmailMessage
+from html import unescape
 from urllib.parse import urlsplit
 
 from autoapp.sources.alerts._mail import html_text, plain_text
@@ -82,7 +83,8 @@ class Redactor:
         except ValueError:
             return _PLACEHOLDER + trail
         host = (parts.hostname or "").lower()
-        if _TRACKING_HOST.search(host) or _TRACKING_PATH.search(parts.path):
+        xing_tracking = (host == "xing.com" or host.endswith(".xing.com")) and parts.path.startswith("/m/")
+        if xing_tracking or _TRACKING_HOST.search(host) or _TRACKING_PATH.search(parts.path):
             return _PLACEHOLDER + trail
         return f"{parts.scheme}://{parts.netloc}{parts.path}" + trail  # no query, no fragment
 
@@ -111,7 +113,8 @@ def _text_lines(msg: EmailMessage) -> list[str]:
                 if a.get_text(strip=True) == "" or href not in a.get_text():
                     a.append(f" {href}")  # keep link targets: they are part of what the card says
             text = soup.get_text("\n", strip=True)
-    return [ln for ln in (" ".join(raw.split()) for raw in text.splitlines()) if ln and not re.fullmatch(r"-{5,}", ln)]
+    return [ln for ln in (" ".join(raw.split()) for raw in unescape(text).splitlines())
+            if ln and not re.fullmatch(r"-{5,}", ln)]
 
 
 def redacted_body(msg: EmailMessage, redactor: Redactor, *, limit: int = BODY_CHARS) -> str:

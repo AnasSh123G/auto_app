@@ -1,5 +1,18 @@
 # Job sources
 
+By default, each search reads and ingests the configured email alerts first, then queries enabled website sources
+(Arbeitsagentur, Adzuna, Arbeitnow and Workwise). The source reports follow that order. Website results
+are deduplicated against the email jobs and can add missing descriptions or application details.
+An unavailable, disabled or unconfigured mailbox does not prevent the website searches.
+
+Run now offers Email only / Full / Web only for this run. Email only skips website job sources
+and additional employer openings while retaining employer details/forms for email jobs. Web only
+skips the alert mailbox. Both choices also filter the saved pending job queues by their discovery
+sources. CLI runs support `--sources email-only|full|web-only`; Full remains the default.
+
+This ordering also applies to quick tests. The alert setting `mode: search_first` below separately
+controls how the employer's full ad is located after discovery.
+
 autoapp finds jobs from Arbeitsagentur, Adzuna, Workwise, optional Arbeitnow, and job-alert emails.
 
 ## Arbeitnow (optional, no key)
@@ -146,13 +159,13 @@ account mail. Links of the older form `workwise.io/job/<id>-<slug>` (also inside
 URL-encoded) are still taken. Workwise alert jobs are not sent to employer discovery: they are applied
 to on Workwise, which the app can open.
 
-## Email alerts from LinkedIn, StepStone, Indeed and Workwise
+## Email alerts from LinkedIn, StepStone, Indeed, Workwise and XING
 
 ### Setup: Gmail
 
 1. Create a Gmail filter to label job alert emails:
    - Go to [mail.google.com](https://mail.google.com) → Settings → Filters and Blocked Addresses
-   - Create a filter with search criteria: `from:(jobalerts-noreply@linkedin.com OR jobagent.stepstone.de OR indeed.com OR workwise.io)`
+   - Create a filter with search criteria: `from:(jobalerts-noreply@linkedin.com OR jobagent.stepstone.de OR indeed.com OR workwise.io OR mail.xing.com)`
    - Apply label: Create a new label called `Jobalerts`
    - Skip the inbox (optional but keeps alerts separate)
 
@@ -287,7 +300,7 @@ your search profiles. It only reads public pages; it never logs in, fills or sub
   and the vacancies read at the last scan. A saved website is reused for every later alert from
   that employer, so each employer is searched once, not once per alert.
 - **Limits** (all in `sources.employer_careers`): 10 employers, 20 searches, 20 pages per employer
-  and 50 openings per employer per run, 100 pages per run in total, plus 50 searches per day and
+  and 50 openings per employer per run, 100,000 pages per run in total, plus 50 searches per day and
   1,000 per month. A search that fails still counts, nothing is retried automatically and each
   employer gets at most two searches. When the run's page total (`max_pages_per_run`) is used up,
   the remaining employers are postponed to the next run (`LOOKUP DEFERRED`), with no search spent
@@ -451,36 +464,40 @@ prevents sending/drafting, not public-page GETs. Only `forms --dry-run` performs
 read-only inspection with no HTTP or model calls. Login, challenge, restricted and ambiguous
 pages retain an explained handoff address rather than promising a found form.
 
+## XING email alerts
+
+XING alerts are supported as `xing-alert` through the existing alert mailbox; no API key or
+XING login is required. In XING's Jobs finden area, save a search as a Suchauftrag and route
+mail from `jobs@mail.xing.com` into your configured alert folder. Keep `sources.alerts.enabled`
+on; `llm_unknown_senders` is not needed. Quick tests include XING as a registered sender.
+
+The parser reads titles, employers, cities, working time and explicit work-mode attributes
+from HTML or plain-text cards. Duplicate image/title links and MIME alternatives yield one
+card per job. The normal grounded `alert_extract` fallback handles unfamiliar layouts within
+its configured call budget and retains the `xing-alert` source.
+
+The supplied layout uses opaque `xing.com/m/` tracking links. The parser neither follows nor
+stores these links, and redacted excerpts remove them. These cards have no source job ID or
+job URL; normal company/title/city deduplication and employer-ad search still work. Direct
+`xing.com/jobs/<slug>-<id>` links retain a canonical address and ID without query or fragment.
+Unlabelled salary ranges are left unknown rather than treated as employer-advertised pay or
+confirmed estimates. With the default `mode: search_first`, full descriptions come from the
+employer's own ad; XING pages are not opened. In platform mode, opaque-link cards still need
+employer discovery or a manually supplied description because they have no safe job URL.
+
+The [XING E-Recruiting API](https://dev.xing.com/partners/job_integration/api_docs) manages
+employer postings; it is not required for reading email alerts. There is no direct XING
+website-search adapter in autoapp.
+
 ## Adding a parser for another sender
 
-To add support for a new job alert sender (e.g., XING), you need:
-
-1. **A parser module** in `src/autoapp/sources/alerts/` (e.g., `xing_parser.py`)
-2. **An anonymised fixture** (a sample email from that sender with personal data removed) in `samples/`
-3. **A registry entry** to connect the sender's email address to the parser
-
-Example: adding XING alerts:
-
-**Step 1:** Create `src/autoapp/sources/alerts/xing_parser.py`
-
-```python
-from email.message import EmailMessage
-from autoapp.sources.alerts.models import AlertCard
-
-SUPPORTED_FROM = ("jobs@xing.com",)
-
-def parse(message: EmailMessage) -> list[AlertCard]:
-    """Parse a XING alert email and return job cards."""
-    # Extract cards from the email body
-    # Return a list of AlertCard objects
-    return []
-```
-
-**Step 2:** Save an anonymised sample email as `samples/xing-alert.eml`
-
-**Step 3:** Register the parser in the alert reader
-
-Once a real XING email arrives in your mailbox, export it to `samples/`, anonymise it (replace personal names, addresses, links with placeholders), and add the parser entry. The registry will automatically pick it up.
+1. Add a parser class in `src/autoapp/sources/alerts/` implementing `name`, `handles`,
+   `is_job_alert` and `parse`, and register it in `registry.py`.
+2. Add its source to `AlertSource` and its fallback mapping to `SOURCE_BY_PARSER`.
+3. Add anonymised samples under `tests/fixtures/alerts/` and tests for parsing, sender
+   selection, deduplication, account mail and token-free persistence.
+4. Check job-board detection in the fetch step and tracking-link redaction so the source
+   follows the configured alert resolution mode and preserves email privacy.
 
 ## Supported filters
 

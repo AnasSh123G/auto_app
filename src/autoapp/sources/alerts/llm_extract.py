@@ -27,7 +27,7 @@ TASK = "alert_extract"
 MAX_JOBS_PER_EMAIL = 25
 UNKNOWN_SOURCE = "llm-alert"
 SOURCE_BY_PARSER = {"linkedin": "linkedin-alert", "stepstone": "stepstone-alert", "indeed": "indeed-alert",
-                    "workwise": "workwise-alert"}
+                    "workwise": "workwise-alert", "xing": "xing-alert"}
 
 SYSTEM = """You read the text of a job-alert email (or of one job card from it) and name the jobs it lists.
 For every job give:

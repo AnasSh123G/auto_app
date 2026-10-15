@@ -7,6 +7,12 @@ from dataclasses import dataclass
 from autoapp.config.models import Config
 from autoapp.setup.prompts import Prompter
 
+SOURCE_CHOICES = (
+    ("email_only", "Email only"),
+    ("full", "Full"),
+    ("web_only", "Web only"),
+)
+
 MODE_CHOICES = (
     ("automatic", "Full automatic: send emails that pass the safeguards to employers; prepare form applications"),
     ("review", "Review first: save every email as a draft in your mailbox; prepare form applications"),
@@ -20,6 +26,7 @@ class RunChoice:
     mode: str
     profile: str | None = None
     dry_run: bool = False
+    source_mode: str = "full"
 
 
 def choose_mode(p: Prompter, config: Config, sent_today: int) -> str:
@@ -33,12 +40,15 @@ def choose_mode(p: Prompter, config: Config, sent_today: int) -> str:
             return mode
 
 
-def choose_run(p: Prompter, config: Config, sent_today: int, *, ask_profile: bool = True) -> RunChoice:
+def choose_run(p: Prompter, config: Config, sent_today: int, *, ask_profile: bool = True,
+               ask_sources: bool = True, source_mode: str = "full") -> RunChoice:
+    if ask_sources:
+        source_mode = p.select("Where should this run find jobs?", list(SOURCE_CHOICES), default=source_mode)
     mode = choose_mode(p, config, sent_today)
     profile = None
     names = [sp.name for sp in config.search_profiles]
     if ask_profile and len(names) > 1:
         picked = p.select("Which search profiles?", [("", "All profiles"), *[(n, n) for n in names]], default="")
         profile = picked or None
-    return RunChoice(mode=mode, profile=profile)
+    return RunChoice(mode=mode, profile=profile, source_mode=source_mode)
 

@@ -290,6 +290,7 @@ def ingest_alerts(
     redactor: Redactor | None = None,
     fallback: EmailFallback | None = None,
     fallback_unknown_senders: bool = False,
+    on_email_read: Callable[[str, str, str], None] | None = None,
     per_sender: int | None = None,
     scan: int = 60,
 ) -> IngestResult:
@@ -327,12 +328,16 @@ def ingest_alerts(
     if newest is not None and per_sender is None:
         messages = list(messages)[-newest:] if newest > 0 else []
     for message_id, msg in messages:
+        sender = from_address(msg)
+        parser = parser_for(msg)
+        provider = parser.name if parser is not None else sender.rpartition("@")[2].lower()
+        subject = redactor.redact(str(msg["Subject"] or ""))
+        if on_email_read is not None:
+            on_email_read(message_id, provider, subject)
         if message_id in seen or is_processed(message_id):
             result.skipped_processed += 1
             continue
         seen.add(message_id)
-        sender = from_address(msg)
-        parser = parser_for(msg)
         reason: str | None = None
         cards: list[AlertCard] = []
         if parser is None:
@@ -358,7 +363,7 @@ def ingest_alerts(
             if parser is not None:
                 result.parsers[parser_name] = result.parsers.get(parser_name, 0)
             unparsed = UnparsedEmail(
-                message_id=message_id, sender=sender, subject=redactor.redact(str(msg["Subject"] or "")),
+                message_id=message_id, sender=sender, subject=subject,
                 parser=parser.name if parser else None, reason=reason,
                 body=body if parser is None else redacted_body(msg, redactor))
             cards, ran = _run_fallback(fallback, unparsed, result)

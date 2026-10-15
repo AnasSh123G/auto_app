@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import select
 import sys
 import time
@@ -32,11 +33,19 @@ from autoapp.assist.answers import (
 from autoapp.assist.fields import FieldInfo, collect_fields
 from autoapp.assist.filler import FillReport, fill_page
 from autoapp.assist.llm_fill import eligible, fill_unmatched
-from autoapp.assist.mapper import FillValues, map_fields
+from autoapp.assist.mapper import (
+    FillValues,
+    fallback_location_assignment,
+    fallback_location_notice,
+    map_fields,
+)
 from autoapp.assist.snapshot import save_snapshot, snapshot_html
+from autoapp.config.models import DocumentEntry
 from autoapp.db.status import Status
 from autoapp.evaluation.schema import FinalEvaluation
+from autoapp.formfinder.employer_link import is_arbeitsagentur_page
 from autoapp.llm.base import LLMError
+from autoapp.package.documents_select import document_matches_language, select_documents
 from autoapp.steps.context import RunContext, profile_prompt_text
 from autoapp.writing.prompt import JobContext, WritingContext
 
@@ -47,36 +56,71 @@ class NotPrepared(Exception):
     """The job has no application folder yet."""
 
 
-def _folder_files(folder: Path, profile, documents=None) -> dict[str, Any]:
-    """The prepared files for one application.
+def _start_url(job, app) -> str | None:  # noqa: ANN001
+    """Pick a stored web entry without opening an Arbeitsagentur job-board page as an application."""
+    candidates = [job["application_url"], app["form_entry_url"]]
+    if app["form_status"] != "no_employer_link":
+        candidates.append(job["job_url"])
+    return next((url for url in candidates if url and not is_arbeitsagentur_page(url)), None)
 
-    CV, letter, certificates and the bundle come from the application folder. Work references (Arbeitszeugnisse)
-    and ``other`` documents come from the folder when they were copied there, otherwise straight from
-    ``documents/`` (files there are only read, never changed).
-    """
-    names = {p.name for p in folder.iterdir()}
-    cv = next((folder / e.file for e in profile.documents if e.role == "cv" and e.file in names), None)
-    certs = [folder / e.file for e in profile.documents if e.role == "certificate" and e.file in names]
 
-    def of_role(role: str) -> list[Path]:
-        found = []
-        for e in profile.documents:
-            if e.role != role:
+def _folder_files(folder: Path, profile, documents=None, *, language: str = "de") -> dict[str, Any]:
+    """Resolve all candidate documents, including files added to ``documents/`` after setup."""
+    selection = select_documents(profile, language, [], True)
+    entries = ([selection.cv] if selection.cv else []) + selection.certificates + selection.extras
+    if selection.photo:
+        entries.append(selection.photo)
+    directory = getattr(documents, "directory", None)
+
+    def available(file: str) -> Path | None:
+        for path in (folder / file, directory / file if directory else None):
+            if path is not None and path.is_file():
+                return path
+        return None
+
+    cv = available(selection.cv.file) if selection.cv else None
+    all_files = [available(e.file) for e in entries]
+    all_files = [p for p in all_files if p is not None]
+    if directory is not None and directory.is_dir():
+        declared = {entry.file for entry in profile.documents}
+        for path in directory.rglob("*"):
+            relative = path.relative_to(directory)
+            if not path.is_file() or any(part.startswith(".") for part in relative.parts):
                 continue
-            if e.file in names:
-                found.append(folder / e.file)
-            elif documents is not None and (documents.directory / e.file).exists():
-                found.append(documents.directory / e.file)
-        return found
+            if relative.as_posix() in declared or (folder / relative).is_file():
+                continue
+            # A stray alternate CV must not become an Other attachment either.
+            if re.search(r"(?<![a-z])(?:cv|resume|lebenslauf)(?![a-z])", path.stem.casefold()):
+                continue
+            if document_matches_language(DocumentEntry(file=relative.as_posix()), language):
+                all_files.append(path)
+    unique: dict[Path, Path] = {}
+    for path in all_files:
+        unique.setdefault(path.resolve(), path)
+    all_files = list(unique.values())
+    cv_paths = {cv.resolve()} if cv else set()
+    reference_files = [p for p in all_files if p.name.casefold().startswith("arbeitszeugnis")]
+    references = {p.resolve() for p in reference_files}
+    # Role declarations still identify a reference when a legacy name lives outside the configured documents dir.
+    for entry in entries:
+        path = available(entry.file)
+        if path and entry.role == "work_reference" and path.name.casefold().startswith("arbeitszeugnis"):
+            references.add(path.resolve())
+    work_references = [p for p in all_files if p.resolve() in references]
+    excluded = set(cv_paths)
+    excluded.update(p.resolve() for p in (folder / "cover_letter.pdf", folder / "Bewerbungsmappe.pdf") if p.exists())
+    # Keep references in the catch-all pool too: the mapper reserves them for a dedicated
+    # Arbeitszeugnis field when one exists, otherwise an Other field can still carry them.
+    other_documents = [p for p in all_files if p.resolve() not in excluded]
 
     return {
         "cv": cv,
-        "cover_letter_pdf": folder / "cover_letter.pdf" if "cover_letter.pdf" in names else None,
-        "certificates": certs,
-        "work_references": of_role("work_reference"),
-        "other_documents": of_role("other"),
-        "work_samples": of_role("writing_sample"),
-        "bundle_pdf": folder / "Bewerbungsmappe.pdf" if "Bewerbungsmappe.pdf" in names else None,
+        "cover_letter_pdf": folder / "cover_letter.pdf" if (folder / "cover_letter.pdf").is_file() else None,
+        "certificates": [available(e.file) for e in entries if e.role == "certificate" and available(e.file)],
+        "work_references": work_references,
+        "other_documents": other_documents,
+        "work_samples": [p for p in all_files if any(e.role == "writing_sample" and e.file == p.name for e in entries)],
+        "bundle_pdf": folder / "Bewerbungsmappe.pdf" if (folder / "Bewerbungsmappe.pdf").is_file() else None,
     }
 
 
@@ -131,8 +175,8 @@ class AssistSession:
             raise NotPrepared(f"job {job_id} has no application folder; run `autoapp prepare --job {job_id}` first")
         self.job, self.app = job, app
         self.folder = Path(app["folder"])
-        # An Arbeitsagentur job without its employer's ad has no application page: its job page is only the ad.
-        self.url = job["application_url"] or (None if app["form_status"] == "no_employer_link" else job["job_url"])
+        # Legacy rows can still hold the Arbeitsagentur board URL in any of these columns.
+        self.url = _start_url(job, app)
         self.use_llm = ctx.config.assist.llm_answers if use_llm is None else use_llm
         self.scope = None
         self.skipped_answers = []
@@ -153,7 +197,8 @@ class AssistSession:
 
     def _load_values(self) -> None:
         """What may be put into a form. Read again when the folder was renamed: the files moved with it."""
-        files = _folder_files(self.folder, self.ctx.profile, self.ctx.documents)
+        files = _folder_files(self.folder, self.ctx.profile, self.ctx.documents,
+                              language=self.app["language"] or "de")
         self.values = FillValues.from_profile(
             self.ctx.profile, salary_expectation=self.app["salary_expectation"], motivation=_motivation(self.folder),
             company=self.job["company"], language=self.app["language"], **files
@@ -182,6 +227,14 @@ class AssistSession:
         if not unmatched and not pending:
             return [], [], []
         extra, review = [], []
+        if not self.use_llm:
+            for f in unmatched:
+                assignment = fallback_location_assignment(f)
+                if assignment is not None:
+                    label = next((text or value for value, text in f.options if value == assignment.value),
+                                 assignment.value)
+                    extra.append(assignment)
+                    review.append(f"{f.label}: {label}{fallback_location_notice(f, assignment.value)}")
         if self.use_llm and pending:
             rule_values = {a.field_id: a.value for a in mapping.assignments if a.field_id not in mapping.fixed_ids}
             try:
@@ -193,6 +246,14 @@ class AssistSession:
             except LLMError as err:
                 # No written answers this time, but your name, contact data, salary and uploads are still filled.
                 self.say(f"Written answers were skipped: {err}. The facts from your profile are still filled.")
+                for f in pending:
+                    assignment = fallback_location_assignment(f)
+                    if assignment is None:
+                        continue
+                    label = next((text or value for value, text in f.options if value == assignment.value),
+                                 assignment.value)
+                    extra.append(assignment)
+                    review.append(f"{f.label}: {label}{fallback_location_notice(f, assignment.value)}")
         done = {a.field_id for a in extra}
         return extra, review, [f for f in unmatched if f.field_id not in done]
 
@@ -593,7 +654,7 @@ class AssistSession:
         self.page = self.context.new_page()
         if self.guard:
             self.guard.attach(self.page)
-        self.page.goto(self.job["application_url"] or self.url or (self.folder / "apply.html").resolve().as_uri())
+        self.page.goto(self.url or (self.folder / "apply.html").resolve().as_uri())
         return self.page
 
     def mark_submitted(self) -> None:

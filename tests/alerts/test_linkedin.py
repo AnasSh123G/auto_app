@@ -42,10 +42,10 @@ def test_footer_is_not_a_card(linkedin_msg: EmailMessage) -> None:
 
 def test_registry_matches_from_only(linkedin_msg: EmailMessage) -> None:
     assert parser_for(linkedin_msg).name == "linkedin"  # type: ignore[union-attr]
-    assert {p.name for p in REGISTRY} == {"linkedin", "stepstone", "indeed", "workwise"}
+    assert {p.name for p in REGISTRY} == {"linkedin", "stepstone", "indeed", "workwise", "xing"}
     # Recipient must never decide: an unknown sender writing to the same recipient is unknown.
     msg = EmailMessage()
-    msg["From"] = "Jobs <someone@xing.com>"
+    msg["From"] = "Jobs <someone@example.com>"
     msg["To"] = linkedin_msg["To"]
     msg.set_content("hello")
     assert parser_for(msg) is None
@@ -59,7 +59,7 @@ def test_from_match_is_case_insensitive(linkedin_msg: EmailMessage) -> None:
 
 def test_unknown_sender_is_unrecognised() -> None:
     msg = EmailMessage()
-    msg["From"] = "someone@xing.com"
+    msg["From"] = "someone@example.com"
     msg["Subject"] = "New jobs"
     msg.set_content("Data Scientist\nACME\nBerlin\n")
     result = parse_email(msg)

@@ -68,9 +68,9 @@ def explain(status: str | None, note: str | None = "") -> Explanation:
                            "employer, paste that address here and the app opens and fills the form. The app looks "
                            "again on later searches.")
     if status == "restricted" and "only on the Arbeitsagentur" in note:
-        return Explanation("apply on the Arbeitsagentur",
-                           "This ad is posted only on the Arbeitsagentur; the employer's own site has no ad for it.",
-                           "Apply on the Arbeitsagentur page yourself, using the answers in apply.html.")
+        return Explanation("employer page unverified",
+                           "A previous check linked to the Arbeitsagentur job board, which is not a verified application page.",
+                           "Search again for the employer's own application page, or verify it yourself before applying.")
     if status == "restricted" and "employer ad not searched yet" in note:
         why = note.split("employer ad not searched yet:", 1)[1].strip()
         return Explanation("employer ad not searched",

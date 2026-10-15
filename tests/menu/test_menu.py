@@ -227,6 +227,41 @@ def test_opening_the_job_link_stays_in_the_menu_so_the_form_address_can_be_paste
     ctx.close()
 
 
+def test_arbeitsagentur_link_can_be_opened_manually_in_normal_browser(ws, monkeypatch):
+    job = _form_job(ws, "Agentur", "partial", "only on the Arbeitsagentur: posted directly there")
+    aa_url = "https://www.arbeitsagentur.de/jobsuche/jobdetail/10000-1234567890-S"
+    ctx = RunContext.open(ws, start_run=False)
+    ctx.repo.update_job(job, application_url=aa_url)
+    ctx.close()
+
+    opened = []
+    monkeypatch.setattr("webbrowser.open", lambda url: opened.append(url))
+    r, p = open_menu(ws, [
+        ("What would you like", "forms"), ("Which application", job),
+        ("What do you want to do", "link"), ("What do you want to do", menu.BACK),
+        ("Which application", menu.BACK), ("What would you like", "quit"),
+    ])
+
+    assert r.exit_code == 0 and opened == [aa_url] and p.remaining == 0
+    assert any(f"Opened {aa_url}" in line for line in p.output)
+
+
+def test_normal_browser_launch_failure_reports_the_url(ws, monkeypatch):
+    job = _form_job(ws, "Manual", "partial", "continue manually")
+    ctx = RunContext.open(ws, start_run=False)
+    ctx.repo.update_job(job, application_url="https://employer.example/apply")
+    ctx.close()
+    monkeypatch.setattr("webbrowser.open", lambda url: False)
+    result, prompts = open_menu(ws, [
+        ("What would you like", "forms"), ("Which application", job),
+        ("What do you want to do", "link"), ("What do you want to do", menu.BACK),
+        ("Which application", menu.BACK), ("What would you like", "quit"),
+    ])
+    assert result.exit_code == 0
+    assert any("Could not launch" in line and "https://employer.example/apply" in line for line in prompts.output)
+    assert not any("Opened https://employer.example/apply" in line for line in prompts.output)
+
+
 def test_a_page_without_a_clear_apply_button_says_what_to_click(ws, monkeypatch):
     job = _form_job(ws, "Agentur", "partial", "no unambiguous safe navigation; continue manually")
     opened = []
@@ -463,3 +498,63 @@ def test_the_full_test_run_entry_is_a_fresh_unsampled_test_run(ws, monkeypatch):
     assert [(c["mode"], c["fresh"], c["sample"] if "sample" in c else False, c["ask_mode"]) for c in calls] == [
         ("test", True, False, False)]
     assert any("Full test run finished." in line for line in p.output)
+
+@pytest.mark.parametrize("sources, expected", [("email-only", "email_only"), ("full", "full"), ("web-only", "web_only")])
+def test_cli_run_source_selection(ws, monkeypatch, sources, expected):
+    seen = {}
+    monkeypatch.setattr("autoapp.commands.run_with_mode", lambda tctx, **kw: seen.update(kw))
+    r = runner.invoke(app, ["-w", str(ws.root), "run", "--sources", sources, "--mode", "review"])
+    assert r.exit_code == 0, r.output
+    assert seen["source_mode"] == expected
+
+
+def test_cli_invalid_sources_does_not_start_session(ws, monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("must reject invalid sources before opening a session")
+
+    monkeypatch.setattr("autoapp.commands.session", forbidden)
+    r = runner.invoke(app, ["-w", str(ws.root), "run", "--sources", "invalid"])
+    assert r.exit_code == 2 and "unknown sources" in r.output
+
+@pytest.mark.parametrize("source_mode", ["email_only", "full", "web_only"])
+def test_run_now_passes_source_choice_to_pipeline_without_changing_config(ws, monkeypatch, source_mode):
+    from autoapp.steps.pipeline import RunSummary
+
+    seen = []
+    before = ws.config_path.read_bytes()
+
+    def pipeline(ctx, profile=None):
+        seen.append((ctx.source_mode, ctx.mode, profile))
+        return RunSummary()
+
+    monkeypatch.setattr("autoapp.steps.pipeline.run_pipeline", pipeline)
+    r, p = open_menu(ws, [("What would you like", "run"), ("Where should", source_mode),
+                         ("How should", "review"), ("What would you like", "quit")])
+    assert r.exit_code == 0 and seen == [(source_mode, "review", None)], (r.output, p.output)
+    assert p.remaining == 0 and ws.config_path.read_bytes() == before
+
+
+def test_cli_explicit_sources_still_asks_delivery_only(ws, monkeypatch):
+    from autoapp.steps.pipeline import RunSummary
+
+    seen = []
+    monkeypatch.setattr("autoapp.commands._interactive", lambda non_interactive: True)
+    monkeypatch.setattr("autoapp.steps.pipeline.run_pipeline",
+                        lambda ctx, profile=None: seen.append(ctx.source_mode) or RunSummary())
+    p = ScriptedPrompter([("How should", "review")])
+    with use_runtime(prompter=p):
+        r = runner.invoke(app, ["-w", str(ws.root), "run", "--sources", "web-only", "--no-dashboard"])
+    assert r.exit_code == 0 and seen == ["web_only"], r.output
+    assert p.remaining == 0
+
+
+@pytest.mark.parametrize("args", [["--non-interactive"], ["--mode", "test"],
+                                  ["--mode", "test", "--fresh", "--sources", "email-only"]])
+def test_cli_source_defaults_and_fresh_forwarding(ws, monkeypatch, args):
+    from autoapp.steps.pipeline import RunSummary
+
+    seen = []
+    monkeypatch.setattr("autoapp.steps.pipeline.run_pipeline",
+                        lambda ctx, profile=None: seen.append(ctx.source_mode) or RunSummary())
+    r = runner.invoke(app, ["-w", str(ws.root), "run", "--no-dashboard", *args])
+    assert r.exit_code == 0 and seen == (["email_only"] if "--fresh" in args else ["full"]), r.output

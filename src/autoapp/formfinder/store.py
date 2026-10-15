@@ -12,6 +12,7 @@ from autoapp.formfinder.employer_link import (
     ONLY_ON_ARBEITSAGENTUR,
     employer_link,
     is_arbeitsagentur_job,
+    is_arbeitsagentur_page,
     outcome_for,
 )
 from autoapp.formfinder.finder import LABELS, Outcome, find
@@ -74,25 +75,40 @@ def _only_on_arbeitsagentur(outcome: Outcome) -> bool:
     return outcome.status == "restricted" and outcome.note.startswith(ONLY_ON_ARBEITSAGENTUR)
 
 
+def _safe_outcome(outcome: Outcome) -> Outcome:
+    """Remove a legacy Arbeitsagentur link before rendering any application section."""
+    legacy_only_note = _only_on_arbeitsagentur(outcome)
+    board_link = is_arbeitsagentur_page(outcome.url) or is_arbeitsagentur_page(outcome.reached)
+    if outcome.status == NO_EMPLOYER_LINK and board_link:
+        return Outcome(outcome.status, None, None, outcome.note)
+    if board_link or (outcome.status == "restricted" and legacy_only_note):
+        return Outcome(
+            "restricted", None, None,
+            "restricted target: arbeitsagentur.de; legacy Arbeitsagentur link removed; "
+            "employer application page not verified",
+        )
+    if outcome.status == NO_EMPLOYER_LINK and is_arbeitsagentur_page(outcome.url):
+        return Outcome(outcome.status, None, outcome.reached, outcome.note)
+    return outcome
+
+
 def _block(name: str, label: str, outcome: Outcome) -> str:
-    """The marked application section of README.md, job.md or apply.html for an outcome. The Arbeitsagentur page
-    is the application link only when the ad is posted nowhere else; a job without an employer link shows no
-    application link at all (the page stays under "Job ad")."""
+    """The marked application section of README.md, job.md or apply.html for an outcome."""
+    outcome = _safe_outcome(outcome)
     status = _status_text(outcome)
     url = outcome.url
     if outcome.status == NO_EMPLOYER_LINK:
         url = None
-    suffix = f" ({ONLY_ON_ARBEITSAGENTUR})" if _only_on_arbeitsagentur(outcome) else ""
     if name == "apply.html":
         if not url:
             return f"<p>{html.escape(status)}</p>"
         return (f'<p><a href="{html.escape(url, quote=True)}" rel="noopener">Application page</a>'
-                f"{html.escape(suffix)}</p>\n<p>{html.escape(status)}</p>")
-    shown = f"{url}{suffix}" if url else ("none yet" if outcome.status == NO_EMPLOYER_LINK else "not available")
+                f"</p>\n<p>{html.escape(status)}</p>")
+    shown = url if url else ("none yet" if outcome.status == NO_EMPLOYER_LINK else "not available")
     return f"- **{label}:** {shown}\n- **Form status:** {status}"
 
 
-def refresh(folder: Path, outcome: Outcome):
+def refresh(folder: Path, outcome: Outcome, *, suppress_job_ad: bool = False):
     updates = {}
     for name, label in (("README.md", "Application link"), ("job.md", "Application page"), ("apply.html", "")):
         path = folder / name
@@ -122,16 +138,24 @@ def refresh(folder: Path, outcome: Outcome):
             raise ValueError(f"Cannot safely refresh {path}: application link section is missing or ambiguous")
         updates[path] = updated
     for path, text in updates.items():
+        if suppress_job_ad and path.name in {"README.md", "job.md"}:
+            text = re.sub(r"^- \*\*Job ad:\*\* .*?$", "- **Job ad:** not available", text, flags=re.M)
+        elif suppress_job_ad and path.name == "apply.html":
+            text = re.sub(r'<a href="[^"]*" rel="noopener">Job ad</a>\s*', "", text)
         path.write_text(text, encoding="utf-8")
 
 
 def save(ctx, job, entry, outcome: Outcome, *, refresh_package=False):
+    outcome = _safe_outcome(outcome)
     outcome = Outcome(outcome.status, outcome.url, outcome.reached, " ".join(outcome.note.split())[:200])
     app = ctx.repo.get_application(job["id"])
     if refresh_package:
-        refresh(Path(app["folder"]), outcome)
+        refresh(Path(app["folder"]), outcome, suppress_job_ad=is_arbeitsagentur_page(job["job_url"]))
+    form_entry = entry or (app["form_entry_url"] if app else None)
+    if is_arbeitsagentur_page(form_entry):
+        form_entry = None
     ctx.repo.upsert_application(
-        job["id"], form_entry_url=(app["form_entry_url"] if app else None) or entry,
+        job["id"], form_entry_url=form_entry,
         form_reached_url=outcome.reached, form_status=outcome.status, form_checked_at=now_iso(),
         form_note=outcome.note,
     )

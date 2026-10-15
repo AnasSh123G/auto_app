@@ -15,7 +15,8 @@ from tests.helpers import make_workspace
 from tests.steps.test_other_steps import PAGE
 
 URLS = {"linkedin-alert": "https://www.linkedin.com/jobs/view/{n}/", "stepstone-alert": "https://www.stepstone.de/stellenangebote--{n}-inline.html",
-        "indeed-alert": "https://de.indeed.com/viewjob?jk={n}", "workwise-alert": "https://www.workwise.io/job/{n}-x"}
+        "indeed-alert": "https://de.indeed.com/viewjob?jk={n}", "workwise-alert": "https://www.workwise.io/job/{n}-x",
+        "xing-alert": "https://www.xing.com/jobs/berlin-backend-developer-{n}"}
 
 
 class Browser:
@@ -56,7 +57,7 @@ def test_no_job_board_page_is_requested_for_any_alert_source(tmp_path):
     ids = [alert(ctx, source, n) for n, source in enumerate(URLS, start=1)]
     browser, seen = Browser(), []
     summary = fetch_details(ctx, http=http_seen(seen), browser=browser)
-    assert browser.urls == [] and seen == [] and summary.fetched == 0 and summary.unavailable == 4
+    assert browser.urls == [] and seen == [] and summary.fetched == 0 and summary.unavailable == len(URLS)
     for job_id in ids:
         job = ctx.repo.get_job(job_id)
         assert job["status"] == "description_unavailable"
@@ -122,7 +123,7 @@ def test_no_request_goes_to_a_job_board_from_the_search_to_the_detail_step(tmp_p
     browser, seen = Browser(), []
     fetch_details(ctx, http=http_seen(seen), browser=browser)
     requested = {urlsplit(u).hostname for u in (*web.calls, *seen, *browser.urls)}
-    board_hosts = {"www.linkedin.com", "www.stepstone.de", "de.indeed.com", "www.workwise.io"}
+    board_hosts = {"www.linkedin.com", "www.stepstone.de", "de.indeed.com", "www.workwise.io", "www.xing.com"}
     assert calls and not requested & board_hosts and browser.urls == [] and seen == []
     assert all(ctx.repo.get_job(j)["status"] == "description_unavailable" for j in ids)
     ctx.close()

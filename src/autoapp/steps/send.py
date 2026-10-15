@@ -81,12 +81,23 @@ def send_applications(
     s = SendSummary()
     repo = ctx.repo
     if not ctx.dry_run:
-        s.unconfirmed = reconcile_pending(repo)
+        if ctx.source_mode == "full":
+            s.unconfirmed = reconcile_pending(repo)
+        else:
+            pending = ctx.conn.execute(
+                "SELECT DISTINCT j.* FROM jobs j JOIN send_attempts s ON s.job_id = j.id "
+                "WHERE s.state = 'pending'"
+            ).fetchall()
+            selected = {job["id"] for job in ctx.jobs_for_sources(pending)}
+            s.unconfirmed = reconcile_pending(repo, job_ids=selected)
     if job_ids is None:
-        job_ids = [j["id"] for j in repo.jobs_by_status(Status.PREPARED)
+        job_ids = [j["id"] for j in ctx.jobs_for_sources(repo.jobs_by_status(Status.PREPARED))
                    if (repo.get_application(j["id"]) or {"channel": None})["channel"] == "email"]
     policy_ = ctx.config.email
     for job_id in job_ids:
+        job = repo.get_job(job_id)
+        if job is not None and not ctx.jobs_for_sources([job]):
+            continue
         folder = _folder(ctx, job_id)
         bundle = folder / BUNDLE if folder else None
         elig = check_eligibility(repo, job_id, policy_, bundle=bundle, manual=manual)
@@ -199,7 +210,7 @@ def _connection_test_mail(own_address: str) -> EmailMessage:
 
 def _latest_prepared_email_job(ctx: RunContext) -> str | None:
     repo = ctx.repo
-    for job in reversed(repo.jobs_by_status(Status.PREPARED)):
+    for job in reversed(ctx.jobs_for_sources(repo.jobs_by_status(Status.PREPARED))):
         app = repo.get_application(job["id"])
         folder = Path(app["folder"]) if app and app["folder"] else None
         if app and app["channel"] == "email" and folder and (folder / "email.eml").exists():
@@ -229,6 +240,8 @@ def send_test_email(ctx: RunContext, job_id: str | None = None, *, mailer: Maile
         job = ctx.repo.get_job(job_id)
         if job is None:
             return SelfTestResult(error=f"unknown job {job_id}")
+        if not ctx.jobs_for_sources([job]):
+            return SelfTestResult(error=f"job {job_id} is excluded by this run source mode")
         app = ctx.repo.get_application(job_id)
         folder = _folder(ctx, job_id)
         if folder is None or not (folder / "email.eml").exists():
@@ -286,7 +299,7 @@ def send_test_applications(ctx: RunContext, *, mailer: Mailer | None = None) -> 
     from autoapp.mail.send import sends_today
 
     real_today = sends_today(repo, datetime.now(UTC))
-    job_ids = [j["id"] for j in repo.jobs_by_status(Status.PREPARED)
+    job_ids = [j["id"] for j in ctx.jobs_for_sources(repo.jobs_by_status(Status.PREPARED))
                if (repo.get_application(j["id"]) or {"channel": None})["channel"] == "email"]
     sample = ctx.sample
     for job_id in job_ids:

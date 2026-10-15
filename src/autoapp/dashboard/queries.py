@@ -108,6 +108,10 @@ class Stats:
     maybe: int = 0
     skipped: int = 0
     average_score: float | None = None
+    judge_reviewed: int = 0
+    judge_score: float | None = None
+    judge_disagreed: int = 0
+    judge_failed: int = 0
     folders_by_channel: dict[str, int] = field(default_factory=dict)
     emails_sent: int = 0
     emails_held: dict[str, int] = field(default_factory=dict)
@@ -269,6 +273,15 @@ def compute_stats(conn: sqlite3.Connection, config: Config, prices: PriceTable, 
                 bridgeable[text.lower()] += 1
     st.top_missing = missing.most_common(8)
     st.top_bridgeable = bridgeable.most_common(8)
+
+    # Judge reviews use the actual run ID rather than a timestamp approximation.
+    judge_where, judge_args = ("run_id = ?", (run_id,)) if run_id is not None else _between("created_at", start, end)
+    audit = conn.execute(f"SELECT COUNT(*) AS n, AVG(score) AS score, SUM(1 - agrees) AS disagreed "
+                         f"FROM judge_reviews WHERE {judge_where}", judge_args).fetchone()
+    st.judge_reviewed = audit["n"]
+    st.judge_score = audit["score"]
+    st.judge_disagreed = audit["disagreed"] or 0
+    st.judge_failed = len(_events(conn, ("judge_failed",), start, end, run_id))
 
     # Applications
     where, wargs = _between("prepared_at", start, end)

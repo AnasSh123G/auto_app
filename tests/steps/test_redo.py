@@ -123,3 +123,46 @@ def test_declining_the_question_changes_nothing_and_accepting_backs_up_first(tmp
     assert ctx.repo.get_job(jid)["status"] == "new" and len(list(ctx.ws.backups_dir.glob("redo-*"))) == 1
     assert "Database backed up" in capsys.readouterr().out
     ctx.close()
+
+@pytest.mark.parametrize("source_mode", ["email_only", "web_only"])
+def test_redo_only_resets_selected_source_provenance(ctx, source_mode):
+    from autoapp.commands import _start_redo
+
+    email = ctx.repo.insert_job(title="Email job", company="Email AG", status="prepared")
+    web = ctx.repo.insert_job(title="Web job", company="Web AG", status="review")
+    ctx.repo.add_source(email, "xing-alert", "email-job")
+    ctx.repo.add_source(web, "adzuna", "web-job")
+    for jid in (email, web):
+        ctx.repo.upsert_application(jid, form_status="partial", form_note="keep unless redone")
+    ctx.source_mode = source_mode
+    assert _start_redo(ctx, dry_run=False, interactive=False, prompter=None)
+    selected, untouched = (email, web) if source_mode == "email_only" else (web, email)
+    assert ctx.repo.get_job(selected)["status"] == "new"
+    assert ctx.repo.get_job(untouched)["status"] == ("review" if untouched == web else "prepared")
+    assert ctx.repo.get_application(selected)["form_status"] is None
+    assert ctx.repo.get_application(untouched)["form_note"] == "keep unless redone"
+    import sqlite3
+
+    backup = next(ctx.ws.backups_dir.glob("redo-*/autoapp.db"))
+    with sqlite3.connect(backup) as conn:
+        assert dict(conn.execute("SELECT id, status FROM jobs")) == {email: "prepared", web: "review"}
+
+
+@pytest.mark.parametrize("sources, expected", [("email-only", "1 prepared"), ("web-only", "1 review")])
+def test_redo_dry_run_preview_uses_cli_source_selection(tmp_path, monkeypatch, sources, expected):
+    monkeypatch.setenv("AUTOAPP_NON_INTERACTIVE", "1")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-not-real")
+    ws = make_workspace(tmp_path, config=CONFIG + SETUP)
+    ctx = RunContext.open(ws)
+    email = ctx.repo.insert_job(title="Email job", company="Email AG", status="prepared")
+    web = ctx.repo.insert_job(title="Web job", company="Web AG", status="review")
+    ctx.repo.add_source(email, "xing-alert", "email-job")
+    ctx.repo.add_source(web, "adzuna", "web-job")
+    ctx.close()
+    result = CliRunner().invoke(app, ["-w", str(ws.root), "run", "--redo", "--dry-run", "--non-interactive",
+                                     "--sources", sources])
+    assert result.exit_code == 0 and f"1 jobs would be processed again: {expected}" in result.output
+    ctx = RunContext.open(ws)
+    assert ctx.repo.get_job(email)["status"] == "prepared" and ctx.repo.get_job(web)["status"] == "review"
+    assert not list(ws.backups_dir.glob("redo-*"))
+    ctx.close()

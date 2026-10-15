@@ -182,6 +182,7 @@ def fill_page(
             mapped.add(extra.field_id)
 
     report = FillReport()
+    report.errors.extend(mapping.upload_notes)
     filled_ids: list[str] = []
     for a in assignments:
         f = by_id[a.field_id]

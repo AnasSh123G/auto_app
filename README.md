@@ -26,7 +26,7 @@ Run each command from the project folder as `uv run autoapp <command>`, for exam
 |---|---|
 | `setup [--section NAME] [--reset NAME\|all]` | Onboarding wizard; redo or reset one section or everything |
 | (no command) | The main menu, in a terminal. Without a terminal, or with `--non-interactive`, it prints help |
-| `run [--mode automatic\|review\|test] [--fresh] [--redo] [--dry-run] [--non-interactive] [--no-dashboard] [--profile NAME]` | Search → fetch details → evaluate → prepare → send, draft or test-send → export. Asks for the mode unless `--mode` is given. `--fresh` (test runs only) starts from an empty job history in `workspace/test-runs/`, so every job counts as new. `--redo` processes every job that is not sent again, in your real workspace |
+| `run [--sources email-only\|full\|web-only] [--mode automatic\|review\|test] [--fresh] [--redo] [--dry-run] [--non-interactive] [--no-dashboard] [--profile NAME]` | Search → fetch details → evaluate → prepare → send, draft or test-send → export. Interactive runs ask for job sources and delivery mode unless supplied; preselected delivery modes and scheduled runs default to Full sources. `--fresh` (test runs only) starts from an empty job history in `workspace/test-runs/`. `--redo` reprocesses unsent jobs within the selected sources, in your real workspace |
 | `stats [--period run\|today\|7d\|30d\|all]` | Statistics; live while a run is active |
 | `draft <id> [--again]`, `drafts [--check]` | Save one email application as a draft in your mailbox; list drafts, or mark the ones you sent by hand as `sent` |
 | `reset-data [--answers] [--logins] [--yes]` | Delete all job data (history, folders, CSV, logs, test runs) and keep the setup; shows what goes and asks first |
@@ -48,7 +48,7 @@ Run each command from the project folder as `uv run autoapp <command>`, for exam
 
 | Entry | What it does |
 |---|---|
-| Run now | Asks for a run mode, then runs the pipeline |
+| Run now | Choose Email only / Full / Web only, then how to send or draft applications |
 | Statistics | Opens the statistics screen (see below) |
 | Applications | Pick an application by status. Show its folder or letter, change its status, re-render the letter, save it as a draft, send it (asks first), send a test copy to yourself, or fill its form |
 | Review queue | Jobs that need your decision or a fixed letter. Show the evaluation, then apply, skip, show the letter path or re-render |

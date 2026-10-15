@@ -17,11 +17,13 @@ ends with what is missing, so you can see it without opening the folder:
 | `_NOEMPLOYER` | an Arbeitsagentur job whose employer's own ad was not found: the letter is ready, but there is no application page yet |
 | `_UNREACHABLE` | the page could not be loaded |
 
-A `_NOEMPLOYER` folder shows the Arbeitsagentur page only as **Job ad**, never as the application page, plus
+A `_NOEMPLOYER` folder shows no Arbeitsagentur application or job-ad link, plus
 `employer ad not found yet: <reason>`. The employer's ad is searched again on later searches (after
 `employer_careers.failure_ttl_hours` at the earliest); when it turns up, the status, the ending and the links are
-refreshed. An ad posted only on the Arbeitsagentur (no external address, the Arbeitsagentur itself as partner) keeps
-the Arbeitsagentur link, labelled "only on the Arbeitsagentur" (ending `_RESTRICTED`).
+refreshed. An ad hosted directly on Arbeitsagentur also requires a verified employer page. An unsuccessful
+lookup does not prove that the job exists only on the board. Legacy board application links are suppressed when
+the generated package links are refreshed. Automatic form filling avoids those pages; the explicit
+"Open the job link in my normal browser" action can still open the saved source address manually.
 
 `autoapp forms --job <id> --again` (or `assist`) looks again; if the result changes, the folder is renamed
 (the ending is added, changed or removed) and the paths inside `README.md`, `job.md` and `apply.html` are updated.
@@ -37,14 +39,25 @@ Folders you renamed yourself are left alone. The exact status and reason are als
 | `cover_letter.md` | Generated cover letter in Markdown (editable before render) |
 | `cover_letter.pdf` | Rendered PDF (DIN 5008 format, one page) |
 | `cover_letter_*.md` | Timestamped backups of cover letters (created on `--force` reruns) |
-| `Bewerbungsmappe.pdf` | Merged PDF: cover letter + CV + certificates (if attached) |
+| `Bewerbungsmappe.pdf` | Merged PDF: cover letter + PDF CV + available PDF certificates and work references |
 | `email.eml` | Formatted email ready to send (if email channel) |
 | `apply.html` | Offline copy of answers for manual form filling or platform applying |
 | `README.md` | Summary with next steps, missing documents, flags for review, and "brush up" list |
 | `form_answers.md` | Structured answers generated for web form questions, plus the answers you gave in `assist` |
 | `filled_form.md` / `filled_form.html` | Record of each fill, and an offline copy of the filled form page (created by `assist`) |
 | `CV_<lang>.pdf` or `.docx` | Copies of your CV in the ad's language |
-| `*.pdf` (certificates) | Copies of requested certificates and Zeugnisse |
+| Additional documents | Copies of matching-language or neutral certificates, references and other documents |
+
+Applications select one matching-language CV; alternate CVs and opposite-language supporting documents are
+excluded from form uploads and email attachments, including when rebuilding an older email draft.
+Email applications attach `Bewerbungsmappe.pdf` plus eligible documents not contained in that bundle. Non-PDF CVs and
+certificates are attached separately, along with other available documents; paths are deduplicated. Re-rendering
+preserves extra attachments whose copied files remain in the folder. A warning reports a combined attachment
+size above `email.max_bundle_mb`; the existing sending limit still checks the bundle itself.
+
+Document filenames must be distinct and must not match generated files such as `cover_letter.pdf` or
+`README.md`. Preparation reports such conflicts before writing a letter, so a document cannot overwrite a
+generated application file.
 
 ## Reviewing before you apply
 
@@ -65,7 +78,8 @@ not rebuild previously edited application packages; its link appears in the next
 
 For non-email applications, preparation first tries to find the actual application page.
 `apply.html`, README and `job.md` show the found page or last usable handoff address and a
-separate form status/reason. The original ad URL is retained. Finder metadata also keeps
+separate form status/reason. Source URLs remain in the database; Arbeitsagentur URLs are excluded from generated
+application links. Finder metadata also keeps
 the original entry and the last reached address, so a stale link can be retried.
 
 ```bash

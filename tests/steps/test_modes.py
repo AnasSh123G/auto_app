@@ -307,19 +307,19 @@ def test_forms_are_prepared_the_same_in_every_mode_without_a_browser(ctx, mode, 
 
 def test_choose_review(ctx):
     p = ScriptedPrompter([("How should this run handle emails", "review")])
-    assert choose_run(p, ctx.config, 0).mode == "review"
+    assert choose_run(p, ctx.config, 0, ask_sources=False).mode == "review"
 
 
 def test_confirm_automatic_shows_sent_today(ctx):
     ctx.config.email.daily_cap = 5
     p = ScriptedPrompter([("How should", "automatic"), ("This will email employers", True)])
-    assert choose_run(p, ctx.config, 2).mode == "automatic"
+    assert choose_run(p, ctx.config, 2, ask_sources=False).mode == "automatic"
     assert any("2 of 5 emails sent today" in line for line in p.output)
 
 
 def test_decline_automatic_asks_again(ctx):
     p = ScriptedPrompter([("How should", "automatic"), ("This will email employers", False), ("How should", "test")])
-    assert choose_run(p, ctx.config, 0).mode == "test"
+    assert choose_run(p, ctx.config, 0, ask_sources=False).mode == "test"
 
 
 def test_default_is_preselected(ctx):
@@ -327,7 +327,7 @@ def test_default_is_preselected(ctx):
 
     ctx.config.run.default_mode = "automatic"
     p = ScriptedPrompter([("How should", ENTER), ("This will email employers", True)])
-    assert choose_run(p, ctx.config, 0).mode == "automatic"
+    assert choose_run(p, ctx.config, 0, ask_sources=False).mode == "automatic"
 
 
 def test_profile_choice_when_several(ctx):
@@ -335,5 +335,25 @@ def test_profile_choice_when_several(ctx):
 
     ctx.config.search_profiles.append(SearchProfile(name="remote", keywords=["x"]))
     p = ScriptedPrompter([("How should", "review"), ("Which search profiles", "remote")])
-    assert choose_run(p, ctx.config, 0).profile == "remote"
+    assert choose_run(p, ctx.config, 0, ask_sources=False).profile == "remote"
 
+
+@pytest.mark.parametrize("source_mode", ["email_only", "full", "web_only"])
+def test_choose_sources_before_delivery(ctx, source_mode):
+    p = ScriptedPrompter([("Where should", source_mode), ("How should", "review")])
+    choice = choose_run(p, ctx.config, 0)
+    assert choice.source_mode == source_mode and choice.mode == "review"
+    assert p.choice_values[0] == ["email_only", "full", "web_only"]
+
+
+def test_sources_default_to_full(ctx):
+    from autoapp.setup.prompts import ENTER
+
+    p = ScriptedPrompter([("Where should", ENTER), ("How should", "review")])
+    assert choose_run(p, ctx.config, 0).source_mode == "full"
+
+
+def test_explicit_sources_skip_source_prompt(ctx):
+    p = ScriptedPrompter([("How should", "review")])
+    choice = choose_run(p, ctx.config, 0, ask_sources=False, source_mode="web_only")
+    assert choice.source_mode == "web_only" and p.remaining == 0

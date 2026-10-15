@@ -63,7 +63,9 @@ def test_section_rerun_changes_only_that_section(finished_ws):
     answers = [
         ("Provider for evaluate", "openrouter"), ("Model for evaluate", ENTER), ("Provider for write", "openrouter"),
         ("Model for write", ENTER), ("Provider for form_fill", "openrouter"), ("Model for form_fill", ENTER),
-        ("Provider for form_find", "openrouter"), ("Model for form_find", ENTER), ("OpenRouter API key", "sk-or-NEW-SECRET"), ("Test the API key", False),
+        ("Provider for form_find", "openrouter"), ("Model for form_find", ENTER),
+        ("Provider for judge", "openrouter"), ("Model for judge", ENTER),
+        ("OpenRouter API key", "sk-or-NEW-SECRET"), ("Test the API key", False),
     ]
     code, prompter = run_cmd(ws, answers, section="llm")
     assert code == 0 and prompter.remaining == 0
@@ -75,7 +77,7 @@ def test_section_rerun_changes_only_that_section(finished_ws):
     assert ws.profile_path.read_bytes() == before_profile
     cfg = load_config(ws)
     assert [p.name for p in cfg.search_profiles] == ["rust-dev", "machine-learning-engineer"]
-    assert {cfg.llm.resolve(t)[0] for t in ("evaluate", "write", "form_fill", "form_find")} == {"openrouter"}
+    assert {cfg.llm.resolve(t)[0] for t in ("evaluate", "write", "form_fill", "form_find", "judge")} == {"openrouter"}
     env = ws.env_path.read_text()
     assert "OPENROUTER_API_KEY='sk-or-NEW-SECRET'" in env and ANTHROPIC_KEY in env
     assert "sk-or-NEW-SECRET" not in after_cfg
@@ -150,7 +152,7 @@ def test_menu_redo_everything_keeps_current_values(finished_ws):
         + [("Test the connections", False)]
         + [(m, ENTER) for m in ("Provider for evaluate", "Model for evaluate", "Provider for write", "Model for write",
                                 "Provider for form_fill", "Model for form_fill", "Provider for form_find",
-                                "Model for form_find", "Anthropic API key")]
+                                "Model for form_find", "Provider for judge", "Model for judge", "Anthropic API key")]
         + [("Test the API key", False)]
         + [("sending mailbox", ENTER), ("same account", ENTER), ("Adjust these limits", ENTER),
            ("Default run mode", ENTER), ("Test the mail login", False)]

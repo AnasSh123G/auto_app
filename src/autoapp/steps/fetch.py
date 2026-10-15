@@ -50,8 +50,8 @@ def _employer_posting(ctx: RunContext, job_id: str) -> str | None:
 
 
 def _is_job_board_page(url: str) -> bool:
-    """LinkedIn, Indeed, StepStone and Workwise job pages: never read for alert jobs in search-first mode."""
-    return site_key(url) in PLATFORM_SITES or host_matches(url, frozenset({"workwise.io"}))
+    """Job-board pages are never read for alert jobs in search-first mode."""
+    return site_key(url) in PLATFORM_SITES or host_matches(url, frozenset({"workwise.io", "xing.com"}))
 
 
 def _waiting_reason(ctx: RunContext, job) -> str:  # noqa: ANN001
@@ -85,7 +85,7 @@ def fetch_details(ctx: RunContext, *, http: HttpFetcher | None = None, browser: 
     """
     summary = FetchSummary()
     repo = ctx.repo
-    jobs = [j for j in repo.jobs_by_status(Status.NEW) if not (j["description"] or "").strip()]
+    jobs = [j for j in ctx.jobs_for_sources(repo.jobs_by_status(Status.NEW)) if not (j["description"] or "").strip()]
     if not jobs:
         return summary
     http = http or ctx.http

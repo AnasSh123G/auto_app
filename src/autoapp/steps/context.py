@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import cached_property
-from typing import Any
+from typing import Any, get_args
 
 from autoapp.config.models import Config, Profile, SearchProfile, load_config, load_profile
 from autoapp.config.workspace import Workspace
@@ -18,6 +19,9 @@ from autoapp.events import EventBus, RunEvent, RunStats
 from autoapp.fetch.http_fetcher import HttpFetcher
 from autoapp.llm.base import LLMClient, Usage, UsageMeter
 from autoapp.llm.cost import PriceTable
+from autoapp.sources.alerts.models import AlertSource
+
+SOURCE_MODES = ("email_only", "full", "web_only")
 
 
 @dataclass(frozen=True)
@@ -64,6 +68,7 @@ class RunContext:
     dry_run: bool = False
     interactive: bool = True
     mode: str = "review"  # automatic | review | test (run-modes spec)
+    source_mode: str = "full"  # email_only | full | web_only; local to this run
     clients: dict[str, LLMClient] = field(default_factory=dict)
     events: EventBus = field(default_factory=EventBus)
     stats: RunStats | None = None
@@ -75,6 +80,8 @@ class RunContext:
     sample: SampleLimits | None = None  # set only by the quick test
     # The quick test's preparation sample, chosen after evaluation and before the own-ad search (job ids, best first).
     sample_job_ids: list[str] | None = None
+    evaluation_count: int = 0  # successful evaluations in this run; every twentieth is audited
+    judge_stopped: str | None = None  # avoid repeating a judge authentication/configuration failure
 
     @classmethod
     def open(cls, ws: Workspace, *, dry_run: bool = False, interactive: bool = True,
@@ -93,6 +100,27 @@ class RunContext:
     @cached_property
     def repo(self) -> Repo:
         return Repo(self.conn)
+
+    def jobs_for_sources(self, jobs: Sequence[sqlite3.Row]) -> list[sqlite3.Row]:
+        """Select saved jobs by source provenance, preserving the caller's order.
+
+        An employer match enriches an email job without turning it into a web job.
+        A vacancy independently found by an API and by email belongs to both modes.
+        """
+        if self.source_mode not in SOURCE_MODES:
+            raise ValueError(f"unknown source mode: {self.source_mode!r}")
+        if self.source_mode == "full" or not jobs:
+            return list(jobs)
+        alerts = get_args(AlertSource)
+        marks = ",".join("?" for _ in alerts)
+        email_ids = {row[0] for row in self.conn.execute(
+            f"SELECT DISTINCT job_id FROM job_sources WHERE source IN ({marks})", alerts)}
+        if self.source_mode == "email_only":
+            return [job for job in jobs if job["id"] in email_ids]
+        web_ids = {row[0] for row in self.conn.execute(
+            f"SELECT DISTINCT job_id FROM job_sources WHERE source NOT IN ({marks}) AND source != ?",
+            (*alerts, "employer-careers"))}
+        return [job for job in jobs if job["id"] not in email_ids or job["id"] in web_ids]
 
     @property
     def http(self) -> HttpFetcher:

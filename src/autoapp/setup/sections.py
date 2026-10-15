@@ -676,7 +676,7 @@ def run_sources(ctx: SetupContext) -> bool:
 
     cur_alerts = dict(sources.get("alerts") or {})
     cur_acct = mail.get("alerts") if isinstance(mail.get("alerts"), dict) else None
-    p.say("Job alerts: LinkedIn and StepStone can email you new matches. autoapp reads those emails from a")
+    p.say("Job alerts: LinkedIn, StepStone, Indeed, Workwise and XING can email you new matches. autoapp reads them from a")
     p.say("mailbox folder (read-only: nothing is moved, deleted or marked as read).")
     use_alerts = p.confirm(
         "Read job-alert emails from a mailbox?",
@@ -688,7 +688,7 @@ def run_sources(ctx: SetupContext) -> bool:
         folder = p.text("Folder or label that holds the alert emails", _s(cur_alerts.get("folder")) or "Jobalerts",
                         required("The folder")).strip()
         p.say("How should an alert job get its full ad? Search first: the app looks for the employer's own ad (and")
-        p.say("its careers page) with a web search and never opens LinkedIn, Indeed, StepStone or Workwise job pages.")
+        p.say("its careers page) with a web search and never opens LinkedIn, Indeed, StepStone, Workwise or XING job pages.")
         p.say("Platform: the job board's page is read slowly, as before; the sites often block that.")
         alert_mode = p.select("How should alert jobs get their full ad?", [
             ("search_first", "Search first: find the employer's own ad by search (recommended; needs a Parallel Search key)"),
@@ -872,6 +872,7 @@ TASK_QUESTIONS = (
     ("write", "writing the cover letters (few calls, so a strong writer is worth it)"),
     ("form_fill", "answering free-text questions when `assist` fills a web form"),
     ("form_find", "finding the real application page behind a job link"),
+    ("judge", "auditing every twentieth evaluation against the job and CV (5% of evaluations)"),
 )
 
 

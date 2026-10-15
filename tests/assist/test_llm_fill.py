@@ -1,7 +1,7 @@
 from autoapp.assist.fields import FieldInfo
 from autoapp.assist.llm_fill import fill_unmatched, is_free_text
 from autoapp.evaluation.schema import Requirement
-from autoapp.llm.base import UsageMeter
+from autoapp.llm.base import LLMError, UsageMeter
 from autoapp.llm.fake import FakeLLM
 from autoapp.writing.prompt import JobContext, WritingContext
 
@@ -131,3 +131,41 @@ def test_reading_the_form_keeps_the_rules_values_and_prepared_texts():
     assert res.skipped == [] and len(llm.calls) == 1  # no letter-writer call for the prepared motivation
     listed = llm.calls[0][2]
     assert "id=q" in listed and "id=n" in listed and "id=m" not in listed
+
+
+def test_unknown_workplace_city_options_use_a_bounded_llm_comparison():
+    workplace = f("w", "Preferred work location", "select",
+                  options=[("k", "Kamen"), ("b", "Berlin")])
+    llm = FakeLLM(script={"form_fill": [{"choices": [{"field_id": "w", "option": "Kamen"}]}]})
+    result = fill_unmatched([workplace], client=llm, meter=UsageMeter(10), wctx=WCTX, job=JOB, facts=FACTS)
+    assert [(a.field_id, a.kind, a.value) for a in result.assignments] == [("w", "select", "k")]
+    assert result.needs_review == ["Preferred work location: Kamen"]
+    assert "Ruhrgebiet" in llm.calls[0][1][0].text
+
+
+def test_invalid_location_choice_falls_back_without_asking_the_candidate():
+    workplace = f("w", "Bevorzugter Arbeitsort", "radio",
+                  options=[("unknown", "Unknown City A"), ("second", "Unknown City B")])
+    llm = FakeLLM(script={"form_fill": [{"choices": [{"field_id": "w", "option": "not an option"}]}]})
+    result = fill_unmatched([workplace], client=llm, meter=UsageMeter(10), wctx=WCTX, job=JOB, facts=FACTS)
+    assert [(a.field_id, a.kind, a.value) for a in result.assignments] == [("w", "check", "unknown")]
+    assert result.needs_review == ["Bevorzugter Arbeitsort: Unknown City A (distance unknown; review choice)"]
+    assert result.skipped == []
+
+
+def test_location_model_failure_falls_back_to_nearest_known_city():
+    workplace = f("w", "Preferred work location", "select",
+                  options=[("unknown", "Unknown City"), ("ber", "Berlin"), ("ess", "Essen")])
+    llm = FakeLLM(script={"form_fill": [LLMError("unavailable")]})
+    result = fill_unmatched([workplace], client=llm, meter=UsageMeter(10), wctx=WCTX, job=JOB, facts=FACTS)
+    assert [(a.field_id, a.value) for a in result.assignments] == [("w", "ess")]
+    assert result.needs_review == ["Preferred work location: Essen (nearest locally recognized option; please review)"]
+
+
+def test_all_unknown_location_fallback_says_distance_is_unknown():
+    workplace = f("w", "Preferred work location", "select",
+                  options=[("first", "Unknown City A"), ("second", "Unknown City B")])
+    llm = FakeLLM(script={"form_fill": [LLMError("unavailable")]})
+    result = fill_unmatched([workplace], client=llm, meter=UsageMeter(10), wctx=WCTX, job=JOB, facts=FACTS)
+    assert [(a.field_id, a.value) for a in result.assignments] == [("w", "first")]
+    assert result.needs_review == ["Preferred work location: Unknown City A (distance unknown; review choice)"]

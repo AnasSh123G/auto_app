@@ -7,7 +7,7 @@ import dataclasses
 import pytest
 
 from autoapp.assist.fields import FieldInfo
-from autoapp.assist.mapper import FillValues, map_fields, norm, truncate_at_word
+from autoapp.assist.mapper import FillValues, fallback_location_assignment, map_fields, norm, truncate_at_word
 
 
 def mk(label: str, type: str = "text", **kw) -> FieldInfo:
@@ -117,6 +117,54 @@ def test_select_and_radio(values: FillValues) -> None:
     assert one("Land", values, type="select", options=[("x", "Frankreich")]) is None
 
 
+def test_preferred_workplace_selects_nearest_ruhrgebiet_option(values: FillValues) -> None:
+    options = [("ber", "Berlin"), ("dus", "Düsseldorf"), ("ess", "Essen (hybrid)"), ("muc", "München")]
+    select = one("Bevorzugter Arbeitsort", values, type="select", options=options)
+    radio = one("Preferred workplace", values, type="radio", options=options)
+    assert select is not None and (select.kind, select.value) == ("select", "ess")
+    assert radio is not None and (radio.kind, radio.value) == ("check", "ess")
+
+
+def test_ruhrgebiet_city_variants_are_recognized(values: FillValues) -> None:
+    options = [("ber", "Berlin"), ("gels", "Gelsenkirchen (hybrid)")]
+    assignment = one("Preferred work location", values, type="select", options=options)
+    assert assignment is not None and assignment.value == "gels"
+
+
+def test_preferred_location_is_fixed_before_llm_but_personal_city_is_not_a_workplace(values: FillValues) -> None:
+    location = mk("Wunschstandort", "select", field_id="location",
+                  options=[("b", "Berlin"), ("d", "Dortmund")])
+    home = mk("Wohnort", "select", field_id="home", options=[("b", "Berlin"), ("d", "Dortmund")])
+    result = map_fields([location, home], values)
+    assert {a.field_id: a.value for a in result.assignments} == {"location": "d", "home": "b"}
+    assert result.fixed_ids == {"location"}
+
+
+def test_unknown_workplace_options_are_left_for_geographic_comparison(values: FillValues) -> None:
+    field = mk("Where would you like to work?", "select", options=[("x", "Unknown City A"), ("y", "Unknown City B")])
+    assignment = one(field.label, values, type="select", options=field.options)
+    assert assignment is None
+
+
+def test_location_fallback_prefers_nearest_known_city_over_unknown_first_option() -> None:
+    field = mk("Where would you like to work?", "select",
+               options=[("unknown", "Unknown City"), ("ber", "Berlin"), ("ess", "Essen")])
+    assignment = fallback_location_assignment(field)
+    assert assignment is not None and assignment.value == "ess"
+
+
+@pytest.mark.parametrize("label", ["Preferred language", "Residence", "Wohnort", "Where did you work before?"])
+def test_non_workplace_location_questions_are_not_auto_selected(values: FillValues, label: str) -> None:
+    field = mk(label, "select", options=[("ber", "Berlin"), ("ess", "Essen")])
+    result = map_fields([field], values)
+    assigned = next((a for a in result.assignments if a.field_id == field.field_id), None)
+    if label == "Wohnort":
+        assert assigned is not None and assigned.value == "ber"  # profile city wins, not the Ruhrgebiet heuristic
+    else:
+        assert assigned is None
+    assert field.field_id not in result.fixed_ids
+
+
 def test_gender_only_when_provided(values: FillValues) -> None:
     assert one("Geschlecht", values, type="select", options=[("m", "männlich"), ("w", "weiblich")]) is None
     v = FillValues(gender="weiblich")
@@ -195,6 +243,35 @@ def test_work_references_and_other_documents(values: FillValues) -> None:
     other = one("Andere (Optional)", values, type="file")
     assert zeugnis is not None and zeugnis.files == [ref]
     assert other is not None and other.files == [values.bundle_pdf]
+
+
+def test_duplicate_uploads_are_suppressed_and_single_file_overflow_is_reported(values: FillValues) -> None:
+    ref = values.certificates[0]
+    values = dataclasses.replace(values, work_references=[ref], other_documents=[ref, values.bundle_pdf, values.cv])
+    ref_field = mk("Arbeitszeugnis", "file", field_id="ref")
+    other_field = mk("Weitere Dokumente", "file", field_id="other")
+    result = map_fields([other_field, ref_field], values)
+    by = {a.field_id: a for a in result.assignments}
+    assert by["ref"].files == [ref]
+    assert by["other"].files == [values.bundle_pdf]
+    assert result.upload_notes == ["Weitere Dokumente accepts one file; 1 additional document(s) could not be attached."]
+
+
+def test_other_upload_gets_all_remaining_documents_without_repeating_certificate(values: FillValues) -> None:
+    extra = values.bundle_pdf
+    values = dataclasses.replace(values, other_documents=[*values.certificates, extra])
+    certificate = mk("Zeugnisse", "file", field_id="certificates", multiple=True)
+    other = mk("Weitere Dokumente", "file", field_id="other", multiple=True)
+    result = map_fields([other, certificate], values)
+    by = {a.field_id: a for a in result.assignments}
+    assert by["certificates"].files == values.certificates
+    assert by["other"].files == [extra]
+
+
+def test_missing_other_upload_slot_is_reported(values: FillValues) -> None:
+    values = dataclasses.replace(values, other_documents=[values.bundle_pdf])
+    result = map_fields([mk("Lebenslauf", "file")], values)
+    assert result.upload_notes == ["No Other upload field was available; 1 additional document(s) could not be attached."]
 
 
 @pytest.mark.parametrize(("label", "attr"), [("Upload Urkunde", "certificates"), ("Diplom", "certificates"),

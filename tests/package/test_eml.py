@@ -51,3 +51,29 @@ def test_given_message_id_and_filename(tmp_path):
     )
     assert msg["Message-ID"] == "<fixed@b.de>"
     assert next(msg.iter_attachments()).get_filename() == "Mappe.pdf"
+
+
+def test_application_emails_remove_arbeitsagentur_links_for_any_source(tmp_path):
+    pdf = tmp_path / "Mappe.pdf"
+    pdf.write_bytes(b"x")
+    msg = build_application_email(
+        sender_name="A", sender_email="a@b.de", to="c@d.de", subject="s",
+        body="Apply at https://www.arbeitsagentur.de/jobsuche/123 or https://jobs.arbeitsagentur.de/a/b.",
+        attachment=pdf,
+    )
+    body = msg.get_body(preferencelist=("plain",))
+    assert body is not None and "arbeitsagentur.de" not in body.get_content()
+
+
+def test_extra_attachments_use_mime_types_and_deduplicate_paths(tmp_path):
+    bundle = tmp_path / "Bewerbungsmappe.pdf"
+    extra = tmp_path / "Portfolio.txt"
+    bundle.write_bytes(b"bundle")
+    extra.write_text("portfolio", encoding="utf-8")
+    msg = build_application_email(
+        sender_name="A", sender_email="a@b.de", to="c@d.de", subject="s", body="b",
+        attachment=bundle, extra_attachments=[bundle, extra, extra],
+    )
+    attachments = list(msg.iter_attachments())
+    assert [part.get_filename() for part in attachments] == ["Bewerbungsmappe.pdf", "Portfolio.txt"]
+    assert [part.get_content_type() for part in attachments] == ["application/pdf", "text/plain"]

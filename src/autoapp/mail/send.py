@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import fnmatch
 import json
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
@@ -144,8 +145,12 @@ def check_eligibility(
     return Eligibility(ok=not reasons, reasons=reasons, flag_review=flag)
 
 
-def reconcile_pending(repo: Repo, now: datetime | None = None) -> list[str]:
-    """Jobs whose send was started but never confirmed become ``send_unconfirmed``."""
+def reconcile_pending(repo: Repo, now: datetime | None = None, *,
+                      job_ids: Collection[str] | None = None) -> list[str]:
+    """Mark stale sends unconfirmed, optionally restricted to selected jobs (an empty collection selects none)."""
+    selected = frozenset(job_ids) if job_ids is not None else None
+    if selected == frozenset():
+        return []
     now = now or datetime.now(UTC)
     cutoff = now_iso(now - STALE_AFTER)
     rows = repo.conn.execute(
@@ -153,6 +158,8 @@ def reconcile_pending(repo: Repo, now: datetime | None = None) -> list[str]:
     ).fetchall()
     changed = []
     for r in rows:
+        if selected is not None and r["job_id"] not in selected:
+            continue
         job = repo.get_job(r["job_id"])
         if job is not None and job["status"] != Status.SEND_UNCONFIRMED.value:
             repo.transition(r["job_id"], Status.SEND_UNCONFIRMED, note="send started but never confirmed; check Sent")

@@ -8,6 +8,8 @@ def test_defaults_per_task():
     s = LLMSettings()
     assert s.resolve("evaluate") == ("anthropic", "claude-sonnet-5-5", "low")
     assert s.resolve("write") == ("anthropic", "claude-sonnet-5-5", "medium")
+    assert s.resolve("judge")[:2] == s.resolve("evaluate")[:2]
+    assert s.resolve("judge")[2] == "medium"
 
 
 def test_task_override():
@@ -31,10 +33,12 @@ def test_every_task_has_its_own_model_and_the_old_single_default_still_loads():
         "evaluate": {"provider": "openrouter", "model": "openai/gpt-6-luna"},
         "write": {"provider": "openrouter", "model": "anthropic/claude-haiku-5.5", "effort": "high"},
         "form_fill": {"provider": "anthropic", "model": "claude-sonnet-5-5"},
-        "form_find": {"provider": "openrouter", "model": "openai/gpt-6-luna"}})
-    assert [s.resolve(t) for t in ("evaluate", "write", "form_fill", "form_find")] == [
+        "form_find": {"provider": "openrouter", "model": "openai/gpt-6-luna"},
+        "judge": {"provider": "openrouter", "model": "openai/gpt-6-luna"}})
+    assert [s.resolve(t) for t in ("evaluate", "write", "form_fill", "form_find", "judge")] == [
         ("openrouter", "openai/gpt-6-luna", "low"), ("openrouter", "anthropic/claude-haiku-5.5", "high"),
-        ("anthropic", "claude-sonnet-5-5", "low"), ("openrouter", "openai/gpt-6-luna", "low")]
+        ("anthropic", "claude-sonnet-5-5", "low"), ("openrouter", "openai/gpt-6-luna", "low"),
+        ("openrouter", "openai/gpt-6-luna", "medium")]
     # the config of earlier versions: one default plus overrides for some tasks
     old = LLMSettings.model_validate({"provider": "openrouter", "model": "a/b", "effort": "medium",
                                       "tasks": {"evaluate": {"provider": "google", "model": "g"}}})
@@ -42,6 +46,7 @@ def test_every_task_has_its_own_model_and_the_old_single_default_still_loads():
     assert old.resolve("write") == ("openrouter", "a/b", "medium")
     assert old.resolve("form_fill") == ("openrouter", "a/b", "medium")
     assert old.resolve("form_find") == ("google", "g", "low")  # find form used to follow the evaluate model
+    assert old.resolve("judge") == ("google", "g", "medium")
     assert not hasattr(old, "provider")
 
 

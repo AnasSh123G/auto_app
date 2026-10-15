@@ -281,8 +281,12 @@ def form_actions(tctx: typer.Context, p: Prompter, job: sqlite3.Row) -> None:
             url = job["application_url"] or job["job_url"]
             _, app = _app_row(tctx.obj.workspace, job["id"])
             if url:
-                webbrowser.open(url)
-                p.say(f"Opened {url} in your browser. Find the application form there, then paste its address here.")
+                if webbrowser.open(url) is False:
+                    p.say(f"Could not launch your default browser. Open this address manually: {url}")
+                else:
+                    p.say(f"Opened {url} in your browser. Find the application form there, then paste its address here.")
+            else:
+                p.say("No job or application address is saved for this position.")
             if app and app["folder"]:
                 p.say(f"Your prepared answers: {Path(app['folder']) / 'apply.html'}")
             default = "address"
@@ -637,7 +641,7 @@ def section_summaries(ws: Workspace) -> dict[str, str]:
         "salary": "see profile.yaml",
         "search": f"{len(c.search_profiles)} profiles, {keywords} keywords",
         "sources": ", ".join(sources) or "none",
-        "llm": ", ".join(f"{t}: {c.llm.resolve(t)[1]}" for t in ("evaluate", "write", "form_fill", "form_find")),
+        "llm": ", ".join(f"{t}: {c.llm.resolve(t)[1]}" for t in ("evaluate", "write", "form_fill", "form_find", "judge")),
         "email": (f"sending from {c.mail.sending.address}" if c.mail.sending else "no sending mailbox")
                  + f", default mode {c.run.default_mode}",
         "writing": f"language {c.writing.language}, max {c.writing.max_words} words",

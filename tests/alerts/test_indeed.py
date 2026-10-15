@@ -143,7 +143,7 @@ def test_bare_job_links_keep_readable_keys_and_distinct_employers():
     assert cards[1].url is None and cards[2].url is None
 
 
-def test_current_alert_stores_no_click_tokens_and_calls_no_extraction_llm(tmp_path):
+def test_current_alert_stores_no_click_tokens_and_only_reviews_redacted_excerpt(tmp_path):
     from autoapp.llm.fake import FakeLLM
     from autoapp.sources.alerts import FakeMailbox
     from autoapp.sources.alerts.excerpt import Redactor, card_excerpts
@@ -161,11 +161,12 @@ def test_current_alert_stores_no_click_tokens_and_calls_no_extraction_llm(tmp_pa
     assert all("SECRET" not in e and "alid=" not in e for e in excerpts)
     ctx = RunContext.open(make_workspace(tmp_path, alert_mode="search_first"))
     ctx.config.sources.alerts.llm_fallback = True
-    client = FakeLLM()
+    client = FakeLLM({"alert_extract": [{"jobs": []}]})
     ctx.clients["alert_extract"] = client
     summary = run_search(ctx, api_sources=[], mailbox=FakeMailbox([("<indeed-alert@x>", msg)]))
     assert summary.alert_cards == 14 and summary.alert_llm_extracted == 0
-    assert client.calls == []
+    [(_, _, user)] = client.calls_for("alert_extract")
+    assert "SECRET_CLICK_TOKEN" not in user and "SECRET_ACCOUNT" not in user and "alid=" not in user
     rows = ctx.conn.execute("SELECT raw, url FROM job_sources WHERE source = 'indeed-alert'").fetchall()
     assert len(rows) == 14
     for row in rows:

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from autoapp.assist.fields import FieldInfo
+from autoapp.discovery.ingest import distance_km
 
 if TYPE_CHECKING:
     from autoapp.config.models import Profile
@@ -135,6 +136,7 @@ class MappingResult:
     left_empty: list[FieldInfo] = field(default_factory=list)
     # Fields answered by a fixed rule (how found, referral, prior employment): never handed to the model.
     fixed_ids: set[str] = field(default_factory=set)
+    upload_notes: list[str] = field(default_factory=list)
 
 
 # ------------------------------------------------------------------------ normalisation
@@ -519,10 +521,83 @@ def _fixed_assignment(key: str, f: FieldInfo, values: FillValues) -> Assignment 
     return Assignment(f.field_id, "fill", truncate_at_word(text, f.maxlength))
 
 
+_WORK_LOCATION = re.compile(
+    r"\b(?:preferred|desired)\s+(?:work\s+)?(?:location|workplace|office|site|city)\b|"
+    r"\b(?:location|workplace|office)\s+preference\b|"
+    r"\b(?:work|working|job|office)\s+(?:location|place|site|city)\b|"
+    r"\b(?:arbeitsort|wunschort|wunschstandort|einsatzort|standort|niederlassung|einsatzgebiet)\b|"
+    r"\b(?:bevorzugter|bevorzugte|gewuenschter|gewuenschte)\s+(?:arbeitsort|standort|einsatzort)\b", re.I
+)
+_WORKPLACE_QUESTION = re.compile(
+    r"\bwhere (?:would|do) you (?:like|want) to work\b|\bwhich city\b.{0,60}\bwork\b|"
+    r"\bwo (?:moechten|wuerden) sie\b.{0,60}\b(?:arbeiten|taetig sein)\b", re.I
+)
+_EMPTY_LOCATION_OPTIONS = frozenset({"please select", "select", "choose", "bitte waehlen", "bitte auswaehlen"})
+
+
+def _preferred_location(f: FieldInfo) -> Assignment | None:
+    """Choose the offered workplace closest to the Ruhrgebiet, when a location question has choices."""
+    if not is_preferred_location(f):
+        return None
+    ranked = _ranked_location_options(f)
+    if not ranked:
+        return None
+    known = [(distance, value) for distance, value in ranked if distance is not None]
+    if known and all(distance is not None for distance, _ in ranked):
+        value = min(known, key=lambda item: item[0])[1]
+    elif len(ranked) == 1:
+        value = ranked[0][1]
+    else:
+        # Unknown cities are handled by the bounded form-fill location chooser.
+        return None
+    return Assignment(f.field_id, "select" if f.type == "select" else "check", value)
+
+
+def is_preferred_location(f: FieldInfo) -> bool:
+    """Whether a select/radio field explicitly asks where the candidate prefers to work."""
+    if f.type not in ("select", "radio") or not f.options:
+        return False
+    question = " ".join((f.label, f.name, f.html_id, f.placeholder))
+    return bool(_WORK_LOCATION.search(norm(question)) or _WORKPLACE_QUESTION.search(norm(question)))
+
+
+def _ranked_location_options(f: FieldInfo) -> list[tuple[float | None, str]]:
+    return [(distance_km(text or value, "Ruhrgebiet"), value)
+            for value, text in f.options if value and norm(text or value) not in _EMPTY_LOCATION_OPTIONS]
+
+
+def fallback_location_assignment(f: FieldInfo) -> Assignment | None:
+    """Nearest locally known workplace, or first non-placeholder when no city can be compared."""
+    if not is_preferred_location(f):
+        return None
+    options = _ranked_location_options(f)
+    if not options:
+        return None
+    known = [(distance, value) for distance, value in options if distance is not None]
+    value = min(known, key=lambda item: item[0])[1] if known else options[0][1]
+    return Assignment(f.field_id, "select" if f.type == "select" else "check", value)
+
+
+def fallback_location_notice(f: FieldInfo, value: str | None) -> str:
+    """Explain when the automatic fallback could not establish actual Ruhrgebiet distance."""
+    distance = next((distance for distance, option in _ranked_location_options(f) if option == value), None)
+    if distance is None:
+        return " (distance unknown; review choice)"
+    return " (nearest locally recognized option; please review)"
+
+
+def location_needs_model(f: FieldInfo) -> bool:
+    """True when an offered city is unknown to the local map and another option competes with it."""
+    if not is_preferred_location(f):
+        return False
+    options = _ranked_location_options(f)
+    return len(options) > 1 and any(distance is None for distance, _ in options)
+
+
 # ------------------------------------------------------------------------------ mapping
 
 
-def _file_assignment(key: str, f: FieldInfo, values: FillValues) -> Assignment | None:
+def _file_candidates(key: str, f: FieldInfo, values: FillValues) -> list[Path]:
     files: list[Path] = []
     if key == "cover_letter" and values.cover_letter_pdf:
         files = [values.cover_letter_pdf]
@@ -536,13 +611,22 @@ def _file_assignment(key: str, f: FieldInfo, values: FillValues) -> Assignment |
         files = list(values.other_documents)
         if not files and f.multiple:  # the old behaviour of "further documents": the certificates
             files = [*values.certificates, *values.work_references]
+    elif key == "generic_upload" and f.multiple:
+        files = [values.cv, values.cover_letter_pdf, *values.certificates, *values.work_references,
+                 *values.work_samples, *values.other_documents]
+        files = [p for p in files if p is not None]
     elif key in ("certificates", "generic_upload"):
-        if key == "certificates" and f.multiple and (values.certificates or values.work_references):
+        if key == "certificates" and (values.certificates or values.work_references):
             files = [*values.certificates, *values.work_references]
         elif values.bundle_pdf:
             files = [values.bundle_pdf]
+    return list(dict.fromkeys(files))
+
+
+def _file_assignment(key: str, f: FieldInfo, values: FillValues) -> Assignment | None:
+    files = _file_candidates(key, f, values)
     if not f.multiple:
-        files = files[:1]  # a single-file input takes one file; the others can be added by hand
+        files = files[:1]
     return Assignment(f.field_id, "upload", files=files) if files else None
 
 
@@ -599,8 +683,19 @@ def map_fields(fields: list[FieldInfo], values: FillValues) -> MappingResult:
     file_inputs = [f for f in fields if f.type == "file"]
     only_one_file = len(file_inputs) == 1
     result = MappingResult()
+    upload_fields: list[FieldInfo] = []
+    upload_candidates: dict[str, list[Path]] = {}
+    upload_priority: dict[str, int] = {}
+    has_other_slot = False
     for f in fields:
         is_file = f.type == "file"
+        if is_file:
+            upload_fields.append(f)
+        preferred = None if is_file else _preferred_location(f)
+        if preferred is not None:
+            result.assignments.append(preferred)
+            result.fixed_ids.add(f.field_id)
+            continue
         fixed = None if is_file else next(
             (k for k in (_fixed_key(f.label, values.company), _fixed_key(_norm_attr(f.name), values.company),
                          _fixed_key(_norm_attr(f.html_id), values.company), _fixed_key(f.placeholder, values.company))
@@ -623,11 +718,19 @@ def map_fields(fields: list[FieldInfo], values: FillValues) -> MappingResult:
             key = _type_key(f)
         if key == "generic_upload" and not only_one_file:
             key = None
+        if key == "other_documents" or (key == "generic_upload" and f.multiple):
+            has_other_slot = True
         if is_file and key is None and only_one_file and not f.label.strip():
             key = "generic_upload"
 
         assignment: Assignment | None = None
         if key is not None:
+            if is_file:
+                upload_candidates[f.field_id] = _file_candidates(key, f, values)
+                upload_priority[f.field_id] = {
+                    "cv": 0, "cover_letter": 0, "work_references": 1, "certificates": 2,
+                    "work_samples": 2, "other_documents": 3, "generic_upload": 4,
+                }.get(key, 4)
             assignment = _file_assignment(key, f, values) if is_file else _text_assignment(key, f, values)
         if assignment is None and not is_file and f.type != "checkbox":
             assignment = _standard_answer(f, values)
@@ -635,4 +738,29 @@ def map_fields(fields: list[FieldInfo], values: FillValues) -> MappingResult:
             result.unmatched.append(f)
         else:
             result.assignments.append(assignment)
+
+    # A document can only be uploaded once, even when a site has overlapping generic and dedicated inputs.
+    seen: set[Path] = set()
+    upload_assignments = [a for a in result.assignments if a.kind == "upload"]
+    for assignment in sorted(upload_assignments, key=lambda a: upload_priority.get(a.field_id, 4)):
+        f = next((field for field in upload_fields if field.field_id == assignment.field_id), None)
+        candidates = upload_candidates.get(assignment.field_id, assignment.files)
+        available = [p for p in candidates if p.resolve() not in seen]
+        unique = []
+        for path in available:
+            identity = path.resolve()
+            if len(unique) < (len(available) if f and f.multiple else 1):
+                unique.append(path)
+                seen.add(identity)
+        assignment.files = unique
+        if f and not f.multiple and len(available) > len(unique):
+            omitted = len(available) - len(unique)
+            result.upload_notes.append(
+                f"{f.label or 'File upload'} accepts one file; {omitted} additional document(s) could not be attached."
+            )
+    result.assignments = [a for a in result.assignments if a.kind != "upload" or a.files]
+    if values.other_documents and not has_other_slot:
+        result.upload_notes.append(
+            f"No Other upload field was available; {len(values.other_documents)} additional document(s) could not be attached."
+        )
     return result

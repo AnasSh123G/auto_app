@@ -11,6 +11,7 @@ import json
 from dataclasses import dataclass, field
 
 from autoapp.db.status import Status
+from autoapp.evaluation.judge import SAMPLE_EVERY, judge_evaluation
 from autoapp.evaluation.prompt import JobView, build_system, build_user
 from autoapp.evaluation.rules import finalize
 from autoapp.evaluation.schema import EvaluationResult
@@ -32,6 +33,13 @@ class EvaluateSummary:
     waiting: int = 0
     errors: list[str] = field(default_factory=list)
     stopped: str | None = None
+    judge_reviewed: int = 0
+    judge_failed: int = 0
+    judge_score_total: int = 0
+
+    @property
+    def judge_score(self) -> float | None:
+        return self.judge_score_total / self.judge_reviewed if self.judge_reviewed else None
 
 
 def _contact_fields(ctx: RunContext, job_id: str) -> str | None:
@@ -65,7 +73,7 @@ def evaluate_jobs(ctx: RunContext, job_ids: list[str] | None = None, *, force: b
             jobs = [j for j in jobs if j["status"] == Status.NEW.value]
     else:
         jobs = repo.alert_jobs_first(repo.jobs_by_status(Status.NEW))
-    jobs = [j for j in jobs if (j["description"] or "").strip()]
+    jobs = [j for j in ctx.jobs_for_sources(jobs) if (j["description"] or "").strip()]
     limit = ctx.config.limits.max_evaluate_per_run
     if len(jobs) > limit:
         summary.waiting += len(jobs) - limit
@@ -110,7 +118,7 @@ def evaluate_jobs(ctx: RunContext, job_ids: list[str] | None = None, *, force: b
         final = finalize(result, profile=ctx.profile, apply_threshold=thresholds.apply_threshold,
                          maybe_threshold=thresholds.maybe_threshold,
                          source_texts=[job["description"], contact])
-        repo.add_evaluation(job["id"], fit_score=final.fit_score, decision=final.decision,
+        evaluation_id = repo.add_evaluation(job["id"], fit_score=final.fit_score, decision=final.decision,
                             provider=client.provider, model=client.model, payload=final.model_dump(mode="json"))
         updates = {}
         r = final.result
@@ -134,4 +142,15 @@ def evaluate_jobs(ctx: RunContext, job_ids: list[str] | None = None, *, force: b
             summary.review += 1
         else:
             summary.skipped += 1
+        audit_due = (ctx.evaluation_count + 1) % SAMPLE_EVERY == 0
+        audit = judge_evaluation(ctx, job, evaluation_id, result, final, contact)
+        if audit:
+            summary.judge_reviewed += 1
+            summary.judge_score_total += audit.score
+        elif audit_due:
+            summary.judge_failed += 1
+    if summary.judge_reviewed or summary.judge_failed:
+        score = f"{summary.judge_score:.1f}/100" if summary.judge_score is not None else "unavailable"
+        ctx.emit("judge_summary", detail=f"evaluator performance {score} (mean of {summary.judge_reviewed} "
+                 f"sampled reviews; {summary.judge_failed} unavailable; sampling every 20 successful evaluations)")
     return summary

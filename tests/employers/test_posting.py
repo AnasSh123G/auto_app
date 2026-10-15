@@ -5,9 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from autoapp.discovery.ingest import card_to_raw, ingest
+from autoapp.employers.crawl import RunBudget
 from autoapp.employers.hints import build_search
 from autoapp.employers.posting import judge
-from autoapp.employers.service import find_own_ads, run_discovery, seed_arbeitsagentur_misses
+from autoapp.employers.service import (
+    _page_budget_message,
+    find_own_ads,
+    run_discovery,
+    seed_arbeitsagentur_misses,
+)
 from autoapp.employers.verify import Candidate, candidate_origins
 from autoapp.sources.alerts.models import AlertCard
 from autoapp.steps.context import RunContext
@@ -125,6 +131,16 @@ def test_what_counts_as_the_ad():
                  title="Software Engineer (m/w/d)").reason == "CHEFS CULINAR is not named on the page"
     closed = page.replace("<h2>", "<p>Diese Stelle ist leider nicht mehr verfügbar.</p><h2>")
     assert "nicht mehr verfügbar" in judge(closed, OWN, company="CHEFS CULINAR", title="Software Engineer (m/w/d)").reason
+
+
+def test_page_cap_message_names_dynamic_cap_usage_and_that_pages_are_not_ai_credits(tmp_path):
+    ctx, _, _ = _setup(tmp_path)
+    cfg = ctx.config.sources.employer_careers
+    cfg.max_pages_per_run = 7
+    reason = _page_budget_message(cfg, RunBudget(pages=0, openings=1))
+    assert "sources.employer_careers.max_pages_per_run=7" in reason
+    assert "7/7 employer-site page reads" in reason and "not AI credits" in reason
+    ctx.close()
 
 
 def test_company_names_and_long_hyphenated_titles_survive_the_query_cleaning():
