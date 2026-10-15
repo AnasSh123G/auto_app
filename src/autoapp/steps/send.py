@@ -20,7 +20,7 @@ from pathlib import Path
 from autoapp.db.status import Status
 from autoapp.mail.connection import MailAuthError, Mailer, MailError, MailSentNoCopyError, SmtpMailer
 from autoapp.mail.send import check_eligibility, reconcile_pending, send_application
-from autoapp.package.email_message import NoStoredEmail, application_email
+from autoapp.package.email_message import BUILD_ERRORS, NoStoredEmail, application_email, build_failed_reason
 from autoapp.package.eml import load_message  # noqa: F401  (re-exported; tests import it from here)
 from autoapp.package.pdf import PdfRenderer
 from autoapp.steps.context import RunContext
@@ -100,9 +100,11 @@ def send_applications(
         job = repo.get_job(job_id)
         if job is not None and not ctx.jobs_for_sources([job]):
             continue
+        built_ok = False
         try:
             # The bundle must exist while eligibility reads its size and while the mail is handed over.
             with application_email(ctx, job_id, renderer_factory=renderer_factory) as built:
+                built_ok = True
                 elig = check_eligibility(repo, job_id, policy_, bundle=built.bundle, manual=manual)
                 job_row = repo.get_job(job_id)
                 if not elig.ok:
@@ -143,6 +145,13 @@ def send_applications(
                         break  # the login will fail for every other job too
         except NoStoredEmail:
             reason = _no_stored_email_reason(ctx, job_id)
+            s.not_sent[job_id] = [reason]
+            if job is not None:
+                ctx.emit("email_held", job, detail=reason[:200])
+        except BUILD_ERRORS as err:
+            if built_ok:  # raised while sending, not while building
+                raise
+            reason = build_failed_reason(err)
             s.not_sent[job_id] = [reason]
             if job is not None:
                 ctx.emit("email_held", job, detail=reason[:200])
@@ -257,9 +266,11 @@ def send_test_email(ctx: RunContext, job_id: str | None = None, *, mailer: Maile
             return SelfTestResult(error=f"unknown job {job_id}")
         if not ctx.jobs_for_sources([job]):
             return SelfTestResult(error=f"job {job_id} is excluded by this run source mode")
+        built_ok = False
         try:
             # The bundle must exist while the message is handed over.
             with application_email(ctx, job_id, renderer_factory=renderer_factory) as built:
+                built_ok = True
                 original = built.message
                 recipient = str(original["To"] or "").strip()
                 if not recipient or "@" not in recipient:
@@ -282,6 +293,10 @@ def send_test_email(ctx: RunContext, job_id: str | None = None, *, mailer: Maile
                     result.error = str(err)
         except NoStoredEmail as err:
             return SelfTestResult(error=str(err))
+        except BUILD_ERRORS as err:
+            if built_ok:  # raised while sending, not while building
+                raise
+            return SelfTestResult(error=f"job {job_id}: {build_failed_reason(err)}")
     return result
 
 
@@ -325,9 +340,11 @@ def send_test_applications(ctx: RunContext, *, mailer: Mailer | None = None,
         if sample is not None and len(s.sent) + len(s.would_send) >= sample.test_emails:
             break  # the quick test sends at most this many test emails
         job = repo.get_job(job_id)
+        built_ok = False
         try:
             # The bundle must exist while eligibility reads its size and while the mail is handed over.
             with application_email(ctx, job_id, renderer_factory=renderer_factory) as built:
+                built_ok = True
                 elig = check_eligibility(repo, job_id, ctx.config.email, bundle=built.bundle)
                 reasons = list(elig.reasons)
                 if sample is not None and sample.ignore_threshold:
@@ -364,6 +381,12 @@ def send_test_applications(ctx: RunContext, *, mailer: Mailer | None = None,
                 ctx.emit("test_sent", job, detail=f"{own} (a real run would send to {recipient})")
         except NoStoredEmail:
             reason = _no_stored_email_reason(ctx, job_id)
+            s.not_sent[job_id] = [reason]
+            ctx.emit("email_held", job, detail="would not be sent: " + reason[:150])
+        except BUILD_ERRORS as err:
+            if built_ok:  # raised while sending, not while building
+                raise
+            reason = build_failed_reason(err)
             s.not_sent[job_id] = [reason]
             ctx.emit("email_held", job, detail="would not be sent: " + reason[:150])
     return s

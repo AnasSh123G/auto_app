@@ -39,6 +39,15 @@ class NoStoredEmail(ValueError):
     """The job has neither stored letter text nor an email.eml."""
 
 
+# Raised while building one job's email (a stored letter that does not parse, a document file
+# that is gone); callers record them for that job and go on with the next one.
+BUILD_ERRORS = (ValueError, OSError)
+
+
+def build_failed_reason(err: Exception) -> str:
+    return f"the email could not be built: {err}"
+
+
 def parse_cover_letter_md(text: str, language: str) -> CoverLetter:
     """Inverse of ``CoverLetter.to_markdown``: subject, salutation, paragraphs, closing, signature."""
     lines = text.strip().splitlines()
