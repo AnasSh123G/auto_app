@@ -272,8 +272,8 @@ bottom**. The statistics stay in view the whole time, from the search until the 
 │ models: evaluate: openrouter openai/gpt-6-luna (low)   calls 9 · tokens 31,000     │
 ╰────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Feed ─────────────────────────────────────────────────────────────────────────────╮
-│ 14:01:00 APPROVED     FEAG GmbH, AI Engineer   score 82                            │
-│ 14:02:40 DRAFT SAVED  FEAG GmbH, AI Engineer   -> hr@acme.example                  │
+│ 14:01:00 APPROVED     Acme GmbH, AI Engineer   score 82                            │
+│ 14:02:40 DRAFT SAVED  Acme GmbH, AI Engineer   -> hr@acme.example                  │
 ╰────────────────────────────────────────────────────────────────────────────────────╯
 ```
 

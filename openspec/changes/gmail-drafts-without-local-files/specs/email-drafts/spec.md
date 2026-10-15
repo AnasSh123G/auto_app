@@ -68,7 +68,7 @@ A failure while saving drafts SHALL leave the affected job `prepared` with its l
 An email job that is `prepared`, has an application folder containing `email.eml` and has no saved draft SHALL be drafted from that `email.eml`, whether or not it is flagged `needs_review`. After the draft is confirmed in the Drafts folder and recorded, the system SHALL store the letter text, subject, email text and Message-ID for the job and delete the folder, but only if the folder lies inside the workspace's applications directory. If drafting fails, the folder SHALL be kept.
 
 #### Scenario: Folder from an earlier run
-- **WHEN** a review-mode run finds a `prepared` email job whose folder `application_feag-gmbh_ai-digital-solutions-engineer_<job-a>` holds `email.eml`
+- **WHEN** a review-mode run finds a `prepared` email job whose folder `application_acme-gmbh_ai-digital-solutions-engineer_<job-a>` holds `email.eml`
 - **THEN** a draft with the same recipient, subject, text and attachments is saved in Gmail, the job becomes `drafted`, and the folder no longer exists
 
 #### Scenario: Folder kept on failure

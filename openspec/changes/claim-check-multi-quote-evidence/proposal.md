@@ -2,7 +2,7 @@
 
 ## Why
 
-The claim check that guards every cover letter flags almost every letter as `needs_review`, although the letters invent nothing. On 2026-10-15 the letters for FEAG (`<job-a>`, German) and Cyber Valley (`<job-c>`, English) were regenerated with the configured model and each claim was checked against the user's real CV. Nine of 17 claims were flagged, and all nine were backed by the CV or by data the app itself supplied:
+The claim check that guards every cover letter flags almost every letter as `needs_review`, although the letters invent nothing. On 2026-10-15 the letters for Acme (`<job-a>`, German) and Beispiel Werk (`<job-c>`, English) were regenerated with the configured model and each claim was checked against the user's real CV. Nine of 17 claims were flagged, and all nine were backed by the CV or by data the app itself supplied:
 
 - **7 of 9: quotes joined from several CV lines.** One sentence of a letter usually combines facts from several CV lines. The model quotes each line word for word and joins the quotes with a line break or `; ` (example: `Umsetzung neuer Anforderungen und Fehlerbehebung im Bereich der Backend-Programmierung; Erstellung von Softwaretests (inklusive pytest)`). Every part is in the CV, but `src/autoapp/writing/claims.py::check_claims` only accepts the whole evidence as one continuous passage.
 - **1 of 9: a fact the app supplies.** "Ich kann ab dem 01.11.2026 starten" quotes the app's own request line "If availability fits naturally, the candidate can start: 01.11.2026" (`writing/prompt.py::build_user`), which is not among the accepted sources. A claim tagged with the wrong source (an `instructions` claim whose quote is in the profile) fails the same way.

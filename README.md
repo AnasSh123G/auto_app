@@ -122,12 +122,12 @@ During an interactive `autoapp run` the screen becomes a live view: run statisti
 ╭─ Feed (f: emails and forms only) ────────────────────────────────────────────────────────────────╮
 │ 14:00:05 SEARCH        arbeitsagentur: 50 found, 50 new, 0 duplicates, 14 filtered               │
 │ 14:00:09 SEARCH        alerts: 19 found, 15 new, 4 duplicates, 0 filtered                        │
-│ 14:01:00 APPROVED    FEAG GmbH, AI & Digital Solutions Engineer  score 82                        │
-│ 14:01:10 SKIPPED     genese.de GmbH, Software-Entwickler  score 25                               │
-│ 14:01:20 APPROVED    Delivery Hero SE, Fullstack Engineer I  score 82                            │
-│ 14:02:00 FOLDER SAVED FEAG GmbH, AI & Digital Solutions Engineer  application_feag-gmbh_ai-digi…  │
-│ 14:02:30 FOLDER SAVED Delivery Hero SE, Fullstack Engineer I  application_delivery-hero-se_full…  │
-│ 14:02:40 DRAFT SAVED FEAG GmbH, AI & Digital Solutions Engineer  → hr@firma.example (in [Gmail…  │
+│ 14:01:00 APPROVED    Acme GmbH, AI & Digital Solutions Engineer  score 82                        │
+│ 14:01:10 SKIPPED     Muster-IT GmbH, Software-Entwickler  score 25                               │
+│ 14:01:20 APPROVED    Beispiel Werk SE, Fullstack Engineer I  score 82                            │
+│ 14:02:00 FOLDER SAVED Acme GmbH, AI & Digital Solutions Engineer  application_acme-gmbh_ai-digi…  │
+│ 14:02:30 FOLDER SAVED Beispiel Werk SE, Fullstack Engineer I  application_beispiel-werk-se_full…  │
+│ 14:02:40 DRAFT SAVED Acme GmbH, AI & Digital Solutions Engineer  → hr@firma.example (in [Gmail…  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 q: hide this view (the run continues)   f: filter the feed
 ```
