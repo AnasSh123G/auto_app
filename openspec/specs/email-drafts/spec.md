@@ -13,8 +13,8 @@ The system SHALL save a prepared email application as a draft by adding it over 
 - **THEN** opening it in the mail program shows the same To address, subject, text and attachment as `email.eml`, and the mailbox's Sent folder is unchanged
 
 #### Scenario: Recipient address
-- **WHEN** the prepared email is addressed to `bewerbung@genese.de`
-- **THEN** the draft's To field is `bewerbung@genese.de`, and the address was found verbatim in the ad
+- **WHEN** the prepared email is addressed to `bewerbung@employer-four.example`
+- **THEN** the draft's To field is `bewerbung@employer-four.example`, and the address was found verbatim in the ad
 
 ### Requirement: Finding the Drafts folder
 The Drafts folder SHALL be found with the server's special-use attribute for drafts. If that is not offered, the system SHALL try `Drafts` and `[Gmail]/Drafts`. The user SHALL be able to name the folder with `mail.sending.drafts_folder`, which SHALL take priority. If no folder can be found, drafting SHALL fail with a message that names the setting to fill in, and no email SHALL be sent as a fallback.

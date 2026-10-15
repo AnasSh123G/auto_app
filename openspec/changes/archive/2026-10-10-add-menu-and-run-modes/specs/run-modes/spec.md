@@ -88,8 +88,8 @@ The letter text and the attachment SHALL be unchanged. A test run SHALL NOT crea
 - **THEN** one test email in the same format is sent for that job without running the other steps
 
 #### Scenario: Banner in the text
-- **WHEN** the user opens a test email for an application addressed to `bewerbung@genese.de`
-- **THEN** its first line reads "This email is what would be sent to bewerbung@genese.de in a real run." and the letter follows
+- **WHEN** the user opens a test email for an application addressed to `bewerbung@employer-four.example`
+- **THEN** its first line reads "This email is what would be sent to bewerbung@employer-four.example in a real run." and the letter follows
 
 ### Requirement: Forms are prepared the same way in every mode
 In every mode, online-form applications SHALL receive the application package plus bounded GET-only finding under `application-form-finding`, including test mode and run dry-run. The run SHALL NOT launch a browser, fill, upload or submit. After an interactive run that prepared form applications, the program SHALL show the "Finish forms" list directly, with "Not now" as the default, and SHALL ask nothing before it. Only `forms --dry-run` SHALL be strictly read-only with no finding requests.

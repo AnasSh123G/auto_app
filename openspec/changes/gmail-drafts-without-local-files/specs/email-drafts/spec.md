@@ -10,8 +10,8 @@ The system SHALL save a prepared email application as a draft by adding it over 
 - **THEN** opening it in the mail program shows the stored To address, subject and email text, `Bewerbungsmappe.pdf` whose first page is the cover letter, and every other selected document as an attachment, and the mailbox's Sent folder is unchanged
 
 #### Scenario: Recipient address
-- **WHEN** the prepared email is addressed to `bewerbung@genese.de`
-- **THEN** the draft's To field is `bewerbung@genese.de`, and the address was found verbatim in the ad
+- **WHEN** the prepared email is addressed to `bewerbung@employer-four.example`
+- **THEN** the draft's To field is `bewerbung@employer-four.example`, and the address was found verbatim in the ad
 
 #### Scenario: Nothing is left on disk
 - **WHEN** a draft is saved, or saving it fails
@@ -68,7 +68,7 @@ A failure while saving drafts SHALL leave the affected job `prepared` with its l
 An email job that is `prepared`, has an application folder containing `email.eml` and has no saved draft SHALL be drafted from that `email.eml`, whether or not it is flagged `needs_review`. After the draft is confirmed in the Drafts folder and recorded, the system SHALL store the letter text, subject, email text and Message-ID for the job and delete the folder, but only if the folder lies inside the workspace's applications directory. If drafting fails, the folder SHALL be kept.
 
 #### Scenario: Folder from an earlier run
-- **WHEN** a review-mode run finds a `prepared` email job whose folder `application_feag-gmbh_ai-digital-solutions-engineer_537eab` holds `email.eml`
+- **WHEN** a review-mode run finds a `prepared` email job whose folder `application_feag-gmbh_ai-digital-solutions-engineer_<job-a>` holds `email.eml`
 - **THEN** a draft with the same recipient, subject, text and attachments is saved in Gmail, the job becomes `drafted`, and the folder no longer exists
 
 #### Scenario: Folder kept on failure

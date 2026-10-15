@@ -191,5 +191,5 @@ def remove_application_folder(ctx, folder: Path) -> bool:
 ## Migration Plan
 
 1. Migration 10 runs automatically when the app opens the database (`open_db` → `migrate`); it only adds nullable columns.
-2. The next review-mode run drafts the three old `prepared` email jobs (`537eab`, `bdc372`, `6a1e45`) from their `email.eml` and deletes their folders.
+2. The next review-mode run drafts the three old `prepared` email jobs (`<job-a>`, `<job-b>`, `<job-c>`) from their `email.eml` and deletes their folders.
 3. Rollback: revert the merge commit. Old code ignores the new columns; jobs prepared draft-only would have no folder, so old code would report "email.eml is missing" for them — run `autoapp prepare --job <id> --force` after a rollback.
