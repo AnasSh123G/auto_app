@@ -19,10 +19,12 @@ from autoapp.writing.lint import fix_dashes, lint
 from autoapp.writing.prompt import (
     JobContext,
     WritingContext,
+    app_facts,
     bridgeable_candidates,
     build_rewrite,
     build_system,
     build_user,
+    evidence_sources,
 )
 from autoapp.writing.schema import CoverLetter, FreeTextAnswer, LetterDraft
 
@@ -97,7 +99,8 @@ class LetterWriter:
 
         claim_problems = check_claims(
             draft.claims,
-            sources={"cv": wctx.cv_text, "profile": wctx.profile_text, "instructions": wctx.instructions},
+            sources=evidence_sources(wctx, job),
+            app_facts=app_facts(job),
             bridgeable=bridgeable_candidates(job),
             decision=job.decision,
             max_assumed=job.max_assumed_skills,
@@ -232,7 +235,7 @@ class FreeTextWriter:
             probs.append(f"answer has {len(a.answer)} characters; at most {limit}")
         probs += check_claims(
             a.claims,
-            sources={"cv": wctx.cv_text, "profile": wctx.profile_text, "instructions": wctx.instructions},
+            sources=evidence_sources(wctx, job), app_facts=app_facts(job),
             bridgeable=bridgeable_candidates(job), decision=job.decision, max_assumed=job.max_assumed_skills,
         )
         nums = unsupported_numbers(a.answer, [wctx.cv_text, wctx.profile_text, wctx.instructions, job.description])

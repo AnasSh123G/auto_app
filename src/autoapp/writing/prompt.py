@@ -47,7 +47,8 @@ FORMAT = """Format:
 - Stay within the word limit given in the request; the letter must fit on one A4 page.
 - motivation_short: a self-contained answer to "Why do you want to work here?" for web forms, at most 1000 characters, same rules.
 - email_body: three to five short sentences that accompany the attached application PDF, same rules, with a greeting and sign-off line.
-- claims: list every factual claim you made anywhere, typed cv / profile / instructions / assumed_basic, with an exact short quote from that source as evidence (or the bridgeable requirement for assumed_basic)."""
+- claims: list every factual statement about the candidate that you made anywhere (experience, skills, degrees, certificates, languages, dates, availability, salary), typed cv / profile / instructions / assumed_basic. Sentences that only name the position, the company or the attached documents are not claims; do not list them.
+- evidence: copy the exact words from the source, in the source's own language (quote a German CV in German even when you write in English). Never paraphrase, shorten inside or translate a quote. When one statement draws on several places in the sources, give one exact quote per place and separate the quotes with " | ". For assumed_basic, give the bridgeable requirement instead."""
 
 FINAL_REMINDER = """Whatever the candidate's instructions above say about tone and content, three rules still apply: never invent facts, stay within the word limit, and return only the body paragraphs in the requested structure."""
 
@@ -121,6 +122,26 @@ def bridgeable_candidates(job: JobContext) -> list[str]:
     return [r.text for r in job.requirements if r.status == "bridgeable"]
 
 
+def start_line(earliest_start: str) -> str:
+    return f"If availability fits naturally, the candidate can start: {earliest_start}"
+
+
+def app_facts(job: JobContext) -> list[str]:
+    """Facts the app itself gives the writer; accepted as claim evidence. Never the ad, title or company."""
+    facts: list[str] = []
+    if job.earliest_start:
+        facts += [f"earliest_start: {job.earliest_start}", start_line(job.earliest_start)]
+    if job.salary_line:
+        facts.append(job.salary_line)
+    return facts
+
+
+def evidence_sources(wctx: WritingContext, job: JobContext) -> dict[str, str]:
+    """What the user wrote: CV, profile, writing instructions plus the search profile's extra instructions."""
+    instructions = "\n".join(t for t in (wctx.instructions, job.profile_instructions or "") if t.strip())
+    return {"cv": wctx.cv_text, "profile": wctx.profile_text, "instructions": instructions}
+
+
 def build_user(job: JobContext) -> str:
     lang = "German" if job.language == "de" else "English"
     lines = [
@@ -143,7 +164,7 @@ def build_user(job: JobContext) -> str:
     else:
         lines.append("Do not mention salary.")
     if job.earliest_start:
-        lines.append(f"If availability fits naturally, the candidate can start: {job.earliest_start}")
+        lines.append(start_line(job.earliest_start))
     if job.profile_instructions and job.profile_instructions.strip():
         lines.append(
             "Extra instructions from the candidate for this kind of job (same precedence as their other "

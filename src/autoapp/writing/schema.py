@@ -23,7 +23,8 @@ class Claim(BaseModel):
     )
     evidence: str | None = Field(
         default=None,
-        description="For cv/profile/instructions: a short quote copied exactly from that source.",
+        description="For cv/profile/instructions: the exact words from the source, in the source's language. "
+        "Several quotes from different places are separated by ' | '. Never paraphrase or translate.",
     )
     requirement: str | None = Field(
         default=None, description="For assumed_basic: the bridgeable requirement exactly as listed."
@@ -34,7 +35,10 @@ class LetterDraft(BaseModel):
     paragraphs: list[str] = Field(description="Three or four body paragraphs. No salutation, no closing.")
     motivation_short: str = Field(description="Short motivation text for application forms, max 1000 characters.")
     email_body: str = Field(description="Short email text that accompanies the attached application.")
-    claims: list[Claim] = Field(description="Every factual claim made in paragraphs, motivation or email.")
+    claims: list[Claim] = Field(
+        description="Every factual statement about the candidate in paragraphs, motivation or email. "
+        "Sentences that only name the position, the company or the attachments are not claims."
+    )
 
 
 @dataclass
@@ -70,4 +74,7 @@ class FreeTextAnswer(BaseModel):
     """Answer to one free-text question in an application form (assisted fill)."""
 
     answer: str = Field(description="The answer, in the requested language, within the character limit.")
-    claims: list[Claim] = Field(description="Every factual claim in the answer, typed and with evidence.")
+    claims: list[Claim] = Field(
+        description="Every factual statement about the candidate in the answer, typed and with exact "
+        "evidence (several quotes separated by ' | ')."
+    )
