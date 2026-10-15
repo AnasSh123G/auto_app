@@ -11,31 +11,12 @@ from pathlib import Path
 from autoapp.config.models import DocumentEntry
 from autoapp.package import render as R
 from autoapp.package.documents_select import document_matches_language, select_documents
+from autoapp.package.email_message import parse_cover_letter_md
 from autoapp.package.eml import build_application_email, write_eml
 from autoapp.package.pdf import PdfRenderer, bundle
 from autoapp.steps.context import RunContext
 from autoapp.steps.send import BUNDLE, load_message
 from autoapp.writing.letter_format import date_line
-from autoapp.writing.schema import CoverLetter
-
-
-def parse_cover_letter_md(text: str, language: str) -> CoverLetter:
-    """Inverse of ``CoverLetter.to_markdown``: subject, salutation, paragraphs, closing, signature."""
-    lines = text.strip().splitlines()
-    if not lines or not lines[0].startswith("# "):
-        raise ValueError("cover_letter.md must start with '# <subject>'")
-    subject = lines[0][2:].strip()
-    blocks = [b.strip() for b in "\n".join(lines[1:]).strip().split("\n\n") if b.strip()]
-    if len(blocks) < 3:
-        raise ValueError("cover_letter.md needs a salutation, at least one paragraph and a closing")
-    salutation, *paragraphs, end = blocks
-    end_lines = end.splitlines()
-    if len(end_lines) >= 2:
-        closing, signature = end_lines[0].strip(), "\n".join(end_lines[1:]).strip()
-    else:  # closing and signature separated by a blank line
-        closing, signature = paragraphs.pop().strip() if paragraphs else "", end.strip()
-    return CoverLetter(language=language, subject=subject, salutation=salutation, paragraphs=paragraphs,
-                       closing=closing, signature=signature, motivation_short="", email_body="")
 
 
 def render_application(ctx: RunContext, job_id: str, *, renderer_factory=PdfRenderer,
@@ -44,9 +25,15 @@ def render_application(ctx: RunContext, job_id: str, *, renderer_factory=PdfRend
     repo = ctx.repo
     app = repo.get_application(job_id)
     job = repo.get_job(job_id)
-    if app is None or job is None or not app["folder"]:
+    if app is None or job is None:
         raise ValueError(f"job {job_id} has not been prepared; run `autoapp prepare` first")
-    folder = Path(app["folder"])
+    folder = Path(app["folder"]) if app["folder"] else None
+    if app["channel"] == "email" and (folder is None or not folder.exists()) and app["letter_md"]:
+        raise ValueError(f"job {job_id} has no local folder: it is a draft in your mailbox's Drafts folder. "
+                         f"Edit the draft there, or run `autoapp draft {job_id} --again` to save a new one "
+                         "from the stored letter.")
+    if folder is None:
+        raise ValueError(f"job {job_id} has not been prepared; run `autoapp prepare` first")
     language = app["language"] or "de"
     letter = parse_cover_letter_md((folder / "cover_letter.md").read_text(encoding="utf-8"), language)
     personal = ctx.profile.personal

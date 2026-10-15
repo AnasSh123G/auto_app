@@ -1,19 +1,18 @@
 """Send step: deliver prepared email applications (opt-in, with every safeguard).
 
-Uses the ``email.eml`` written by prepare (its Message-ID is the idempotency key).
-``dry_run`` performs every check and reports what would be sent, without contacting
-the SMTP server.
+Builds each email from the stored letter in a temporary directory (an old folder's
+``email.eml`` is read as it is); its Message-ID is the idempotency key. ``dry_run``
+performs every check and reports what would be sent, without contacting the SMTP server.
 """
 
 from __future__ import annotations
 
 import copy
-import email
 import json
 import os
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
-from email import policy
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
 from pathlib import Path
@@ -21,6 +20,9 @@ from pathlib import Path
 from autoapp.db.status import Status
 from autoapp.mail.connection import MailAuthError, Mailer, MailError, MailSentNoCopyError, SmtpMailer
 from autoapp.mail.send import check_eligibility, reconcile_pending, send_application
+from autoapp.package.email_message import NoStoredEmail, application_email
+from autoapp.package.eml import load_message  # noqa: F401  (re-exported; tests import it from here)
+from autoapp.package.pdf import PdfRenderer
 from autoapp.steps.context import RunContext
 
 BUNDLE = "Bewerbungsmappe.pdf"
@@ -36,15 +38,6 @@ class SendSummary:
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     auth_failed: bool = False
-
-
-def _folder(ctx: RunContext, job_id: str) -> Path | None:
-    app = ctx.repo.get_application(job_id)
-    return Path(app["folder"]) if app and app["folder"] else None
-
-
-def load_message(folder: Path) -> EmailMessage:
-    return email.message_from_bytes((folder / "email.eml").read_bytes(), policy=policy.default)  # type: ignore[return-value]
 
 
 def default_mailer(ctx: RunContext) -> Mailer:
@@ -64,6 +57,14 @@ def _flag(ctx: RunContext, job_id: str, reason: str) -> None:
         ctx.repo.set_needs_review(job_id, [*reasons, reason])
 
 
+def _no_stored_email_reason(ctx: RunContext, job_id: str) -> str:
+    """The folder case keeps the old wording; a job without a folder gets the builder's message."""
+    app = ctx.repo.get_application(job_id)
+    if app is not None and app["folder"]:
+        return "email.eml is missing; run `autoapp render` for this job"
+    return f"no stored email; run `autoapp prepare --job {job_id} --force`"
+
+
 def send_applications(
     ctx: RunContext,
     job_ids: list[str] | None = None,
@@ -71,6 +72,7 @@ def send_applications(
     manual: bool = False,
     mailer: Mailer | None = None,
     confirm: Callable[[str, EmailMessage], bool] | None = None,
+    renderer_factory: Callable[[], AbstractContextManager[PdfRenderer]] = PdfRenderer,
 ) -> SendSummary:
     """Send eligible email applications.
 
@@ -98,49 +100,52 @@ def send_applications(
         job = repo.get_job(job_id)
         if job is not None and not ctx.jobs_for_sources([job]):
             continue
-        folder = _folder(ctx, job_id)
-        bundle = folder / BUNDLE if folder else None
-        elig = check_eligibility(repo, job_id, policy_, bundle=bundle, manual=manual)
-        if folder is not None and not (folder / "email.eml").exists():
-            elig.ok = False
-            elig.reasons.append("email.eml is missing; run `autoapp render` for this job")
-        job_row = repo.get_job(job_id)
-        if not elig.ok:
-            s.not_sent[job_id] = elig.reasons
-            if job_row is not None:
-                ctx.emit("email_held", job_row, detail="; ".join(elig.reasons)[:200])
-            if elig.flag_review and not ctx.dry_run:
-                for r in elig.reasons:
-                    if "check it by hand" in r:
-                        _flag(ctx, job_id, r)
-                s.flagged.append(job_id)
-            continue
-        msg = load_message(folder)  # type: ignore[arg-type]
-        if ctx.dry_run:
-            s.would_send.append(job_id)
-            ctx.emit("email_would_send", job_row, detail=str(msg["To"] or ""))
-            continue
-        if confirm is not None and not confirm(job_id, msg):
-            s.not_sent[job_id] = ["not confirmed"]
-            continue
-        if mailer is None:
-            try:
-                mailer = default_mailer(ctx)
-            except RuntimeError as err:
-                s.errors.append(str(err))
-                break
-        result = send_application(repo, job_id, msg, mailer)
-        if result.sent:
-            s.sent.append(job_id)
-            ctx.emit("email_sent", job_row, detail=str(msg["To"] or ""))
-            if result.warning:
-                s.warnings.append(f"{job_id}: {result.warning}")
-        else:
-            s.errors.append(f"{job_id}: {result.error}")
-            ctx.emit("email_failed", job_row, detail=str(result.error or "")[:200])
-            if result.auth_failed:
-                s.auth_failed = True
-                break  # the login will fail for every other job too
+        try:
+            # The bundle must exist while eligibility reads its size and while the mail is handed over.
+            with application_email(ctx, job_id, renderer_factory=renderer_factory) as built:
+                elig = check_eligibility(repo, job_id, policy_, bundle=built.bundle, manual=manual)
+                job_row = repo.get_job(job_id)
+                if not elig.ok:
+                    s.not_sent[job_id] = elig.reasons
+                    if job_row is not None:
+                        ctx.emit("email_held", job_row, detail="; ".join(elig.reasons)[:200])
+                    if elig.flag_review and not ctx.dry_run:
+                        for r in elig.reasons:
+                            if "check it by hand" in r:
+                                _flag(ctx, job_id, r)
+                        s.flagged.append(job_id)
+                    continue
+                msg = built.message
+                if ctx.dry_run:
+                    s.would_send.append(job_id)
+                    ctx.emit("email_would_send", job_row, detail=str(msg["To"] or ""))
+                    continue
+                if confirm is not None and not confirm(job_id, msg):
+                    s.not_sent[job_id] = ["not confirmed"]
+                    continue
+                if mailer is None:
+                    try:
+                        mailer = default_mailer(ctx)
+                    except RuntimeError as err:
+                        s.errors.append(str(err))
+                        break
+                result = send_application(repo, job_id, msg, mailer)
+                if result.sent:
+                    s.sent.append(job_id)
+                    ctx.emit("email_sent", job_row, detail=str(msg["To"] or ""))
+                    if result.warning:
+                        s.warnings.append(f"{job_id}: {result.warning}")
+                else:
+                    s.errors.append(f"{job_id}: {result.error}")
+                    ctx.emit("email_failed", job_row, detail=str(result.error or "")[:200])
+                    if result.auth_failed:
+                        s.auth_failed = True
+                        break  # the login will fail for every other job too
+        except NoStoredEmail:
+            reason = _no_stored_email_reason(ctx, job_id)
+            s.not_sent[job_id] = [reason]
+            if job is not None:
+                ctx.emit("email_held", job, detail=reason[:200])
     return s
 
 
@@ -212,13 +217,16 @@ def _latest_prepared_email_job(ctx: RunContext) -> str | None:
     repo = ctx.repo
     for job in reversed(ctx.jobs_for_sources(repo.jobs_by_status(Status.PREPARED))):
         app = repo.get_application(job["id"])
-        folder = Path(app["folder"]) if app and app["folder"] else None
-        if app and app["channel"] == "email" and folder and (folder / "email.eml").exists():
+        if app is None or app["channel"] != "email":
+            continue
+        folder = Path(app["folder"]) if app["folder"] else None
+        if (folder is not None and (folder / "email.eml").exists()) or app["letter_md"]:
             return job["id"]
     return None
 
 
-def send_test_email(ctx: RunContext, job_id: str | None = None, *, mailer: Mailer | None = None) -> SelfTestResult:
+def send_test_email(ctx: RunContext, job_id: str | None = None, *, mailer: Mailer | None = None,
+                    renderer_factory: Callable[[], AbstractContextManager[PdfRenderer]] = PdfRenderer) -> SelfTestResult:
     """Deliver one job's application email to yourself instead of the employer.
 
     One email arrives: the subject is ``TEST_RUN: `` plus the normal subject, and the body starts
@@ -236,35 +244,44 @@ def send_test_email(ctx: RunContext, job_id: str | None = None, *, mailer: Maile
     if job_id is None:
         result.kind = "connection"
         msg = _connection_test_mail(own)
+        try:
+            mailer = mailer or default_mailer(ctx)
+            mailer.send(msg, to_addrs=[own], keep_copy=False)  # the envelope names only you
+        except MailSentNoCopyError as err:
+            result.warning = str(err)
+        except (MailError, RuntimeError) as err:
+            result.error = str(err)
     else:
         job = ctx.repo.get_job(job_id)
         if job is None:
             return SelfTestResult(error=f"unknown job {job_id}")
         if not ctx.jobs_for_sources([job]):
             return SelfTestResult(error=f"job {job_id} is excluded by this run source mode")
-        app = ctx.repo.get_application(job_id)
-        folder = _folder(ctx, job_id)
-        if folder is None or not (folder / "email.eml").exists():
-            return SelfTestResult(error=f"job {job_id} has no email.eml; run `autoapp prepare --job {job_id}` first")
-        original = load_message(folder)
-        recipient = str(original["To"] or "").strip()
-        if not recipient or "@" not in recipient:
-            return SelfTestResult(error=f"job {job_id}: the prepared email has no recipient address")
-        if app is not None and app["contact_email"] and app["contact_email"].lower() != recipient.lower():
-            return SelfTestResult(error=f"job {job_id}: email.eml is addressed to {recipient} but the application "
-                                        f"says {app['contact_email']}; run `autoapp render {job_id}`")
-        result.job_id, result.original_to = job_id, recipient
-        result.evidence = address_evidence(job["description"], recipient)
-        if result.evidence is None:
-            result.warning = f"{recipient} was not found word for word in the stored ad text; check it by hand"
-        msg = build_test_copy(original, own)
-    try:
-        mailer = mailer or default_mailer(ctx)
-        mailer.send(msg, to_addrs=[own], keep_copy=False)  # the envelope names only you
-    except MailSentNoCopyError as err:
-        result.warning = str(err)
-    except (MailError, RuntimeError) as err:
-        result.error = str(err)
+        try:
+            # The bundle must exist while the message is handed over.
+            with application_email(ctx, job_id, renderer_factory=renderer_factory) as built:
+                original = built.message
+                recipient = str(original["To"] or "").strip()
+                if not recipient or "@" not in recipient:
+                    return SelfTestResult(error=f"job {job_id}: the prepared email has no recipient address")
+                app = ctx.repo.get_application(job_id)
+                if app is not None and app["contact_email"] and app["contact_email"].lower() != recipient.lower():
+                    return SelfTestResult(error=f"job {job_id}: email.eml is addressed to {recipient} but the application "
+                                                f"says {app['contact_email']}; run `autoapp render {job_id}`")
+                result.job_id, result.original_to = job_id, recipient
+                result.evidence = address_evidence(job["description"], recipient)
+                if result.evidence is None:
+                    result.warning = f"{recipient} was not found word for word in the stored ad text; check it by hand"
+                msg = build_test_copy(original, own)
+                try:
+                    mailer = mailer or default_mailer(ctx)
+                    mailer.send(msg, to_addrs=[own], keep_copy=False)  # the envelope names only you
+                except MailSentNoCopyError as err:
+                    result.warning = str(err)
+                except (MailError, RuntimeError) as err:
+                    result.error = str(err)
+        except NoStoredEmail as err:
+            return SelfTestResult(error=str(err))
     return result
 
 
@@ -280,7 +297,9 @@ class TestRunSummary:
     auth_failed: bool = False
 
 
-def send_test_applications(ctx: RunContext, *, mailer: Mailer | None = None) -> TestRunSummary:
+def send_test_applications(ctx: RunContext, *, mailer: Mailer | None = None,
+                           renderer_factory: Callable[[], AbstractContextManager[PdfRenderer]] = PdfRenderer,
+                           ) -> TestRunSummary:
     """Apply the automatic-mode rules, then send each email a real run would send to yourself.
 
     The daily cap counts real sends plus the test emails of this run. Nothing is recorded:
@@ -306,41 +325,45 @@ def send_test_applications(ctx: RunContext, *, mailer: Mailer | None = None) -> 
         if sample is not None and len(s.sent) + len(s.would_send) >= sample.test_emails:
             break  # the quick test sends at most this many test emails
         job = repo.get_job(job_id)
-        folder = _folder(ctx, job_id)
-        elig = check_eligibility(repo, job_id, ctx.config.email, bundle=folder / BUNDLE if folder else None)
-        reasons = list(elig.reasons)
-        if sample is not None and sample.ignore_threshold:
-            # The quick test prepared its jobs whatever their score; the mail goes only to you, so the score is no bar.
-            reasons = [r for r in reasons if not r.startswith(("decision is not apply", "fit score "))]
-        if folder is not None and not (folder / "email.eml").exists():
-            reasons.append("email.eml is missing; run `autoapp render` for this job")
-        if not any("daily cap" in r for r in reasons) and real_today + len(s.sent) + len(s.would_send) >= cap:
-            reasons.append(f"daily cap of {cap} reached")
-        if reasons:
-            s.not_sent[job_id] = reasons
-            ctx.emit("email_held", job, detail="would not be sent: " + "; ".join(reasons)[:180])
-            continue
-        original = load_message(folder)  # type: ignore[arg-type]
-        recipient = str(original["To"] or "")
-        if ctx.dry_run:
-            s.would_send[job_id] = recipient
-            ctx.emit("test_would_send", job, detail=f"{own} (a real run would send to {recipient})")
-            continue
-        msg = build_test_copy(original, own)
         try:
-            mailer = mailer or default_mailer(ctx)
-            mailer.send(msg, to_addrs=[own], keep_copy=False)  # the envelope names only you
-        except MailSentNoCopyError:
-            pass
-        except MailError as err:
-            s.errors.append(f"{job_id}: {err}")
-            if isinstance(err, MailAuthError):
-                s.auth_failed = True
-                break
-            continue
-        except RuntimeError as err:
-            s.errors.append(str(err))
-            break
-        s.sent[job_id] = recipient
-        ctx.emit("test_sent", job, detail=f"{own} (a real run would send to {recipient})")
+            # The bundle must exist while eligibility reads its size and while the mail is handed over.
+            with application_email(ctx, job_id, renderer_factory=renderer_factory) as built:
+                elig = check_eligibility(repo, job_id, ctx.config.email, bundle=built.bundle)
+                reasons = list(elig.reasons)
+                if sample is not None and sample.ignore_threshold:
+                    # The quick test prepared its jobs whatever their score; the mail goes only to you, so the score is no bar.
+                    reasons = [r for r in reasons if not r.startswith(("decision is not apply", "fit score "))]
+                if not any("daily cap" in r for r in reasons) and real_today + len(s.sent) + len(s.would_send) >= cap:
+                    reasons.append(f"daily cap of {cap} reached")
+                if reasons:
+                    s.not_sent[job_id] = reasons
+                    ctx.emit("email_held", job, detail="would not be sent: " + "; ".join(reasons)[:180])
+                    continue
+                original = built.message
+                recipient = str(original["To"] or "")
+                if ctx.dry_run:
+                    s.would_send[job_id] = recipient
+                    ctx.emit("test_would_send", job, detail=f"{own} (a real run would send to {recipient})")
+                    continue
+                msg = build_test_copy(original, own)
+                try:
+                    mailer = mailer or default_mailer(ctx)
+                    mailer.send(msg, to_addrs=[own], keep_copy=False)  # the envelope names only you
+                except MailSentNoCopyError:
+                    pass
+                except MailError as err:
+                    s.errors.append(f"{job_id}: {err}")
+                    if isinstance(err, MailAuthError):
+                        s.auth_failed = True
+                        break
+                    continue
+                except RuntimeError as err:
+                    s.errors.append(str(err))
+                    break
+                s.sent[job_id] = recipient
+                ctx.emit("test_sent", job, detail=f"{own} (a real run would send to {recipient})")
+        except NoStoredEmail:
+            reason = _no_stored_email_reason(ctx, job_id)
+            s.not_sent[job_id] = [reason]
+            ctx.emit("email_held", job, detail="would not be sent: " + reason[:150])
     return s

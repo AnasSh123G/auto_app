@@ -129,6 +129,9 @@ class RunSummary:
             out.append(f"drafts: {len(d.saved)} saved{where}, {len(d.existing)} already saved"
                        + (f"; not drafted: {', '.join(f'{j} ({r[-1]})' for j, r in d.not_drafted.items())}"
                           if d.not_drafted else ""))
+            if d.review:
+                out.append("drafts to check before sending: "
+                           + ", ".join(f"{j} ({'; '.join(r)[:120]})" for j, r in d.review.items()))
         if self.test:
             t = self.test
             for jid, to in (t.would_send or t.sent).items():
@@ -239,7 +242,8 @@ def run_pipeline(ctx: RunContext, profile_name: str | None = None, **overrides: 
                 s.forms_to_finish.append(jid)
 
     if ctx.mode == "automatic":
-        s.send = _guard(s, "send", send_applications, ctx, ctx=ctx, mailer=overrides.get("mailer"))
+        kw = {"renderer_factory": overrides["renderer_factory"]} if "renderer_factory" in overrides else {}
+        s.send = _guard(s, "send", send_applications, ctx, ctx=ctx, mailer=overrides.get("mailer"), **kw)
         if s.send:
             s.errors += [f"send: {e}" for e in s.send.errors if s.send.auth_failed or "not set" in e
                          or "no sending mailbox" in e]
@@ -247,13 +251,16 @@ def run_pipeline(ctx: RunContext, profile_name: str | None = None, **overrides: 
             s.warnings += s.send.warnings
     elif ctx.mode == "review":
         kw = {"store": overrides["draft_store"]} if "draft_store" in overrides else {}
+        if "renderer_factory" in overrides:
+            kw["renderer_factory"] = overrides["renderer_factory"]
         s.drafts = _guard(s, "draft", draft_applications, ctx, ctx=ctx, **kw)
         if s.drafts:
             fatal = s.drafts.auth_failed or any("not set" in e or "no sending mailbox" in e or "drafts_folder" in e
                                                 for e in s.drafts.errors)
             (s.errors if fatal else s.warnings).extend(f"draft: {e}" for e in s.drafts.errors)
     elif ctx.mode == "test":
-        s.test = _guard(s, "test send", send_test_applications, ctx, ctx=ctx, mailer=overrides.get("mailer"))
+        kw = {"renderer_factory": overrides["renderer_factory"]} if "renderer_factory" in overrides else {}
+        s.test = _guard(s, "test send", send_test_applications, ctx, ctx=ctx, mailer=overrides.get("mailer"), **kw)
         if s.test:
             fatal = s.test.auth_failed or any("not set" in e or "no sending mailbox" in e for e in s.test.errors)
             (s.errors if fatal else s.warnings).extend(f"test send: {e}" for e in s.test.errors)

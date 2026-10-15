@@ -10,10 +10,12 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import tempfile
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
+from email.utils import make_msgid
 from pathlib import Path
 from typing import get_args
 
@@ -27,6 +29,7 @@ from autoapp.llm.base import LLMAuthError, LLMCallLimitReached, LLMError
 from autoapp.package import render as R
 from autoapp.package.documents_select import select_documents
 from autoapp.package.eml import build_application_email, write_eml
+from autoapp.package.folders import remove_application_folder
 from autoapp.package.pdf import PdfRenderer, bundle
 from autoapp.package.salary_expectation import compute_expectation, needs_salary_note
 from autoapp.package.slug import folder_name
@@ -59,6 +62,11 @@ class PrepareSummary:
 
 def ad_asks_salary(description: str | None) -> bool:
     return bool(_ASKS_SALARY.search(description or ""))
+
+
+def draft_only(ctx: RunContext, channel: str | None, apply_email: str | None) -> bool:
+    """Review mode never writes an email application to disk: it goes to the mailbox's Drafts folder only."""
+    return ctx.mode == "review" and channel == "email" and bool(apply_email)
 
 
 def salary_sentence(amount: int, language: str) -> str:
@@ -222,8 +230,13 @@ def prepare_jobs(
             app = repo.get_application(job["id"])
             if app and app["form_status"]:
                 summary.form_outcomes[app["form_status"]] = summary.form_outcomes.get(app["form_status"], 0) + 1
-            saved = Path(app["folder"]) if app and app["folder"] else folder
-            ctx.emit("folder_saved", job, detail=saved.name, channel=app["channel"] if app else None)
+            if app is not None and not app["folder"]:
+                ctx.emit("email_prepared", job,
+                         detail=f"{app['contact_email']} (letter written; it goes to your mailbox's Drafts folder, "
+                                "no local folder)", channel="email")
+            else:
+                saved = Path(app["folder"]) if app and app["folder"] else folder
+                ctx.emit("folder_saved", job, detail=saved.name, channel=app["channel"] if app else None)
             if flagged:
                 fresh = repo.get_job(job["id"])
                 reasons = "; ".join(json.loads(fresh["needs_review_reasons"] or "[]")) if fresh else ""
@@ -245,12 +258,43 @@ def _write_letter(writer: LetterWriter, wctx: WritingContext, jctx: JobContext, 
     return outcome, extra
 
 
+def _store_email_letter(ctx: RunContext, job, r, writer: LetterWriter, wctx: WritingContext,
+                        jctx: JobContext, frame: LetterFrame, style: StyleSettings,
+                        html_for: Callable[[CoverLetter], str], renderer: PdfRenderer, folder: Path,
+                        language: str, expectation: int | None) -> bool:
+    """Review-mode email application: write the letter into a temporary directory, store it, keep no file."""
+    repo = ctx.repo
+    with tempfile.TemporaryDirectory(prefix="autoapp-letter-") as tmp:
+        outcome, page_problems = _write_letter(writer, wctx, jctx, frame, style, html_for, renderer,
+                                               Path(tmp) / "cover_letter.pdf")
+    letter = outcome.letter
+    review = list(outcome.needs_review) + page_problems + email_text_reasons(repo, job["id"])
+    personal = ctx.profile.personal
+    message_id = make_msgid(domain=personal.email.rpartition("@")[2])
+    repo.upsert_application(
+        job["id"], folder=None, channel="email", contact_person=r.contact_person,
+        contact_email=r.apply_email, reference=r.reference,
+        salary_expectation=str(expectation) if expectation else None,
+        assumed_skills=letter.assumed_skills, language=language, prepared_at=now_iso(),
+        letter_md=letter.to_markdown(), email_subject=letter.subject, email_body=letter.email_body,
+        message_id=message_id,
+    )
+    if folder.is_dir():
+        remove_application_folder(ctx, folder)
+    repo.set_needs_review(job["id"], review)
+    if job["status"] != Status.PREPARED.value:
+        repo.transition(job["id"], Status.PREPARED,
+                        note="email application: letter stored, goes to your mailbox's Drafts (no local folder)")
+    return bool(review)
+
+
 def _prepare_one(ctx: RunContext, job, folder: Path, writer: LetterWriter, renderer: PdfRenderer,
                  today: date, force: bool) -> bool:
     repo = ctx.repo
     ev_row = repo.current_evaluation(job["id"])
     final = FinalEvaluation.model_validate(json.loads(ev_row["payload"]))
     r = final.result
+    email_only = draft_only(ctx, r.channel, r.apply_email)
     if r.channel != "email":
         from autoapp.formfinder.store import resolve
 
@@ -289,19 +333,23 @@ def _prepare_one(ctx: RunContext, job, folder: Path, writer: LetterWriter, rende
     frame = LetterFrame(r.contact_person, r.reference, f"{personal.first_name} {personal.last_name}")
     style = StyleSettings(ctx.config.writing.banned_phrases, ctx.config.writing.allowed_phrases)
 
-    if folder.exists() and force:
-        old = folder / "cover_letter.md"
-        if old.exists():
-            stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-            shutil.copy2(old, folder / f"cover_letter.{stamp}.md")
-    folder.mkdir(parents=True, exist_ok=True)
-
     recipient = [job["company"]] + ([f"z. Hd. {r.contact_person}"] if r.contact_person and language == "de"
                                     else [f"Attn. {r.contact_person}"] if r.contact_person else [])
     dline = date_line(personal.city, today, language)
 
     def html_for(letter: CoverLetter) -> str:
         return R.render_cover_letter_html(letter, personal, recipient, dline)
+
+    if email_only:
+        return _store_email_letter(ctx, job, r, writer, wctx, jctx, frame, style, html_for, renderer,
+                                   folder, language, expectation)
+
+    if folder.exists() and force:
+        old = folder / "cover_letter.md"
+        if old.exists():
+            stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+            shutil.copy2(old, folder / f"cover_letter.{stamp}.md")
+    folder.mkdir(parents=True, exist_ok=True)
 
     letter_pdf = folder / "cover_letter.pdf"
     outcome, page_problems = _write_letter(writer, wctx, jctx, frame, style, html_for, renderer, letter_pdf)

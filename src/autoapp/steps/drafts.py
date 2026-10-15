@@ -1,16 +1,23 @@
 """Draft step: save prepared email applications as drafts (review-first runs, ``draft <id>``),
 and ``check_drafts``: mark drafts the user sent by hand as ``sent`` (email-drafts spec).
 
+Every draft is built from the stored letter in a temporary directory (an old folder with
+``email.eml`` is read as it is and retired afterwards); flagged ``needs_review`` jobs are
+drafted too, with a "check before sending" note, because the user reads every draft.
+
 Nothing here sends email. Drafting ignores the automatic-send rules (score, cap, cooldown,
 free-mail) because the user reads every draft, but reports them as notes.
 """
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
+from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
 from pathlib import Path
 
@@ -19,8 +26,10 @@ from autoapp.db.status import Status
 from autoapp.mail.connection import MailAuthError, MailError
 from autoapp.mail.drafts import DraftFolderNotFound, DraftStore, ImapDraftStore, imap_utf7_decode
 from autoapp.mail.send import check_eligibility
+from autoapp.package.email_message import NoStoredEmail, application_email
+from autoapp.package.folders import remove_application_folder
+from autoapp.package.pdf import PdfRenderer
 from autoapp.steps.context import RunContext
-from autoapp.steps.send import BUNDLE, load_message
 
 # Reasons that block an automatic send but not a draft; shown as notes.
 _NOTE_MARKERS = ("min_score", "daily cap", "cooldown", "free-mail")
@@ -33,6 +42,7 @@ class DraftSummary:
     existing: list[str] = field(default_factory=list)
     not_drafted: dict[str, list[str]] = field(default_factory=dict)
     notes: dict[str, list[str]] = field(default_factory=dict)
+    review: dict[str, list[str]] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
     auth_failed: bool = False
     folder: str | None = None
@@ -70,8 +80,8 @@ def draftable_jobs(ctx: RunContext) -> list[str]:
     return out
 
 
-def _notes(ctx: RunContext, job_id: str, folder: Path) -> list[str]:
-    elig = check_eligibility(ctx.repo, job_id, ctx.config.email, bundle=folder / BUNDLE)
+def _notes(ctx: RunContext, job_id: str, bundle: Path | None) -> list[str]:
+    elig = check_eligibility(ctx.repo, job_id, ctx.config.email, bundle=bundle)
     return [r for r in elig.reasons if any(m in r for m in _NOTE_MARKERS)]
 
 
@@ -83,17 +93,34 @@ def _reasons_not_draftable(ctx: RunContext, job, again: bool) -> list[str]:
         reasons.append(f"status is {job['status']}, not prepared")
     if app is None or app["channel"] != "email" or not app["contact_email"]:
         reasons.append("the ad does not take applications by email")
-    if job["needs_review"]:
-        reasons.append("flagged needs_review; fix the letter, run `autoapp render`, then draft it")
-    folder = Path(app["folder"]) if app and app["folder"] else None
-    if folder is None or not (folder / "email.eml").exists():
-        reasons.append("email.eml is missing; run `autoapp render` for this job")
+    folder = Path(app["folder"]) if app is not None and app["folder"] else None
+    has_eml = folder is not None and (folder / "email.eml").exists()
+    if app is not None and not has_eml and not app["letter_md"]:
+        reasons.append(f"no stored email for this job; run `autoapp prepare --job {job['id']} --force`")
     return reasons
 
 
-def draft_applications(ctx: RunContext, job_ids: list[str] | None = None, *, again: bool = False,
-                       store: DraftStore | None = None,
-                       store_factory: Callable[[RunContext], DraftStore] | None = None) -> DraftSummary:
+def _retire_legacy_folder(ctx: RunContext, job_id: str, folder: Path, msg: EmailMessage) -> None:
+    """The draft is saved and recorded: keep the folder's letter and email text in the database, then delete it."""
+    old = folder / "cover_letter.md"
+    body = msg.get_body(("plain",))
+    ctx.repo.upsert_application(
+        job_id, letter_md=old.read_text(encoding="utf-8") if old.exists() else None,
+        email_subject=str(msg["Subject"]), email_body=body.get_content() if body else "",
+        message_id=str(msg["Message-ID"]), folder=None,
+    )
+    remove_application_folder(ctx, folder)
+
+
+def draft_applications(
+    ctx: RunContext,
+    job_ids: list[str] | None = None,
+    *,
+    again: bool = False,
+    store: DraftStore | None = None,
+    store_factory: Callable[[RunContext], DraftStore] | None = None,
+    renderer_factory: Callable[[], AbstractContextManager[PdfRenderer]] = PdfRenderer,
+) -> DraftSummary:
     s = DraftSummary()
     repo = ctx.repo
     ids = job_ids if job_ids is not None else draftable_jobs(ctx)
@@ -118,12 +145,16 @@ def draft_applications(ctx: RunContext, job_ids: list[str] | None = None, *, aga
                     ctx.emit("needs_review", job, detail="not drafted: " + reasons[-1])
                 continue
             app = repo.get_application(job_id)
-            folder = Path(app["folder"])
-            notes = _notes(ctx, job_id, folder)
-            if notes:
-                s.notes[job_id] = notes
-            note_text = (" (" + "; ".join(notes) + ")") if notes else ""
+            folder = Path(app["folder"]) if app["folder"] else None
+            legacy = folder is not None and (folder / "email.eml").exists()
+            review_reasons = json.loads(job["needs_review_reasons"] or "[]") if job["needs_review"] else []
+            if review_reasons:
+                s.review[job_id] = review_reasons
             if ctx.dry_run:
+                notes = _notes(ctx, job_id, None)
+                if notes:
+                    s.notes[job_id] = notes
+                note_text = (" (" + "; ".join(notes) + ")") if notes else ""
                 s.would_save.append(job_id)
                 ctx.emit("draft_would_save", job, detail=f"{app['contact_email']}{note_text}")
                 continue
@@ -134,17 +165,23 @@ def draft_applications(ctx: RunContext, job_ids: list[str] | None = None, *, aga
                 except RuntimeError as err:
                     s.errors.append(str(err))
                     break
-            msg = load_message(folder)
-            del msg["Date"]
-            msg["Date"] = formatdate(localtime=True)
-            if again:
-                del msg["Message-ID"]
-                msg["Message-ID"] = make_msgid(domain=str(app["contact_email"]).rsplit("@", 1)[-1])
+            new_id = make_msgid(domain=str(app["contact_email"]).rsplit("@", 1)[-1]) if again else None
             try:
-                if s.folder is None:
-                    s.folder = store.drafts_folder()
-                if not store.has_message(s.folder, str(msg["Message-ID"])):
-                    store.append_draft(s.folder, msg)
+                with application_email(ctx, job_id, renderer_factory=renderer_factory, message_id=new_id) as built:
+                    msg = built.message
+                    notes = _notes(ctx, job_id, built.bundle)
+                    if notes:
+                        s.notes[job_id] = notes
+                    note_text = (" (" + "; ".join(notes) + ")") if notes else ""
+                    del msg["Date"]
+                    msg["Date"] = formatdate(localtime=True)
+                    if s.folder is None:
+                        s.folder = store.drafts_folder()
+                    if not store.has_message(s.folder, str(msg["Message-ID"])):
+                        store.append_draft(s.folder, msg)
+            except NoStoredEmail as err:
+                s.not_drafted[job_id] = [str(err)]
+                continue
             except MailAuthError as err:
                 s.errors.append(str(err) + "; run `autoapp setup --section email`")
                 s.auth_failed = True
@@ -165,11 +202,17 @@ def draft_applications(ctx: RunContext, job_ids: list[str] | None = None, *, aga
                     "VALUES (?, ?, ?, ?, ?, 'saved', ?)",
                     (job_id, str(msg["Message-ID"]), s.folder, str(msg["To"]), str(msg["Subject"]), now_iso()),
                 )
+            repo.upsert_application(job_id, message_id=str(msg["Message-ID"]))
+            if legacy:
+                _retire_legacy_folder(ctx, job_id, folder, msg)
             shown = imap_utf7_decode(s.folder)
             if job["status"] != Status.DRAFTED.value:
                 repo.transition(job_id, Status.DRAFTED, note=f"draft saved in {shown}" + (" (replaced)" if again else ""))
             s.saved.append(job_id)
-            ctx.emit("draft_saved", job, detail=f"{app['contact_email']} (in {shown}){note_text}")
+            check_text = (" — check before sending: " + "; ".join(review_reasons))[:300] if review_reasons else ""
+            ctx.emit("draft_saved", job, detail=f"{app['contact_email']} (in {shown}){note_text}{check_text}")
+            if review_reasons:
+                ctx.emit("needs_review", job, detail="drafted; check before sending: " + "; ".join(review_reasons))
     finally:
         if own_store and store is not None:
             store.close()

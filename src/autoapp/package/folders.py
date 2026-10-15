@@ -9,6 +9,7 @@ refreshed, so a later successful `autoapp forms --again` removes it.
 from __future__ import annotations
 
 import re
+import shutil
 from pathlib import Path
 
 from autoapp.package.slug import PREFIX, folder_name
@@ -48,6 +49,16 @@ def _rewrite_paths(folder: Path, old: Path, new: Path) -> None:
         updated = pattern.sub(lambda m: news[m.group(0)], text)  # one pass: a new name never matches again
         if updated != text:
             path.write_text(updated, encoding="utf-8")
+
+
+def remove_application_folder(ctx, folder: Path) -> bool:  # noqa: ANN001 - RunContext
+    """Delete an application folder, only if it lies inside the workspace's applications directory."""
+    root = ctx.ws.applications_dir.resolve()
+    target = folder.resolve()
+    if target == root or root not in target.parents or not target.is_dir():
+        return False
+    shutil.rmtree(target)
+    return True
 
 
 def sync_folder_name(ctx, job_id: str) -> Path | None:  # noqa: ANN001 - RunContext

@@ -148,11 +148,13 @@ Run `autoapp setup --section email` or edit `config.yaml` to remove the old key.
 
 ## Review first: drafts
 
-In review mode each email application is saved as a draft in the Drafts folder of your sending mailbox, over IMAP. Nothing is sent. Open your mail program, read the draft and send it yourself.
+In review mode each email application is written straight into the Drafts folder of your sending mailbox, over IMAP, with all its documents attached (`Bewerbungsmappe.pdf` and any other requested documents). Nothing is sent and nothing is saved under `workspace/applications/` for it; the letter and the email text are kept in the database. Open your mail program, read the draft and send it yourself.
 
 - The folder is found by its special-use attribute, so localized names such as Gmail's `[Gmail]/Entwürfe` work. If it cannot be found, set `mail.sending.drafts_folder`.
 - A drafted job gets the new status `drafted`.
-- Review mode drafts a job even if it is below `min_score`, is addressed to a free-mail domain, is in the company cooldown or is over the daily cap. These show as notes. It never drafts a job flagged `needs_review`.
+- Review mode drafts a job even if it is below `min_score`, is addressed to a free-mail domain, is in the company cooldown or is over the daily cap. These show as notes.
+- Flagged jobs (claims that could not be verified, style issues) are drafted too; the feed, the run summary and `autoapp drafts` show a "check before sending" note with the reasons.
+- A draft that fails to save (for example a rejected login) is retried by the next run or `autoapp draft <id>` without writing a new letter. `autoapp draft <id> --again` rebuilds the draft from the stored letter.
 
 ```yaml
 mail:
@@ -210,7 +212,7 @@ The safeguards apply to automatic mode and to deciding what a test run would sen
 | `max_attempts` | `3` | Retry a failed send up to 3 times, then stop |
 | `max_bundle_mb` | `10.0` | Refuse to send if attachments exceed 10 MB |
 | Free-mail check | (configurable) | Addresses at gmail.com, gmx.de, web.de, etc. go to manual review, not automatic sending |
-| `needs_review` flag | (blocking) | Nothing is sent or drafted if the letter has warnings (claim violations, style issues) |
+| `needs_review` flag | (blocking) | Nothing is sent automatically if the letter has warnings (claim violations, style issues); review mode still drafts it with a "check before sending" note |
 
 Configure:
 
@@ -265,7 +267,7 @@ and the job can still be sent for real afterwards. It also proves that your app 
 - Run `autoapp setup` again to test the connection
 
 **Email never arrives:**
-- Check the recipient address in `email.eml` (in the application folder)
+- Check the recipient address in the draft (review mode) or in `email.eml` (automatic mode)
 - Some employers use no-reply addresses for alerts; these can't receive emails
 - If the recipient is flagged `free_mail_domains`, automatic sending is blocked for manual review (review mode still drafts it)
 

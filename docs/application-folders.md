@@ -2,6 +2,10 @@
 
 When you prepare an application, autoapp creates a folder with all necessary files for review and submission. Each folder is named `application_<company>_<title>_<id>/` and contains:
 
+Email applications in **review mode** get no folder at all: autoapp keeps the letter and the email text in the
+database and saves the application as one draft in your mailbox's Drafts folder (see [email.md](email.md)). The
+folder description below is what automatic mode (and test mode) create, and what older runs left behind.
+
 ### Form status in the folder name
 
 An application that needs a web form is saved even when autoapp cannot reach the form. The folder name then
@@ -40,7 +44,7 @@ Folders you renamed yourself are left alone. The exact status and reason are als
 | `cover_letter.pdf` | Rendered PDF (DIN 5008 format, one page) |
 | `cover_letter_*.md` | Timestamped backups of cover letters (created on `--force` reruns) |
 | `Bewerbungsmappe.pdf` | Merged PDF: cover letter + PDF CV + available PDF certificates and work references |
-| `email.eml` | Formatted email ready to send (if email channel) |
+| `email.eml` | Formatted email ready to send (automatic and test mode only) |
 | `apply.html` | Offline copy of answers for manual form filling or platform applying |
 | `README.md` | Summary with next steps, missing documents, flags for review, and "brush up" list |
 | `form_answers.md` | Structured answers generated for web form questions, plus the answers you gave in `assist` |
@@ -72,7 +76,7 @@ not rebuild previously edited application packages; its link appears in the next
 2. **Read `evaluation.md`** to check requirement matching and the fit score
 3. **Read/edit `cover_letter.md`** to verify the content and tone
 4. **Run `autoapp render <id>`** to rebuild the PDF after any edits
-5. **Check `email.eml`** if applying by email, or `apply.html` if the company has a web form
+5. **Check the draft in your mailbox** if applying by email in review mode (or `email.eml` in automatic and test mode), or `apply.html` if the company has a web form
 
 ## Manual applying via apply.html
 
@@ -152,7 +156,7 @@ application_mueller-soehne-gmbh_software-entwickler_a1b2c3/
 ├── cover_letter.pdf
 ├── cover_letter_2026-10-08_14-32-15.md
 ├── Bewerbungsmappe.pdf
-├── email.eml
+├── email.eml                # automatic and test mode only
 ├── apply.html
 ├── form_answers.md
 ├── CV_de.pdf

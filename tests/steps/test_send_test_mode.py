@@ -7,9 +7,11 @@ import pytest
 from autoapp.llm.fake import FakeLLM
 from autoapp.mail.connection import FakeMailer, MailAuthError, MailSentNoCopyError
 from autoapp.steps.context import RunContext
+from autoapp.steps.drafts import draft_applications
 from autoapp.steps.prepare import prepare_jobs
-from autoapp.steps.send import TEST_PREFIX, build_test_copy, load_message, send_test_email
+from autoapp.steps.send import TEST_PREFIX, build_test_copy, load_message, send_applications, send_test_email
 from tests.helpers import make_workspace
+from tests.steps.test_modes import FakeDraftStore
 from tests.steps.test_prepare_step import LETTER, FakeRenderer, approved_job, factory
 
 OWN = "max.mustermann@example.com"
@@ -17,7 +19,7 @@ OWN = "max.mustermann@example.com"
 
 @pytest.fixture
 def ctx(tmp_path):
-    c = RunContext.open(make_workspace(tmp_path))
+    c = RunContext.open(make_workspace(tmp_path), mode="automatic")
     yield c
     c.close()
 
@@ -88,9 +90,32 @@ def test_original_email_file_is_not_modified(ctx):
     assert path.read_bytes() == before
 
 
-def test_nothing_is_recorded_and_the_job_can_still_be_sent(ctx):
-    from autoapp.steps.send import send_applications
+def test_review_mode_job_is_test_sent_from_the_stored_letter(ctx):
+    ctx.mode = "review"
+    jid = _prepared(ctx)
+    mailer = FakeMailer()
+    r = send_test_email(ctx, jid, mailer=mailer, renderer_factory=factory(FakeRenderer([1])))
+    assert r.error is None and r.kind == "application" and r.original_to == "jobs@muster-gmbh.de"
+    (msg,) = mailer.sent
+    assert msg["To"] == OWN
+    assert [a.get_filename() for a in msg.iter_attachments()] == ["Bewerbungsmappe.pdf"]
+    assert list(ctx.ws.applications_dir.iterdir()) == []
 
+
+def test_manual_send_of_a_drafted_folderless_job(ctx):
+    ctx.mode = "review"
+    jid = _prepared(ctx)
+    draft_applications(ctx, store=FakeDraftStore(), renderer_factory=factory(FakeRenderer([1])))
+    assert ctx.repo.get_job(jid)["status"] == "drafted"
+    mailer = FakeMailer()
+    s = send_applications(ctx, [jid], manual=True, mailer=mailer, confirm=lambda *_: True,
+                          renderer_factory=factory(FakeRenderer([1])))
+    assert s.sent == [jid] and ctx.repo.get_job(jid)["status"] == "sent"
+    assert mailer.sent[0]["To"] == "jobs@muster-gmbh.de"
+    assert list(ctx.ws.applications_dir.iterdir()) == []
+
+
+def test_nothing_is_recorded_and_the_job_can_still_be_sent(ctx):
     ctx.mode = "automatic"
     jid = _prepared(ctx)
     before = _db_state(ctx, jid)
@@ -122,7 +147,7 @@ def test_unknown_job_and_job_without_email_file(ctx):
     mailer = FakeMailer()
     assert "unknown job" in (send_test_email(ctx, "nope", mailer=mailer).error or "")
     jid = ctx.repo.insert_job(title="Dev", company="A GmbH")
-    assert "no email.eml" in (send_test_email(ctx, jid, mailer=mailer).error or "")
+    assert "no stored email" in (send_test_email(ctx, jid, mailer=mailer).error or "")
     assert mailer.sent == []
 
 

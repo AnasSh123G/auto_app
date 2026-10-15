@@ -20,6 +20,7 @@ ALL_COUNTED = [
     ("details_done", {"fetched": 3, "unavailable": 1}),
     ("job_approved", {}), ("job_maybe", {}), ("job_skipped", {}), ("job_skipped", {}),
     ("folder_saved", {"channel": "email"}), ("folder_saved", {"channel": "employer_form"}),
+    ("email_prepared", {}),
     ("email_sent", {}), ("email_would_send", {}), ("email_held", {}), ("email_failed", {}),
     ("form_filled", {}), ("needs_review", {}), ("warning", {}), ("error", {}),
     ("judge_reviewed", {"score": 80, "agrees": False}), ("judge_failed", {}),
@@ -35,6 +36,7 @@ def test_each_kind_updates_its_counter():
     assert (st.details_fetched, st.details_unavailable) == (3, 1)
     assert (st.evaluated, st.approved, st.maybe, st.skipped) == (4, 1, 1, 2)
     assert (st.folders_saved, st.email_folders, st.forms_saved) == (2, 1, 1)
+    assert st.emails_prepared == 1
     assert (st.emails_sent, st.emails_would_send, st.emails_held, st.emails_failed) == (1, 1, 1, 1)
     assert (st.forms_filled, st.needs_review, st.warnings, st.errors) == (1, 1, 1, 1)
     assert st.llm_calls == 2 and st.tokens == 150 and st.cost_usd == pytest.approx(0.01) and st.cost_unknown
@@ -64,6 +66,14 @@ def test_form_link_outcomes_count_latest_result_per_job():
     summary = RunSummary(prepare=PrepareSummary(prepared=11,
                          form_outcomes={"found": 7, "needs_browser": 3, "login_required": 1}))
     assert "forms: 7 found, 3 need your browser, 1 login required" in summary.lines()
+
+
+def test_email_prepared_is_a_feed_line():
+    st = RunStats()
+    st.apply(RunEvent("email_prepared"))
+    assert st.emails_prepared == 1
+    line = format_event(RunEvent("email_prepared", company="Muster GmbH", detail="jobs@muster-gmbh.de"))
+    assert "EMAIL READY" in line and "jobs@muster-gmbh.de" in line
 
 
 def test_format_event_is_one_plain_line():

@@ -66,6 +66,7 @@ def test_backup_is_a_readable_copy(ctx):
 def test_a_redone_folder_is_rebuilt_in_place_and_the_old_letter_is_kept(ctx):
     jid = approved_job(ctx)
     ctx.clients["write"] = FakeLLM(script={"write": [LETTER]})
+    ctx.mode = "automatic"  # this test checks the contents of the folder
     prepare_jobs(ctx, renderer_factory=factory(FakeRenderer([1])), today=date(2026, 10, 7))
     folder = Path(ctx.repo.get_application(jid)["folder"])
     (folder / "extra_note.txt").write_text("mine")

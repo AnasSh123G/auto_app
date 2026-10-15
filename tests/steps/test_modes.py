@@ -11,11 +11,12 @@ from autoapp.dashboard.wiring import attach_run_events
 from autoapp.llm.fake import FakeLLM
 from autoapp.mail.connection import FakeMailer, MailAuthError
 from autoapp.menu.run_prompt import choose_run
+from autoapp.package.email_message import application_email
 from autoapp.setup.prompts import ScriptedPrompter
 from autoapp.sources.alerts.imap_reader import FakeMailbox
 from autoapp.steps.context import RunContext
 from autoapp.steps.drafts import check_drafts, draft_applications
-from autoapp.steps.pipeline import run_pipeline
+from autoapp.steps.pipeline import RunSummary, run_pipeline
 from autoapp.steps.prepare import prepare_jobs
 from autoapp.steps.send import load_message, send_test_applications
 from tests.helpers import make_workspace
@@ -62,17 +63,12 @@ def ctx(tmp_path):
 
 
 def prepared(ctx, n=1, emails=None, scores=None):
-    """n prepared email applications; optionally retarget recipients and scores."""
+    """n prepared email applications in review mode (no folder); optionally retarget recipients and scores."""
     ids = [approved_job(ctx, company=f"Firma {i} GmbH") for i in range(n)]
     ctx.clients["write"] = FakeLLM(script={"write": [LETTER] * n})
     prepare_jobs(ctx, renderer_factory=factory(FakeRenderer([1])))
     for i, jid in enumerate(ids):
         if emails:
-            folder = Path(ctx.repo.get_application(jid)["folder"])
-            m = load_message(folder)
-            del m["To"]
-            m["To"] = emails[i]
-            (folder / "email.eml").write_bytes(m.as_bytes())
             ctx.repo.upsert_application(jid, contact_email=emails[i])
         if scores:
             ctx.conn.execute("UPDATE evaluations SET fit_score = ? WHERE job_id = ?", (scores[i], jid))
@@ -83,25 +79,25 @@ def prepared(ctx, n=1, emails=None, scores=None):
 # --- 2.3 drafting -------------------------------------------------------------------------
 
 
-def test_draft_is_the_exact_prepared_email(ctx):
+def test_draft_is_built_from_the_stored_letter(ctx):
     (jid,) = prepared(ctx)
+    app = ctx.repo.get_application(jid)
     store = FakeDraftStore()
-    s = draft_applications(ctx, store=store)
+    s = draft_applications(ctx, store=store, renderer_factory=factory(FakeRenderer([1])))
     assert s.saved == [jid] and ctx.repo.get_job(jid)["status"] == "drafted"
-    original = load_message(Path(ctx.repo.get_application(jid)["folder"]))
     (d,) = store.drafts
-    for h in ("From", "To", "Subject", "Message-ID"):
-        assert d[h] == original[h]
-    assert d.get_body(("plain",)).get_content() == original.get_body(("plain",)).get_content()
+    assert (str(d["To"]), str(d["Subject"]), str(d["Message-ID"])) == (app["contact_email"], app["email_subject"], app["message_id"])
+    assert d.get_body(("plain",)).get_content().strip() == app["email_body"].strip()
     assert [a.get_filename() for a in d.iter_attachments()] == ["Bewerbungsmappe.pdf"]
     row = ctx.conn.execute("SELECT * FROM drafts WHERE job_id = ?", (jid,)).fetchone()
     assert row["state"] == "saved" and row["recipient"] == "jobs@muster-gmbh.de"
     assert ctx.conn.execute("SELECT COUNT(*) FROM send_attempts").fetchone()[0] == 0
+    assert list(ctx.ws.applications_dir.iterdir()) == []
 
 
 def test_free_mail_and_low_score_are_drafted_with_notes(ctx):
     a, b = prepared(ctx, 2, emails=["firma.jobs@gmail.com", "jobs@firma1.de"], scores=[90, 78])
-    s = draft_applications(ctx, store=FakeDraftStore())
+    s = draft_applications(ctx, store=FakeDraftStore(), renderer_factory=factory(FakeRenderer([1])))
     assert sorted(s.saved) == sorted([a, b])
     assert any("free-mail" in n for n in s.notes[a])
     assert any("min_score" in n for n in s.notes[b])
@@ -110,38 +106,88 @@ def test_free_mail_and_low_score_are_drafted_with_notes(ctx):
 def test_second_run_does_not_duplicate_and_again_replaces(ctx):
     (jid,) = prepared(ctx)
     store = FakeDraftStore()
-    draft_applications(ctx, store=store)
-    s = draft_applications(ctx, [jid], store=store)
+    draft_applications(ctx, store=store, renderer_factory=factory(FakeRenderer([1])))
+    s = draft_applications(ctx, [jid], store=store, renderer_factory=factory(FakeRenderer([1])))
     assert s.existing == [jid] and len(store.drafts) == 1
-    s = draft_applications(ctx, [jid], again=True, store=store)
+    s = draft_applications(ctx, [jid], again=True, store=store, renderer_factory=factory(FakeRenderer([1])))
     assert s.saved == [jid] and len(store.drafts) == 2
     assert store.drafts[0]["Message-ID"] != store.drafts[1]["Message-ID"]
+    assert ctx.repo.get_application(jid)["message_id"] == str(store.drafts[1]["Message-ID"])
     states = [r["state"] for r in ctx.conn.execute("SELECT state FROM drafts ORDER BY id")]
     assert states == ["replaced", "saved"]
 
 
-def test_needs_review_is_not_drafted(ctx):
+def test_needs_review_is_drafted_with_a_check_note(ctx):
     (jid,) = prepared(ctx)
     ctx.repo.set_needs_review(jid, ["a claim could not be verified"])
-    s = draft_applications(ctx, store=FakeDraftStore())
-    assert s.saved == [] and "needs_review" in " ".join(s.not_drafted[jid])
-    assert ctx.repo.get_job(jid)["status"] == "prepared"
+    store = FakeDraftStore()
+    s = draft_applications(ctx, store=store, renderer_factory=factory(FakeRenderer([1])))
+    assert s.saved == [jid] and ctx.repo.get_job(jid)["status"] == "drafted"
+    assert s.review[jid] == ["a claim could not be verified"]
+    (d,) = store.drafts
+    assert "a claim could not be verified" not in d.get_body(("plain",)).get_content()
+    assert "check before sending" in "\n".join(RunSummary(drafts=s).lines())
 
 
 def test_dry_run_saves_nothing(ctx):
     (jid,) = prepared(ctx)
     ctx.dry_run = True
     store = FakeDraftStore()
-    s = draft_applications(ctx, store=store)
+    s = draft_applications(ctx, store=store, renderer_factory=factory(FakeRenderer([1])))
     assert s.would_save == [jid] and store.drafts == [] and ctx.repo.get_job(jid)["status"] == "prepared"
 
 
 def test_lost_confirmation_is_recorded_without_a_duplicate(ctx):
     (jid,) = prepared(ctx)
     store = FakeDraftStore()
-    store.drafts.append(load_message(Path(ctx.repo.get_application(jid)["folder"])))  # appended earlier, unrecorded
-    s = draft_applications(ctx, store=store)
+    with application_email(ctx, jid, renderer_factory=factory(FakeRenderer([1]))) as b:
+        store.drafts.append(b.message)  # appended earlier, unrecorded
+    s = draft_applications(ctx, store=store, renderer_factory=factory(FakeRenderer([1])))
     assert s.saved == [jid] and len(store.drafts) == 1
+
+
+def test_retry_after_failure_needs_no_llm(ctx):
+    (jid,) = prepared(ctx)
+    s = draft_applications(ctx, store=FakeDraftStore(fail=MailAuthError("rejected")),
+                           renderer_factory=factory(FakeRenderer([1])))
+    assert s.auth_failed and ctx.repo.get_job(jid)["status"] == "prepared"
+    ctx.clients["write"] = FakeLLM(script={"write": []})
+    s = draft_applications(ctx, store=FakeDraftStore(), renderer_factory=factory(FakeRenderer([1])))
+    assert s.saved == [jid]
+
+
+def test_legacy_folder_is_drafted_then_deleted(ctx):
+    jid = approved_job(ctx)
+    ctx.clients["write"] = FakeLLM(script={"write": [LETTER]})
+    ctx.mode = "automatic"
+    prepare_jobs(ctx, renderer_factory=factory(FakeRenderer([1])))
+    ctx.mode = "review"
+    folder = Path(ctx.repo.get_application(jid)["folder"])
+    original = load_message(folder)
+    ctx.repo.set_needs_review(jid, ["a claim could not be verified"])
+    store = FakeDraftStore()
+    s = draft_applications(ctx, store=store, renderer_factory=factory(FakeRenderer([1])))
+    assert s.saved == [jid]
+    (d,) = store.drafts
+    app = ctx.repo.get_application(jid)
+    assert not folder.exists() and app["folder"] is None and app["letter_md"]
+    assert (str(d["To"]), str(d["Subject"]), str(d["Message-ID"])) == (
+        str(original["To"]), str(original["Subject"]), str(original["Message-ID"]))
+    assert app["email_subject"] == str(original["Subject"]) and app["message_id"] == str(original["Message-ID"])
+    assert app["email_body"].strip() == original.get_body(("plain",)).get_content().strip()
+
+
+def test_legacy_folder_is_kept_when_drafting_fails(ctx):
+    jid = approved_job(ctx)
+    ctx.clients["write"] = FakeLLM(script={"write": [LETTER]})
+    ctx.mode = "automatic"
+    prepare_jobs(ctx, renderer_factory=factory(FakeRenderer([1])))
+    ctx.mode = "review"
+    folder = Path(ctx.repo.get_application(jid)["folder"])
+    s = draft_applications(ctx, store=FakeDraftStore(fail=MailAuthError("rejected")),
+                           renderer_factory=factory(FakeRenderer([1])))
+    assert s.auth_failed and folder.exists() and ctx.repo.get_job(jid)["status"] == "prepared"
+    assert ctx.repo.get_application(jid)["folder"] == str(folder)
 
 
 # --- 2.4 failures ----------------------------------------------------------------------------
@@ -149,9 +195,11 @@ def test_lost_confirmation_is_recorded_without_a_duplicate(ctx):
 
 def test_login_failure_keeps_jobs_prepared_and_the_run_completes(ctx):
     prepared(ctx, 2)
-    s = draft_applications(ctx, store=FakeDraftStore(fail=MailAuthError("the IMAP server rejected the login")))
+    s = draft_applications(ctx, store=FakeDraftStore(fail=MailAuthError("the IMAP server rejected the login")),
+                           renderer_factory=factory(FakeRenderer([1])))
     assert s.auth_failed and len(s.errors) == 1 and "setup --section email" in s.errors[0]
     assert {j["status"] for j in ctx.repo.jobs_by_status("prepared")} == {"prepared"}
+    assert list(ctx.ws.applications_dir.iterdir()) == []
 
 
 # --- 2.5 sent detection ------------------------------------------------------------------------
@@ -160,8 +208,8 @@ def test_login_failure_keeps_jobs_prepared_and_the_run_completes(ctx):
 def test_check_drafts_marks_sent_reports_missing_and_keeps_edited(ctx):
     a, b, c = prepared(ctx, 3, emails=["a@firma.de", "b@firma.de", "c@firma.de"])
     store = FakeDraftStore()
-    draft_applications(ctx, store=store)
-    subj = {j: str(load_message(Path(ctx.repo.get_application(j)["folder"]))["Subject"]) for j in (a, b, c)}
+    draft_applications(ctx, store=store, renderer_factory=factory(FakeRenderer([1])))
+    subj = {j: str(ctx.repo.get_application(j)["email_subject"]) for j in (a, b, c)}
     later = datetime.now(UTC) + timedelta(minutes=1)
     store.sent.append(("a@firma.de", subj[a], later))  # a: sent by hand
     store.drafts = [d for d in store.drafts if d["To"] != "b@firma.de"]  # b: draft deleted
@@ -176,7 +224,7 @@ def test_check_drafts_marks_sent_reports_missing_and_keeps_edited(ctx):
 def test_check_drafts_is_skipped_in_dry_runs(ctx):
     prepared(ctx)
     store = FakeDraftStore()
-    draft_applications(ctx, store=store)
+    draft_applications(ctx, store=store, renderer_factory=factory(FakeRenderer([1])))
     ctx.dry_run = True
     assert check_drafts(ctx, store=FakeDraftStore(fail=AssertionError("must not connect"))).sent == []
 
@@ -234,6 +282,14 @@ def test_review_mode_never_calls_smtp(ctx):
     assert ctx.stats.drafts_saved == 2
 
 
+def test_review_pipeline_leaves_no_files(ctx):
+    prepared(ctx, 3)
+    s = _pipeline(ctx, "review", draft_store=FakeDraftStore())
+    assert s.ok, s.errors
+    assert len(s.drafts.saved) == 3
+    assert list(ctx.ws.applications_dir.iterdir()) == []
+
+
 def test_automatic_mode_sends_and_does_not_draft_ineligible(ctx):
     a, b = prepared(ctx, 2, emails=["a@x.de", "b@y.de"], scores=[90, 70])
     ctx.config.email.min_score = 85
@@ -269,7 +325,7 @@ def test_draft_login_failure_is_an_error_but_other_steps_complete(ctx):
 def test_drafts_are_checked_at_the_start_of_a_run(ctx):
     (jid,) = prepared(ctx)
     store = FakeDraftStore()
-    draft_applications(ctx, store=store)
+    draft_applications(ctx, store=store, renderer_factory=factory(FakeRenderer([1])))
     d = store.drafts[0]
     store.sent.append((str(d["To"]), str(d["Subject"]), datetime.now(UTC) + timedelta(minutes=1)))
     s = _pipeline(ctx, "review", draft_store=store)

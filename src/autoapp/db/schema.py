@@ -331,7 +331,16 @@ CREATE TABLE judge_reviews (
 CREATE INDEX idx_judge_reviews_run ON judge_reviews(run_id);
 """
 
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9]
+# The stored letter and email text of a review-mode email application (gmail-drafts-without-local-files):
+# the row replaces the application folder, so a failed draft or `draft --again` needs no new LLM call.
+_V10 = """
+ALTER TABLE applications ADD COLUMN letter_md TEXT;
+ALTER TABLE applications ADD COLUMN email_subject TEXT;
+ALTER TABLE applications ADD COLUMN email_body TEXT;
+ALTER TABLE applications ADD COLUMN message_id TEXT;
+"""
+
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10]
 
 
 def current_version(conn: sqlite3.Connection) -> int:
