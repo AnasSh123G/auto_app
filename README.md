@@ -72,6 +72,34 @@ Form applications are prepared the same way in every mode, including bounded GET
 
 `email.auto_send` no longer exists. An old config is migrated on load: `true` becomes `run.default_mode: automatic`, `false` becomes `review`.
 
+## Supported alert emails
+
+autoapp reads the job-alert emails that arrive in your mailbox. Set the alert mailbox and folder in `autoapp setup`
+(section `sources`); nothing else is needed from you, and you do not have to provide sample emails.
+
+| Site | Recognised by the sender address |
+|---|---|
+| LinkedIn | `jobalerts-noreply@linkedin.com` |
+| Indeed | `indeed.com` senders, including `match.indeed.com` |
+| StepStone | `@jobagent.stepstone.de` |
+| Workwise | `@workwise.io` (and the former `@campusjaeger.de`) |
+| XING | XING sender domains |
+
+The parsers go by the sender, not by who the email is addressed to, so they work the same for every user. They were
+written against these sites' current layouts and are tested on anonymised examples, so a changed or foreign-language
+layout can make a parser miss a card.
+
+- **AI fallback (on by default, `sources.alerts.llm_fallback`).** When a parser cannot read a card or a whole email,
+  the AI model reads it instead. It only sees a redacted excerpt (no name, address, email, phone or tracking links),
+  and anything it names that is not in that text is thrown away. It needs your AI model key and is capped at
+  `sources.alerts.max_llm_extractions_per_run` (default 20) reads per run. Without a key, or with the fallback off,
+  such emails are only counted as unrecognised and tried again next run.
+- **Other senders (off by default, `sources.alerts.llm_unknown_senders`).** Alerts from sites without a parser are
+  skipped. Set this to `true` to let the AI fallback read emails from unknown senders that look like a job alert. Their
+  jobs are listed under the source `llm-alert` and are marked **needs review**: check each one before you apply.
+
+Details, settings and how to add a parser for another site are in [Job sources](docs/job-sources.md).
+
 ## Arbeitnow jobs (optional, free)
 
 Enable Arbeitnow with `autoapp setup --section sources` or `sources.arbeitnow.enabled: true`.
