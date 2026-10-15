@@ -274,6 +274,12 @@ def test_missing_other_upload_slot_is_reported(values: FillValues) -> None:
     assert result.upload_notes == ["No Other upload field was available; 1 additional document(s) could not be attached."]
 
 
+def test_documents_in_dedicated_fields_are_not_reported_as_missing_other(values: FillValues) -> None:
+    values = dataclasses.replace(values, other_documents=list(values.certificates))
+    result = map_fields([mk("Lebenslauf", "file"), mk("Zeugnisse", "file", multiple=True)], values)
+    assert not result.upload_notes
+
+
 @pytest.mark.parametrize(("label", "attr"), [("Upload Urkunde", "certificates"), ("Diplom", "certificates"),
                                              ("Upload Arbeitsprobe", "work_samples"), ("Portfolio", "work_samples")])
 def test_diplomas_and_work_samples(label: str, attr: str, values: FillValues) -> None:

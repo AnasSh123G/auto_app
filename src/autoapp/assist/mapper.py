@@ -759,8 +759,9 @@ def map_fields(fields: list[FieldInfo], values: FillValues) -> MappingResult:
                 f"{f.label or 'File upload'} accepts one file; {omitted} additional document(s) could not be attached."
             )
     result.assignments = [a for a in result.assignments if a.kind != "upload" or a.files]
-    if values.other_documents and not has_other_slot:
+    omitted_other = {p.resolve() for p in values.other_documents} - seen
+    if omitted_other and not has_other_slot:
         result.upload_notes.append(
-            f"No Other upload field was available; {len(values.other_documents)} additional document(s) could not be attached."
+            f"No Other upload field was available; {len(omitted_other)} additional document(s) could not be attached."
         )
     return result

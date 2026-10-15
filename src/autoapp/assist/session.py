@@ -101,11 +101,16 @@ def _folder_files(folder: Path, profile, documents=None, *, language: str = "de"
     cv_paths = {cv.resolve()} if cv else set()
     reference_files = [p for p in all_files if p.name.casefold().startswith("arbeitszeugnis")]
     references = {p.resolve() for p in reference_files}
-    # Role declarations still identify a reference when a legacy name lives outside the configured documents dir.
+    work_sample_paths: set[Path] = set()
+    # Explicit roles take precedence over filename conventions, including for nested paths.
     for entry in entries:
         path = available(entry.file)
-        if path and entry.role == "work_reference" and path.name.casefold().startswith("arbeitszeugnis"):
+        if path is None:
+            continue
+        if entry.role == "work_reference":
             references.add(path.resolve())
+        elif entry.role == "writing_sample":
+            work_sample_paths.add(path.resolve())
     work_references = [p for p in all_files if p.resolve() in references]
     excluded = set(cv_paths)
     excluded.update(p.resolve() for p in (folder / "cover_letter.pdf", folder / "Bewerbungsmappe.pdf") if p.exists())
@@ -119,7 +124,7 @@ def _folder_files(folder: Path, profile, documents=None, *, language: str = "de"
         "certificates": [available(e.file) for e in entries if e.role == "certificate" and available(e.file)],
         "work_references": work_references,
         "other_documents": other_documents,
-        "work_samples": [p for p in all_files if any(e.role == "writing_sample" and e.file == p.name for e in entries)],
+        "work_samples": [p for p in all_files if p.resolve() in work_sample_paths],
         "bundle_pdf": folder / "Bewerbungsmappe.pdf" if (folder / "Bewerbungsmappe.pdf").is_file() else None,
     }
 
