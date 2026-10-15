@@ -48,7 +48,7 @@ In automatic mode the send step SHALL behave exactly as specified for automatic 
 - **THEN** 2 emails are sent and the third stays `prepared` with "fit score is below the minimum", and no draft is created
 
 ### Requirement: Review first mode
-In review mode the run SHALL NOT call the SMTP send function for any application, whatever the score, cap or cooldown state. Every prepared email application without a `needs_review` flag SHALL be saved as a draft as specified in `email-drafts`. Jobs with a `needs_review` flag SHALL stay in the review queue with their reasons and SHALL NOT be drafted. The run summary SHALL state how many drafts were saved and where to find them.
+In review mode the run SHALL NOT call the SMTP send function for any application, whatever the score, cap or cooldown state. Every prepared email application SHALL be saved as a draft as specified in `email-drafts`, including applications flagged `needs_review`, and no file or folder SHALL be written to the workspace for an email application. A flagged application SHALL be drafted and SHALL stay in the review queue with its reasons, and the feed and summary SHALL tell the user to check it before sending. The run summary SHALL state how many drafts were saved and where to find them.
 
 #### Scenario: Nothing is ever sent
 - **WHEN** a review-mode run prepares 4 email applications, one of them with a score of 95 and `email.daily_cap` not reached
@@ -56,7 +56,11 @@ In review mode the run SHALL NOT call the SMTP send function for any application
 
 #### Scenario: Flagged letter
 - **WHEN** one prepared letter is flagged `needs_review` because a claim could not be verified
-- **THEN** it is not drafted, and the summary lists it under the review queue with the reason
+- **THEN** it is drafted, and the summary lists it as "check before sending" with the reason
+
+#### Scenario: No local copy
+- **WHEN** a review-mode run drafts 3 email applications
+- **THEN** the workspace's applications directory has no folder for any of the 3 jobs, and the summary says the drafts are in the mailbox's Drafts folder
 
 ### Requirement: Test run mode
 In test mode the run SHALL execute every step as in automatic mode (search, fetch, filter, evaluate, prepare) and SHALL apply the same eligibility rules as a real automatic run to decide which emails would be sent: minimum score, free-mail rule, `needs_review`, company cooldown, the daily cap counted from real sends plus the test emails already sent in this run, and the duplicate guard. For each email that a real run would send, the system SHALL send one email to the sending mailbox's own address instead, and SHALL NOT contact any employer address. The test email SHALL be the prepared application email with these differences only:
