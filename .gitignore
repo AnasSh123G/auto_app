@@ -12,3 +12,5 @@ logs/
 dist/
 build/
 *.egg-info/
+.agents/
+.opencode/
