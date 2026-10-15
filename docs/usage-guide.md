@@ -8,6 +8,7 @@ while you work.
 
 1. [What autoapp does, in one minute](#1-what-autoapp-does-in-one-minute)
 2. [Starting it](#2-starting-it)
+   - [Keys you need](#keys-you-need)
 3. [First-time setup](#3-first-time-setup)
 4. [A normal day](#4-a-normal-day)
 5. [The main menu, entry by entry](#5-the-main-menu-entry-by-entry)
@@ -95,6 +96,27 @@ Good to know:
 
 ---
 
+## Keys you need
+
+Keys and passwords live in `workspace/.env`, one `NAME=value` per line, never in `config.yaml`. The setup wizard
+asks for them and writes them there; you can also edit the file by hand. Their values are never printed.
+
+| Variable | Needed? | What it unlocks | Where to get it |
+|---|---|---|---|
+| `OPENROUTER_API_KEY` | **Yes**, one of these three: the key of the provider you pick in the `llm` section | Every AI step: evaluate, write, form fill, find form | [openrouter.ai/keys](https://openrouter.ai/keys) |
+| `ANTHROPIC_API_KEY` | (one of three, see above) | The same, with Anthropic as the provider | [console.anthropic.com](https://console.anthropic.com) |
+| `GOOGLE_API_KEY` | (one of three, see above) | The same, with Google as the provider | [aistudio.google.com](https://aistudio.google.com/) |
+| `AUTOAPP_SMTP_PASSWORD` | **Yes** for email applications | Saving drafts in your mailbox (review mode), sending (automatic mode) and test emails | The sending mailbox's password. Gmail: an *app password*, see the [mailbox cheat sheet](#mailbox-cheat-sheet) |
+| `AUTOAPP_ALERTS_PASSWORD` | Only if you read job-alert emails | Reading LinkedIn, Indeed, StepStone, Workwise and XING alert emails from your mailbox | The alert mailbox's password (an app password for Gmail). Often the same mailbox, so the same value |
+| `PARALLEL_API_KEY` | Optional, recommended with alert emails | Finding the employer's own ad and careers site for alert jobs and new employers. Without it those jobs wait with "search key missing" | Your account at [parallel.ai](https://parallel.ai) |
+| `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` | Optional, both together | The Adzuna job search | A free developer account at [developer.adzuna.com](https://developer.adzuna.com/) |
+
+Arbeitsagentur, Arbeitnow and Workwise need no key. The two mail variables are the default names; a mailbox in
+`config.yaml` can name another one with `password_env`. Details: [LLM providers](llm-providers.md),
+[email](email.md), [job sources](job-sources.md).
+
+---
+
 ## 3. First-time setup
 
 ```fish
@@ -103,6 +125,8 @@ uv run autoapp setup
 
 The first time you run any command in a terminal, the wizard starts by itself. It has eight sections. Every question
 shows the current value as the default, so **Enter keeps it**. Wrong answers are explained and asked again.
+Have the keys and passwords from [Keys you need](#keys-you-need) ready: the `llm`, `sources` and `email` sections ask
+for them.
 
 | Section | What you tell it | Notes |
 |---|---|---|
