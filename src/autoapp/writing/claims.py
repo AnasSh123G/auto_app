@@ -1,7 +1,9 @@
 """Claim check for generated application texts (cover-letter-writing spec, "Claim check").
 
-* ``cv`` / ``profile`` / ``instructions`` claims need an evidence quote that occurs in
-  that source (case- and whitespace-insensitive).
+* ``cv`` / ``profile`` / ``instructions`` claims need evidence whose every part (several
+  exact quotes may be joined by line breaks, ``;``, `` | `` or ``…``) occurs in an accepted
+  source: the CV, profile, instructions or an app-supplied fact. The tag does not have to
+  name the right source; the ad is never a source.
 * ``assumed_basic`` claims must name a requirement the evaluation classified as
   bridgeable, only for decision ``apply``, and at most ``max_assumed`` of them.
 * Independently of what the model tagged, every number in the text must occur in a
@@ -28,6 +30,14 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", " ", t).strip().strip(".,;:!?\"'()")
 
 
+_EVIDENCE_SPLIT = re.compile(r"\n|;|\s*\|\s*|…|\.\.\.")
+
+
+def evidence_parts(evidence: str | None) -> list[str]:
+    """The normalized, non-empty parts of an evidence string (several exact quotes may be joined)."""
+    return [p for p in (normalize(x) for x in _EVIDENCE_SPLIT.split(evidence or "")) if p]
+
+
 def _numbers(text: str) -> set[str]:
     out = set()
     for m in _NUMBER.finditer(text):
@@ -51,12 +61,14 @@ def check_claims(
     bridgeable: Iterable[str],
     decision: str,
     max_assumed: int,
+    app_facts: Iterable[str] = (),
 ) -> list[str]:
     """Return human-readable problems; empty means every claim is acceptable.
 
-    ``sources`` maps ``cv``, ``profile`` and ``instructions`` to their text.
+    ``sources`` maps ``cv``, ``profile`` and ``instructions`` to their text. ``app_facts``
+    holds facts the app itself gave the writer; every part of the evidence may also occur there.
     """
-    norm_sources = {k: normalize(v or "") for k, v in sources.items()}
+    haystacks = [normalize(v or "") for v in sources.values()] + [normalize(f) for f in app_facts if f]
     bridge = {normalize(b): b for b in bridgeable}
     problems: list[str] = []
     assumed = 0
@@ -72,14 +84,15 @@ def check_claims(
                     "bridgeable requirements; remove it"
                 )
             continue
-        ev = normalize(c.evidence or "")
-        src = norm_sources.get(c.type, "")
-        if not ev:
+        parts = evidence_parts(c.evidence)
+        if not parts:
             problems.append(f'"{c.text}": no evidence quote from {_SOURCE_NAMES[c.type]}; remove it or quote the source')
-        elif ev not in src:
+            continue
+        missing = next((p for p in parts if not any(p in h for h in haystacks)), None)
+        if missing is not None:
             problems.append(
-                f'"{c.text}": the quoted evidence does not appear in {_SOURCE_NAMES[c.type]}; remove the claim '
-                "or quote the source exactly"
+                f'"{c.text}": the quoted evidence does not appear in the CV, the profile or your writing '
+                f'instructions: "{missing[:120]}"; remove the claim or quote the source exactly'
             )
     if assumed > max_assumed:
         problems.append(f"{assumed} skills outside the CV are claimed; at most {max_assumed} are allowed")

@@ -14,6 +14,10 @@ For requirements marked "basic" or "unspecified" (not intermediate/advanced, not
 
 Example: If the ad mentions "Docker" as a nice-to-have and your CV mentions personal projects with containers, you can claim "working knowledge of Docker". You'll see a "Before an interview, brush up on" list in the application folder.
 
+### How claims are checked
+
+The writer tags every factual statement it makes and gives an exact quote from the source as evidence. One statement often draws on several places, so the evidence may be several exact quotes joined by ` | `. Every quote must appear word for word in your CV, your profile, your writing instructions, the search profile's instructions, or a fact the app itself supplies (your earliest start date or the salary sentence). The job ad never counts as evidence. If a quote is not found, the application gets a `needs_review` reason like `the quoted evidence does not appear in the CV, the profile or your writing instructions: "…"`, which names the quote that was not found.
+
 ## Bridgeable skill policy
 
 - **Max assumed skills per letter:** `writing.max_assumed_skills` (default: 5)
